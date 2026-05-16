@@ -29,6 +29,9 @@ Response:
   - `GET /currency-rates`
   - `POST /currency-rates`
   - `GET /currency-rates/{currency_rate_id}`
+  - `GET /credit-statement-cycles`
+  - `POST /credit-statement-cycles`
+  - `GET /credit-statement-cycles/{cycle_id}`
   - `GET /entries`
   - `POST /entries`
   - `POST /entries/{entry_id}/confirm`
@@ -49,6 +52,13 @@ Response:
 - Non-CNY amounts use the latest available rate on or before the entry date.
 - Voiding a confirmed entry reverses its balance/liability effect.
 - Credit card charges increase `current_liability`; credit repayment decreases it and is treated as transfer movement.
+- Credit card charges must belong to a `CreditStatementCycle`.
+- If a credit charge omits `statement_cycle_id`, the backend auto-assigns the matching cycle by account and entry date.
+- Credit card repayments must explicitly provide `statement_cycle_id`.
+- Credit card charges increase a cycle's `statement_amount`; repayments increase its `paid_amount`.
+- Voiding confirmed credit charges or repayments rolls back both account balances and cycle amounts.
+- Credit repayment entries should use `transfer_out` for the balance account side and `credit_repayment` for the credit account side.
+- Automatic credit repayment cash-flow generation is deferred until `CashFlowItem` is introduced in Phase 3; `linked_cash_flow_item_id` is already reserved on the cycle.
 
 ## Domain Rules For API Design
 

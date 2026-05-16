@@ -20,5 +20,9 @@ final class FinanceDefaultsTests: XCTestCase {
         XCTAssertEqual(money.formattedOriginal, "$123.45")
         XCTAssertEqual(money.formattedConvertedCNY, "about ¥839.46")
     }
-}
 
+    func testCreditStatementStatusUsesApiRawValues() {
+        XCTAssertEqual(CreditStatementStatus.statementGenerated.rawValue, "statement_generated")
+        XCTAssertEqual(CreditStatementStatus.partiallyPaid.rawValue, "partially_paid")
+    }
+}

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.constants import BASE_CURRENCY
 from app.models.account import Account
 from app.models.category import Category
+from app.models.credit_statement_cycle import CreditStatementCycle
 from app.models.currency_rate import CurrencyRate
 from app.models.entry import AccountMovement, EntryCategoryLine, FinancialEntry
 from app.schemas.entry import EntryCreate, EntryRead
@@ -174,6 +175,8 @@ def _create_account_movement(
         raise LedgerValidationError("Account not found")
     if payload.movement_type not in SUPPORTED_MOVEMENT_TYPES:
         raise LedgerValidationError("Unsupported account movement type")
+    if payload.currency.upper() != account.currency:
+        raise LedgerValidationError("Account movement currency must match account currency")
 
     amount = quantize_money(payload.amount)
     if amount <= 0:
@@ -187,10 +190,18 @@ def _create_account_movement(
         payload.exchange_rate_id,
         payload.converted_cny_amount,
     )
+    statement_cycle = _resolve_statement_cycle_for_movement(
+        db,
+        account,
+        payload.movement_type,
+        entry_date,
+        payload.statement_cycle_id,
+    )
+
     movement = AccountMovement(
         entry_id=entry_id,
         account_id=payload.account_id,
-        statement_cycle_id=payload.statement_cycle_id,
+        statement_cycle_id=statement_cycle.id if statement_cycle is not None else None,
         movement_type=payload.movement_type,
         amount=amount,
         currency=payload.currency.upper(),
@@ -214,6 +225,58 @@ def _resolve_payload_conversion(
     if converted_cny_amount is not None:
         return quantize_money(converted_cny_amount), exchange_rate_id
     return convert_to_cny(db, amount, currency, entry_date, exchange_rate_id)
+
+
+def _resolve_statement_cycle_for_movement(
+    db: Session,
+    account: Account,
+    movement_type: str,
+    entry_date: DateType,
+    statement_cycle_id: Optional[str],
+) -> Optional[CreditStatementCycle]:
+    _validate_movement_account_type(account, movement_type)
+
+    if movement_type not in {"credit_charge", "credit_repayment"}:
+        if statement_cycle_id is not None:
+            raise LedgerValidationError("Only credit movements can link to statement cycles")
+        return None
+
+    if movement_type == "credit_charge" and statement_cycle_id is None:
+        statement_cycle = db.execute(
+            select(CreditStatementCycle)
+            .where(
+                CreditStatementCycle.credit_account_id == account.id,
+                CreditStatementCycle.cycle_start_date <= entry_date,
+                CreditStatementCycle.cycle_end_date >= entry_date,
+            )
+            .order_by(CreditStatementCycle.cycle_start_date.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if statement_cycle is None:
+            raise LedgerValidationError("Credit charge requires a matching statement cycle")
+    elif statement_cycle_id is None:
+        raise LedgerValidationError("Credit repayment requires a statement cycle")
+    else:
+        statement_cycle = db.get(CreditStatementCycle, statement_cycle_id)
+        if statement_cycle is None:
+            raise LedgerValidationError("Credit statement cycle not found")
+
+    if statement_cycle.credit_account_id != account.id:
+        raise LedgerValidationError("Statement cycle must belong to the credit account")
+    if statement_cycle.currency != account.currency:
+        raise LedgerValidationError("Statement cycle currency must match credit account currency")
+    if movement_type == "credit_charge" and not (
+        statement_cycle.cycle_start_date <= entry_date <= statement_cycle.cycle_end_date
+    ):
+        raise LedgerValidationError("Credit charge date must fall inside the statement cycle")
+    return statement_cycle
+
+
+def _validate_movement_account_type(account: Account, movement_type: str) -> None:
+    if movement_type in {"credit_charge", "credit_repayment"} and account.type != "credit":
+        raise LedgerValidationError("Credit movements require a credit account")
+    if movement_type in {"balance_in", "balance_out", "transfer_in", "transfer_out"} and account.type != "balance":
+        raise LedgerValidationError("Balance movements require a balance account")
 
 
 def _resolve_rate(
@@ -288,10 +351,50 @@ def _apply_movements(db: Session, movements: Iterable[AccountMovement], sign: De
             account.current_balance = quantize_money(account.current_balance - signed_amount)
         elif movement.movement_type == "credit_charge":
             account.current_liability = quantize_money(account.current_liability + signed_amount)
+            _apply_statement_cycle_movement(db, movement, sign)
         elif movement.movement_type == "credit_repayment":
             account.current_liability = quantize_money(account.current_liability - signed_amount)
+            _apply_statement_cycle_movement(db, movement, sign)
         else:
             raise LedgerValidationError("Unsupported account movement type")
+
+
+def _apply_statement_cycle_movement(
+    db: Session,
+    movement: AccountMovement,
+    sign: Decimal,
+) -> None:
+    if movement.statement_cycle_id is None:
+        raise LedgerValidationError("Credit movement requires a statement cycle")
+
+    cycle = db.get(CreditStatementCycle, movement.statement_cycle_id)
+    if cycle is None:
+        raise LedgerValidationError("Credit statement cycle not found")
+
+    signed_amount = movement.amount * sign
+    if movement.movement_type == "credit_charge":
+        cycle.statement_amount = quantize_money(cycle.statement_amount + signed_amount)
+    elif movement.movement_type == "credit_repayment":
+        cycle.paid_amount = quantize_money(cycle.paid_amount + signed_amount)
+
+    if cycle.statement_amount < 0:
+        raise LedgerValidationError("Statement cycle amount cannot be negative")
+    if cycle.paid_amount < 0:
+        raise LedgerValidationError("Statement cycle paid amount cannot be negative")
+    _refresh_statement_cycle_status(cycle)
+
+
+def _refresh_statement_cycle_status(cycle: CreditStatementCycle) -> None:
+    if cycle.statement_amount == 0 and cycle.paid_amount == 0:
+        if cycle.status in {"paid", "partially_paid", "statement_generated"}:
+            cycle.status = "open"
+        return
+    if cycle.paid_amount >= cycle.statement_amount:
+        cycle.status = "paid"
+    elif cycle.paid_amount > 0:
+        cycle.status = "partially_paid"
+    elif cycle.status in {"paid", "partially_paid"}:
+        cycle.status = "statement_generated"
 
 
 def _load_entry_parts(

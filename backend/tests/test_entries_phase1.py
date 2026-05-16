@@ -42,6 +42,22 @@ def create_usd_cny_rate(client):
     return response.json()
 
 
+def create_statement_cycle(client, credit_account_id, currency="USD"):
+    response = client.post(
+        "/api/v1/credit-statement-cycles",
+        json={
+            "credit_account_id": credit_account_id,
+            "cycle_start_date": "2026-05-01",
+            "cycle_end_date": "2026-05-31",
+            "statement_date": "2026-06-01",
+            "due_date": "2026-06-20",
+            "currency": currency,
+        },
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
 def test_draft_entry_does_not_change_balance_until_confirmed(client) -> None:
     account = create_account(client, balance="1000")
     category = create_category(client)
@@ -120,6 +136,7 @@ def test_confirmed_entry_changes_balance_immediately(client) -> None:
 def test_usd_credit_charge_uses_manual_rate_and_increases_liability(client) -> None:
     create_usd_cny_rate(client)
     account = create_account(client, name="Chase Credit", account_type="credit", currency="USD")
+    create_statement_cycle(client, account["id"])
     category = create_category(client, name="Flight")
 
     response = client.post(
@@ -234,6 +251,7 @@ def test_dashboard_summary_uses_backend_balances_and_status_counts(client) -> No
         account_type="credit",
         currency="USD",
     )
+    create_statement_cycle(client, credit_account["id"])
     category = create_category(client)
 
     client.post(

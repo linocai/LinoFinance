@@ -35,21 +35,36 @@ and durable setup documentation.
   - expense/income category totals must match account movements in CNY;
   - USD entries use available manual USD/CNY rates.
 - Dashboard summary API added with backend-computed balance total, credit liability total, net worth, and entry status counts.
+- Phase 2 credit statement core implemented:
+  - `CreditStatementCycle` list/create/get API;
+  - statement cycles can only be created for credit accounts;
+  - statement cycle currency must match credit account currency;
+  - confirmed credit charges auto-assign a matching cycle when omitted, otherwise validate the explicit cycle;
+  - confirmed credit repayments require an explicit cycle;
+  - credit charges update cycle `statement_amount`;
+  - credit repayments update cycle `paid_amount` and status;
+  - voiding confirmed credit charges/repayments rolls back both account balances and cycle amounts.
+- Phase 2 repayment cash-flow auto-generation is intentionally deferred until Phase 3 because `CashFlowItem` is not implemented yet; the linking field is already present.
+- Frontend Phase 2 shared types added:
+  - `CreditStatementCycle`;
+  - `CreditStatementStatus`;
+  - placeholder credit statement view for later app-shell integration.
 - Verification passed:
   - `python3 -m compileall backend/app backend/tests`
-  - `cd backend && . .venv/bin/activate && pytest` (`10 passed`)
+  - `cd backend && . .venv/bin/activate && pytest` (`16 passed`)
   - `cd backend && . .venv/bin/activate && ruff check .`
   - `cd backend && . .venv/bin/activate && alembic upgrade head --sql`
-  - `cd frontend && swift test` (`2 passed`)
+  - `cd frontend && swift test` (`3 passed`)
   - `curl http://127.0.0.1:8000/api/v1/health`
 
 ## Remaining
 
-1. Add entry edit/update rules, especially what can be edited after confirmation.
-2. Add account balance recalculation/reconciliation command to rebuild balances from movements.
-3. Add seed scripts for default categories and initial USD/CNY rate in local/test setup.
-4. Add real iOS/macOS app targets after shared Swift modules settle.
-5. Prepare local PostgreSQL instructions or Docker Compose if a local database runner is desired.
+1. Add credit statement cycle update/close endpoints if manual statement reconciliation needs editing after creation.
+2. Start Phase 3 `CashFlowItem`, then generate credit repayment cash-flow items from statement cycles.
+3. Add account balance recalculation/reconciliation command to rebuild balances from movements and cycle amounts.
+4. Add seed scripts for default categories and initial USD/CNY rate in local/test setup.
+5. Add real iOS/macOS app targets after shared Swift modules settle.
+6. Prepare local PostgreSQL instructions or Docker Compose if a local database runner is desired.
 
 ## Decisions
 
