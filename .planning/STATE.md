@@ -203,6 +203,14 @@ the existing cloud API, DTOs, repositories, view models, and business screens.
   - Reports no longer hard-depend on AppKit and exports CSV to ShareLink on iOS while preserving Finder reveal on macOS;
   - mobile-visible action menus were added for entries, cash flow, credit installment/subscription, and notification rows;
   - dashboard, reports, credit, entries, reimbursements, and detail rows were adjusted to avoid fixed desktop-only widths on iPhone.
+- Initial macOS account setup repair completed:
+  - production currency rate check found one active manual `USD -> CNY` rate: `6.8` dated `2026-05-16`;
+  - account row conversion bug fixed so USD account rows use the latest CNY rate instead of showing original USD amount as approximate CNY;
+  - user-provided June-December credit/loan bills were written to production as 25 statement cycles and linked cash-flow items;
+  - account liabilities set to: 花呗 `823.80 CNY`, 白条 `1772.17 CNY`, 工商3375 `4337.27 CNY`, 工商5438 `20.00 USD`, 车贷 `17731.00 CNY`;
+  - 白条 monthly figures summed to `1771.57`, so December was adjusted from `14.89` to `15.49` because the user explicitly said total `1772.17` is authoritative;
+  - production backup before direct adjustment: `/opt/linofinance/backups/linofinance-before-initial-bills-20260516T112839Z.dump`;
+  - updated macOS app copied to `/Users/linotsai/Applications/LinoF.app` and relaunched.
 - Verification passed:
   - `python3 -m compileall backend/app backend/tests`
   - `python3 -m compileall backend/app backend/scripts`
@@ -226,6 +234,9 @@ the existing cloud API, DTOs, repositories, view models, and business screens.
   - iOS Swift typecheck passed with simulator SDK:
     `xcrun --sdk iphonesimulator swiftc -typecheck -target arm64-apple-ios18.0-simulator ...`
   - full iOS Simulator xcodebuild is blocked on this machine because no iOS simulator runtime is installed; `iPhone Air` exists only as unavailable `iOS 26.4`
+  - after account conversion fix: `cd frontend && swift test` (`12 passed`)
+  - after account conversion fix: macOS Debug build `BUILD SUCCEEDED`
+  - production API verification showed 25 statement cycles, 25 linked cash-flow items, and matching cycle totals for 花呗/白条/工商3375/工商5438/车贷
 
 ## Remaining
 

@@ -39,7 +39,7 @@ struct AccountsView: View {
                 )) {
                     Section("余额账户") {
                         ForEach(environment.accountsViewModel.accounts.balanceAccounts) { account in
-                            AccountRow(account: account)
+                            AccountRow(account: account, convertedCNY: convertedCNY(for: account))
                                 .tag(account.id)
                                 .contentShape(Rectangle())
                                 .onTapGesture { environment.inspectorSelection = .account(account) }
@@ -47,7 +47,7 @@ struct AccountsView: View {
                     }
                     Section("信用账户") {
                         ForEach(environment.accountsViewModel.accounts.creditAccounts) { account in
-                            AccountRow(account: account)
+                            AccountRow(account: account, convertedCNY: convertedCNY(for: account))
                                 .tag(account.id)
                                 .contentShape(Rectangle())
                                 .onTapGesture { environment.inspectorSelection = .account(account) }
@@ -61,12 +61,25 @@ struct AccountsView: View {
         .moduleFrame()
         .task {
             try? await environment.accountsViewModel.refresh()
+            try? await environment.settingsViewModel.refresh()
         }
+    }
+
+    private func convertedCNY(for account: AccountDTO) -> DecimalValue? {
+        guard account.currency != .cny else { return nil }
+        guard let rate = environment.settingsViewModel.rates.first(where: {
+            $0.fromCurrency == account.currency && $0.toCurrency == .cny
+        }) else {
+            return nil
+        }
+        let amount = account.type == .credit ? account.currentLiability : account.currentBalance
+        return DecimalValue(amount.value * rate.rate.value)
     }
 }
 
 private struct AccountRow: View {
     let account: AccountDTO
+    let convertedCNY: DecimalValue?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -87,7 +100,7 @@ private struct AccountRow: View {
             MoneyText(
                 amount: account.type == .credit ? account.currentLiability : account.currentBalance,
                 currency: account.currency,
-                convertedCNY: account.currency == .cny ? nil : (account.type == .credit ? account.currentLiability : account.currentBalance),
+                convertedCNY: convertedCNY,
                 prominence: .headline
             )
         }
