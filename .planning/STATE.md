@@ -211,6 +211,12 @@ the existing cloud API, DTOs, repositories, view models, and business screens.
   - 白条 monthly figures summed to `1771.57`, so December was adjusted from `14.89` to `15.49` because the user explicitly said total `1772.17` is authoritative;
   - production backup before direct adjustment: `/opt/linofinance/backups/linofinance-before-initial-bills-20260516T112839Z.dump`;
   - updated macOS app copied to `/Users/linotsai/Applications/LinoF.app` and relaunched.
+- Salary cash-flow recurrence added:
+  - New Cash Flow sheet now treats `salary` as an inflow;
+  - selecting salary shows a `每月重复到` cutoff date;
+  - submit creates one monthly salary cash-flow item from the first expected date through the cutoff date;
+  - generated salary cash flows carry `FREQ=MONTHLY;UNTIL=yyyy-MM-dd` in `recurrence_rule`;
+  - local `/Users/linotsai/Applications/LinoF.app` rebuilt, replaced, and relaunched.
 - Verification passed:
   - `python3 -m compileall backend/app backend/tests`
   - `python3 -m compileall backend/app backend/scripts`
@@ -237,6 +243,9 @@ the existing cloud API, DTOs, repositories, view models, and business screens.
   - after account conversion fix: `cd frontend && swift test` (`12 passed`)
   - after account conversion fix: macOS Debug build `BUILD SUCCEEDED`
   - production API verification showed 25 statement cycles, 25 linked cash-flow items, and matching cycle totals for 花呗/白条/工商3375/工商5438/车贷
+  - after salary recurrence change: `cd frontend && swift test` (`12 passed`)
+  - after salary recurrence change: macOS Debug build `BUILD SUCCEEDED`
+  - after salary recurrence change: iOS simulator SDK Swift typecheck passed
 
 ## Remaining
 

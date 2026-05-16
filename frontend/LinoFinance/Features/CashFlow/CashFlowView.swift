@@ -261,6 +261,7 @@ struct NewCashFlowSheet: View {
     @State private var title = ""
     @State private var amount = ""
     @State private var expectedDate = Date()
+    @State private var recurrenceEndDate = Calendar.current.date(byAdding: .month, value: 12, to: Date()) ?? Date()
     @State private var direction = "outflow"
     @State private var cashFlowType = "one_time"
     @State private var accountId: String?
@@ -286,6 +287,12 @@ struct NewCashFlowSheet: View {
                     }
                 }
                 DatePicker("预计日期", selection: $expectedDate, displayedComponents: .date)
+                if cashFlowType == "salary" {
+                    DatePicker("每月重复到", selection: $recurrenceEndDate, displayedComponents: .date)
+                    Text("会从预计日期开始，每月生成一条工资进账，直到截止日期所在日。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Picker("账户", selection: accountSelection) {
                     Text("不关联").tag(Optional<String>.none)
                     ForEach(environment.accountsViewModel.accounts.balanceAccounts) { account in
@@ -316,6 +323,22 @@ struct NewCashFlowSheet: View {
             try? await environment.accountsViewModel.refresh()
             try? await environment.entriesViewModel.refresh()
         }
+        .onChange(of: cashFlowType) { _, newValue in
+            if newValue == "salary" {
+                direction = "inflow"
+                if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    title = "工资"
+                }
+                if recurrenceEndDate < expectedDate {
+                    recurrenceEndDate = expectedDate
+                }
+            }
+        }
+        .onChange(of: expectedDate) { _, newValue in
+            if cashFlowType == "salary", recurrenceEndDate < newValue {
+                recurrenceEndDate = newValue
+            }
+        }
     }
 
     private var accountSelection: Binding<String?> {
@@ -328,27 +351,55 @@ struct NewCashFlowSheet: View {
 
     private func submit() async {
         guard let decimal = Decimal(string: amount) else { return }
+        if cashFlowType == "salary", recurrenceEndDate < expectedDate {
+            errorMessage = "工资重复截止日期不能早于首次预计日期"
+            return
+        }
         let converted = DecimalValue(decimal)
-        let request = CashFlowItemCreateRequest(
-            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-            direction: direction,
-            cashFlowType: cashFlowType,
-            amount: converted,
-            currency: .cny,
-            exchangeRateId: nil,
-            convertedCnyAmount: converted,
-            expectedDate: expectedDate,
-            accountId: accountId,
-            categoryId: categoryId,
-            recurrenceRule: nil,
-            note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note
-        )
+        let requests = cashFlowRequests(amount: converted)
         do {
-            try await environment.cashFlowViewModel.create(request)
+            try await environment.cashFlowViewModel.create(requests)
             try? await environment.reportsViewModel.refresh()
             environment.isShowingNewCashFlowSheet = false
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func cashFlowRequests(amount: DecimalValue) -> [CashFlowItemCreateRequest] {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let noteValue = trimmedNote.isEmpty ? nil : trimmedNote
+        let dates = cashFlowType == "salary" ? monthlyDates(from: expectedDate, through: recurrenceEndDate) : [expectedDate]
+        let recurrenceRule = cashFlowType == "salary" ? "FREQ=MONTHLY;UNTIL=\(DateFormatter.linoAPIDate.string(from: recurrenceEndDate))" : nil
+
+        return dates.map { date in
+            CashFlowItemCreateRequest(
+                title: trimmedTitle,
+                direction: cashFlowType == "salary" ? "inflow" : direction,
+                cashFlowType: cashFlowType,
+                amount: amount,
+                currency: .cny,
+                exchangeRateId: nil,
+                convertedCnyAmount: amount,
+                expectedDate: date,
+                accountId: accountId,
+                categoryId: categoryId,
+                recurrenceRule: recurrenceRule,
+                note: noteValue
+            )
+        }
+    }
+
+    private func monthlyDates(from startDate: Date, through endDate: Date) -> [Date] {
+        var dates: [Date] = []
+        let calendar = Calendar.current
+        var current = startDate
+        while current <= endDate, dates.count < 120 {
+            dates.append(current)
+            guard let next = calendar.date(byAdding: .month, value: 1, to: current) else { break }
+            current = next
+        }
+        return dates
     }
 }
