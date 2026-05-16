@@ -4,8 +4,8 @@ Last updated: 2026-05-16
 
 ## Current Goal
 
-Execute `plan.md` from Phase 0 onward. The current completed slice is Phase 6:
-AI structured actions, risk gating, audit logs, and notification rules.
+Execute `plan.md` from Phase 0 onward. The current completed slice is Phase 7:
+report aggregation APIs and CSV export.
 
 ## Completed
 
@@ -105,16 +105,31 @@ AI structured actions, risk gating, audit logs, and notification rules.
   - `AuditLog`;
   - `JSONValue` for AI/notification JSON payloads;
   - placeholder AI plan and notification rule views.
+- Phase 7 report and CSV export core implemented:
+  - `GET /reports/monthly-overview`;
+  - `GET /reports/category-expenses`;
+  - `GET /reports/cash-flow-pressure`;
+  - `GET /reports/credit-liability-trend`;
+  - `GET /reports/reimbursements`;
+  - `GET /reports/subscriptions`;
+  - report rows include original-currency display totals and CNY totals where relevant;
+  - reimbursement report supports `pre_reimbursement`, `expected_net`, `approved_net`, `received_net`, and `personal_net` views;
+  - `GET /exports/csv` lists available CSV datasets;
+  - `GET /exports/csv/{dataset}` exports core ledger, cash-flow, reimbursement, credit, installment, subscription, audit, AI, and notification tables.
+- Frontend Phase 7 shared types added:
+  - report summary models and reimbursement report view enum;
+  - `ExportDataset`;
+  - placeholder reports view.
 - Verification passed:
   - `python3 -m compileall backend/app backend/tests`
-  - `cd backend && . .venv/bin/activate && pytest` (`38 passed`)
+  - `cd backend && . .venv/bin/activate && pytest` (`42 passed`)
   - `cd backend && . .venv/bin/activate && ruff check .`
   - `cd backend && . .venv/bin/activate && alembic upgrade head --sql`
-  - `cd frontend && swift test` (`10 passed`)
+  - `cd frontend && swift test` (`12 passed`)
 
 ## Remaining
 
-1. Start Phase 7 report aggregation and CSV export.
+1. Start Phase 8 cloud deployment, domain API, production migration flow, backups, auth/rate limit, and end-to-end stabilization.
 2. Add partial cash-flow settlement once reimbursement and partial payments need it.
 3. Add credit statement cycle update/close endpoints if manual statement reconciliation needs editing after creation.
 4. Add account balance recalculation/reconciliation command to rebuild balances from movements and cycle amounts.

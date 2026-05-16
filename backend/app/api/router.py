@@ -10,9 +10,11 @@ from app.api.routes import (
     currency_rates,
     dashboard,
     entries,
+    exports,
     health,
     installments,
     notification_rules,
+    reports,
     reimbursements,
     subscriptions,
 )
@@ -30,6 +32,7 @@ api_router.include_router(
 )
 api_router.include_router(currency_rates.router, prefix="/currency-rates", tags=["currency-rates"])
 api_router.include_router(entries.router, prefix="/entries", tags=["entries"])
+api_router.include_router(exports.router, prefix="/exports", tags=["exports"])
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 api_router.include_router(installments.router, prefix="/installment-plans", tags=["installments"])
 api_router.include_router(
@@ -37,6 +40,7 @@ api_router.include_router(
     prefix="/notification-rules",
     tags=["notification-rules"],
 )
+api_router.include_router(reports.router, prefix="/reports", tags=["reports"])
 api_router.include_router(reimbursements.router, prefix="/reimbursement-claims", tags=["reimbursements"])
 api_router.include_router(subscriptions.router, prefix="/subscription-rules", tags=["subscriptions"])
 api_router.include_router(health.router, tags=["health"])

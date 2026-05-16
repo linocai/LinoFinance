@@ -74,6 +74,14 @@ Response:
   - `POST /notification-rules/{rule_id}/resume`
   - `POST /notification-rules/{rule_id}/cancel`
   - `GET /audit-logs`
+  - `GET /reports/monthly-overview`
+  - `GET /reports/category-expenses`
+  - `GET /reports/cash-flow-pressure`
+  - `GET /reports/credit-liability-trend`
+  - `GET /reports/reimbursements`
+  - `GET /reports/subscriptions`
+  - `GET /exports/csv`
+  - `GET /exports/csv/{dataset}`
   - `GET /entries`
   - `POST /entries`
   - `POST /entries/{entry_id}/confirm`
@@ -153,6 +161,21 @@ Response:
 - Executed AI-created cash-flow items and notification rules can be rolled back by cancellation when still eligible.
 - Notification rules support `credit_repayment`, `cash_flow`, `reimbursement`, `subscription`, and `anomaly`.
 - Notification channels support `in_app`, `system`, and `email`; client delivery is future frontend work.
+
+## Report And CSV Export Rules Implemented
+
+- Reports are backend-computed read models over confirmed ledger records and active future cash flows.
+- Report date filters use inclusive `date_from` / `date_to` boundaries.
+- Monthly overview includes income, expense, reimbursement offsets, future cash-flow pressure, and active credit liability in CNY.
+- Category expense reports group confirmed expense category lines and include original-currency totals plus CNY totals.
+- Cash-flow pressure reports summarize active `expected`, `confirmed`, and `partial` cash flows for 7/30/90 day windows.
+- Transfer-direction future cash flows, such as credit repayment and installments, count as outflow pressure.
+- Credit liability trend reports summarize statement cycles by statement date and include remaining original-currency and CNY amounts.
+- Reimbursement reports support `pre_reimbursement`, `expected_net`, `approved_net`, `received_net`, and `personal_net` views.
+- Subscription reports project active weekly/monthly/yearly rules into monthly and annual CNY equivalents.
+- CSV export is V1-only CSV; each dataset endpoint returns `text/csv`.
+- Export datasets include core ledger tables, cash-flow/reimbursement/credit/installment/subscription tables, AI/action/audit tables, and notification rules.
+- CSV amount rows preserve original amount/currency fields and CNY conversion columns where the underlying table has them.
 
 ## Domain Rules For API Design
 

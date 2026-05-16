@@ -76,4 +76,16 @@ final class FinanceDefaultsTests: XCTestCase {
 
         XCTAssertEqual(decoded, payload)
     }
+
+    func testReportEnumsUseApiRawValues() {
+        XCTAssertEqual(ReimbursementReportView.preReimbursement.rawValue, "pre_reimbursement")
+        XCTAssertEqual(ReimbursementReportView.expectedNet.rawValue, "expected_net")
+        XCTAssertEqual(ReimbursementReportView.personalNet.rawValue, "personal_net")
+    }
+
+    func testExportDatasetKeepsCsvFilename() {
+        let dataset = ExportDataset(name: "entries", filename: "entries.csv")
+
+        XCTAssertEqual(dataset.filename, "entries.csv")
+    }
 }
