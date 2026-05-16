@@ -75,7 +75,7 @@ struct EntriesView: View {
                     .foregroundStyle(.orange)
             }
         }
-        .padding(24)
+        .padding(FinanceSpacing.page)
         .moduleFrame()
         .task {
             try? await environment.entriesViewModel.refresh()
@@ -188,10 +188,32 @@ private struct EntryRow: View {
     }
 
     var body: some View {
+        #if os(iOS)
+        HStack(alignment: .top, spacing: 12) {
+            entryIcon
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(entry.title)
+                        .font(.headline)
+                        .lineLimit(2)
+                    StatusTag(title: entry.status.title, style: entry.status == .confirmed ? .confirmed : .draft)
+                }
+                Text("\(FinanceFormatter.shortDate(entry.date)) · \(accountName) · \(categoryName)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                if let primaryLine {
+                    MoneyText(amount: primaryLine.amount, currency: primaryLine.currency, convertedCNY: primaryLine.convertedCnyAmount)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 6)
+        #else
         HStack(spacing: 12) {
-            Image(systemName: entry.status == .confirmed ? "checkmark.circle.fill" : "circle.dotted")
-                .foregroundStyle(entry.status == .confirmed ? FinanceColor.income : FinanceColor.pending)
-                .frame(width: 28)
+            entryIcon
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
@@ -211,6 +233,13 @@ private struct EntryRow: View {
             }
         }
         .padding(.vertical, 6)
+        #endif
+    }
+
+    private var entryIcon: some View {
+        Image(systemName: entry.status == .confirmed ? "checkmark.circle.fill" : "circle.dotted")
+            .foregroundStyle(entry.status == .confirmed ? FinanceColor.income : FinanceColor.pending)
+            .frame(width: 28)
     }
 }
 

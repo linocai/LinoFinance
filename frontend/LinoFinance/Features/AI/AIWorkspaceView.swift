@@ -11,7 +11,7 @@ struct AIWorkspaceView: View {
             PageHeader(title: "AI", subtitle: "计划、确认、执行与回滚")
 
             if let config = environment.aiViewModel.config {
-                HStack(spacing: 12) {
+                LazyVGrid(columns: aiConfigColumns, spacing: 12) {
                     ToolbarPill(title: "Provider", value: config.provider, tint: FinanceColor.ai)
                     ToolbarPill(title: "模型", value: config.model ?? "未配置", tint: FinanceColor.ai)
                     ToolbarPill(title: "API Key", value: config.apiKeyConfigured ? "已配置" : "未配置", tint: config.apiKeyConfigured ? FinanceColor.income : FinanceColor.warning)
@@ -25,18 +25,16 @@ struct AIWorkspaceView: View {
                         .font(.headline)
                     TextField("例如：今天午餐 88 元，从招商银行支出，分类餐饮", text: $prompt, axis: .vertical)
                         .lineLimit(3...6)
-                    HStack {
-                        TextField("高风险强确认：EXECUTE_HIGH_RISK", text: $strongConfirm)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(maxWidth: 280)
-                        Spacer()
-                        Button {
-                            Task { await createPlan() }
-                        } label: {
-                            Label("生成计划", systemImage: "sparkles")
+                    ViewThatFits(in: .horizontal) {
+                        HStack {
+                            strongConfirmField
+                            Spacer()
+                            createPlanButton
                         }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        VStack(alignment: .leading, spacing: 10) {
+                            strongConfirmField
+                            createPlanButton
+                        }
                     }
                 }
             }
@@ -68,7 +66,7 @@ struct AIWorkspaceView: View {
                 ErrorBanner(message: message)
             }
         }
-        .padding(24)
+        .padding(FinanceSpacing.page)
         .moduleFrame()
         .task {
             try? await environment.aiViewModel.refresh()
@@ -85,6 +83,30 @@ struct AIWorkspaceView: View {
         } message: { item in
             Text(item.message)
         }
+    }
+
+    private var aiConfigColumns: [GridItem] {
+#if os(iOS)
+        [GridItem(.adaptive(minimum: 140), spacing: 12)]
+#else
+        Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
+#endif
+    }
+
+    private var strongConfirmField: some View {
+        TextField("高风险强确认：EXECUTE_HIGH_RISK", text: $strongConfirm)
+            .textFieldStyle(.roundedBorder)
+            .frame(maxWidth: 280)
+    }
+
+    private var createPlanButton: some View {
+        Button {
+            Task { await createPlan() }
+        } label: {
+            Label("生成计划", systemImage: "sparkles")
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     private func createPlan() async {
@@ -158,18 +180,21 @@ private struct AIPlanCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(plan.sourceText)
-                        .font(.headline)
-                    Text(plan.explanation ?? "结构化动作计划")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    planSummary
+                    Spacer()
+                    StatusTag(status: plan.riskLevel)
+                    StatusTag(status: plan.status)
                 }
-                Spacer()
-                StatusTag(status: plan.riskLevel)
-                StatusTag(status: plan.status)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    planSummary
+                    HStack {
+                        StatusTag(status: plan.riskLevel)
+                        StatusTag(status: plan.status)
+                    }
+                }
             }
 
             ForEach(plan.actions) { item in
@@ -207,4 +232,17 @@ private struct AIPlanCard: View {
         }
         .padding(.vertical, 8)
     }
+
+    private var planSummary: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(plan.sourceText)
+                .font(.headline)
+                .lineLimit(2)
+            Text(plan.explanation ?? "结构化动作计划")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+        }
+    }
+
 }

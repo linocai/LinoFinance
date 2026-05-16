@@ -13,7 +13,29 @@ enum FinanceColor {
 }
 
 enum FinanceSpacing {
-    static let panel: CGFloat = 16
+    static var page: CGFloat {
+#if os(iOS)
+        16
+#else
+        24
+#endif
+    }
+
+    static var panel: CGFloat {
+#if os(iOS)
+        14
+#else
+        16
+#endif
+    }
+
     static let row: CGFloat = 10
-    static let cornerRadius: CGFloat = 16
+
+    static var cornerRadius: CGFloat {
+#if os(iOS)
+        14
+#else
+        16
+#endif
+    }
 }

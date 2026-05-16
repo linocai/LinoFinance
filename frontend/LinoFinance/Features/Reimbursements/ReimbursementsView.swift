@@ -73,7 +73,7 @@ struct ReimbursementsView: View {
                 ErrorBanner(message: message)
             }
         }
-        .padding(24)
+        .padding(FinanceSpacing.page)
         .moduleFrame()
         .task {
             try? await environment.reimbursementsViewModel.refresh()

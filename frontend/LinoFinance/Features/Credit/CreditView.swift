@@ -32,7 +32,7 @@ struct CreditView: View {
                         action: environment.beginNewAccount
                     )
                 } else {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 240), spacing: 12)], spacing: 12) {
+                    LazyVGrid(columns: creditAccountColumns, spacing: 12) {
                         ForEach(creditAccounts) { account in
                             Button {
                                 environment.inspectorSelection = .account(account)
@@ -60,7 +60,7 @@ struct CreditView: View {
                     }
                 }
 
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 16)], spacing: 16) {
+                LazyVGrid(columns: creditPanelColumns, spacing: 16) {
                     FinancePanel {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("分期计划")
@@ -116,7 +116,7 @@ struct CreditView: View {
                     ErrorBanner(message: message)
                 }
             }
-            .padding(24)
+            .padding(FinanceSpacing.page)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .moduleFrame()
@@ -166,6 +166,22 @@ struct CreditView: View {
                 Label("新建订阅", systemImage: "repeat")
             }
         }
+    }
+
+    private var creditAccountColumns: [GridItem] {
+#if os(iOS)
+        [GridItem(.adaptive(minimum: 220), spacing: 12)]
+#else
+        [GridItem(.adaptive(minimum: 240), spacing: 12)]
+#endif
+    }
+
+    private var creditPanelColumns: [GridItem] {
+#if os(iOS)
+        [GridItem(.adaptive(minimum: 220), spacing: 16)]
+#else
+        [GridItem(.adaptive(minimum: 320), spacing: 16)]
+#endif
     }
 
     private func accountName(_ id: String) -> String {
@@ -284,7 +300,11 @@ private struct CreditAccountCard: View {
             }
         }
         .padding(14)
+#if os(iOS)
+        .background(Color(.secondarySystemGroupedBackground))
+#else
         .background(.regularMaterial)
+#endif
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
@@ -294,19 +314,36 @@ private struct CreditCycleRow: View {
     let accountName: String
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(accountName)
-                    .font(.headline)
-                Text("\(FinanceFormatter.shortDate(cycle.cycleStartDate)) - \(FinanceFormatter.shortDate(cycle.cycleEndDate)) · 到期 \(FinanceFormatter.shortDate(cycle.dueDate))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                cycleSummary
+                Spacer()
+                StatusTag(status: cycle.status)
+                MoneyText(amount: cycle.remainingAmount, currency: cycle.currency, prominence: .headline)
             }
-            Spacer()
-            StatusTag(status: cycle.status)
-            MoneyText(amount: cycle.remainingAmount, currency: cycle.currency, prominence: .headline)
+
+            VStack(alignment: .leading, spacing: 8) {
+                cycleSummary
+                HStack {
+                    StatusTag(status: cycle.status)
+                    Spacer()
+                    MoneyText(amount: cycle.remainingAmount, currency: cycle.currency, prominence: .headline)
+                }
+            }
         }
         .padding(.vertical, 6)
+    }
+
+    private var cycleSummary: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(accountName)
+                .font(.headline)
+                .lineLimit(2)
+            Text("\(FinanceFormatter.shortDate(cycle.cycleStartDate)) - \(FinanceFormatter.shortDate(cycle.cycleEndDate)) · 到期 \(FinanceFormatter.shortDate(cycle.dueDate))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
     }
 }
 
@@ -315,19 +352,37 @@ private struct InstallmentRow: View {
     let accountName: String
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(accountName)
-                    .font(.headline)
-                Text("\(plan.numberOfPayments) 期 · \(FinanceFormatter.shortDate(plan.startDate)) - \(FinanceFormatter.shortDate(plan.endDate))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                installmentSummary
+                Spacer()
+                StatusTag(status: plan.status)
+                MoneyText(amount: plan.paymentAmount, currency: plan.currency)
             }
-            Spacer()
-            StatusTag(status: plan.status)
-            MoneyText(amount: plan.paymentAmount, currency: plan.currency)
+
+            VStack(alignment: .leading, spacing: 8) {
+                installmentSummary
+                HStack {
+                    StatusTag(status: plan.status)
+                    Spacer()
+                    MoneyText(amount: plan.paymentAmount, currency: plan.currency)
+                }
+            }
         }
         .padding(.vertical, 6)
+        .padding(.trailing, 28)
+    }
+
+    private var installmentSummary: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(accountName)
+                .font(.headline)
+                .lineLimit(2)
+            Text("\(plan.numberOfPayments) 期 · \(FinanceFormatter.shortDate(plan.startDate)) - \(FinanceFormatter.shortDate(plan.endDate))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
     }
 }
 
@@ -352,19 +407,37 @@ private struct SubscriptionRow: View {
     let rule: SubscriptionRuleDTO
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(rule.title)
-                    .font(.headline)
-                Text("\(rule.billingInterval.financeStatusTitle) · 下次 \(rule.nextChargeDate.map(FinanceFormatter.shortDate) ?? "未排期")")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                subscriptionSummary
+                Spacer()
+                StatusTag(status: rule.status)
+                MoneyText(amount: rule.amount, currency: rule.currency)
             }
-            Spacer()
-            StatusTag(status: rule.status)
-            MoneyText(amount: rule.amount, currency: rule.currency)
+
+            VStack(alignment: .leading, spacing: 8) {
+                subscriptionSummary
+                HStack {
+                    StatusTag(status: rule.status)
+                    Spacer()
+                    MoneyText(amount: rule.amount, currency: rule.currency)
+                }
+            }
         }
         .padding(.vertical, 6)
+        .padding(.trailing, 28)
+    }
+
+    private var subscriptionSummary: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(rule.title)
+                .font(.headline)
+                .lineLimit(2)
+            Text("\(rule.billingInterval.financeStatusTitle) · 下次 \(rule.nextChargeDate.map(FinanceFormatter.shortDate) ?? "未排期")")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
     }
 }
 

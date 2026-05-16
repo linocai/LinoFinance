@@ -22,7 +22,7 @@ struct DashboardView: View {
                     )
 
                     if let bundle = environment.reportsViewModel.bundle {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16)], spacing: 16) {
+                        LazyVGrid(columns: dashboardCardColumns, spacing: 16) {
                             DashboardCashFlowCard(report: bundle.cashFlow)
                             DashboardCategoryCard(report: bundle.categories)
                             DashboardReimbursementCard(report: bundle.reimbursement)
@@ -53,7 +53,7 @@ struct DashboardView: View {
                     ErrorBanner(message: message)
                 }
             }
-            .padding(24)
+            .padding(FinanceSpacing.page)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .moduleFrame()
@@ -62,6 +62,14 @@ struct DashboardView: View {
             try? await environment.reportsViewModel.refresh()
             try? await environment.aiViewModel.refresh()
         }
+    }
+
+    private var dashboardCardColumns: [GridItem] {
+#if os(iOS)
+        [GridItem(.adaptive(minimum: 260), spacing: 16)]
+#else
+        [GridItem(.adaptive(minimum: 300), spacing: 16)]
+#endif
     }
 }
 
@@ -136,12 +144,24 @@ private struct DashboardCategoryCard: View {
                     MoneyText(amount: report.totalExpenseCny, currency: .cny, prominence: .headline)
                 }
                 ForEach(report.rows.prefix(5)) { row in
-                    HStack(alignment: .top) {
-                        Text(row.categoryName)
-                            .frame(minWidth: 72, idealWidth: 110, maxWidth: 120, alignment: .leading)
-                            .lineLimit(1)
-                        ThinBar(value: row.expenseCny, maxValue: maxValue, tint: FinanceColor.expense)
-                        MoneyText(amount: row.expenseCny, currency: .cny)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top) {
+                            Text(row.categoryName)
+                                .frame(minWidth: 72, idealWidth: 110, maxWidth: 120, alignment: .leading)
+                                .lineLimit(1)
+                            ThinBar(value: row.expenseCny, maxValue: maxValue, tint: FinanceColor.expense)
+                            MoneyText(amount: row.expenseCny, currency: .cny)
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text(row.categoryName)
+                                    .font(.subheadline.weight(.medium))
+                                Spacer()
+                                MoneyText(amount: row.expenseCny, currency: .cny)
+                            }
+                            ThinBar(value: row.expenseCny, maxValue: maxValue, tint: FinanceColor.expense)
+                        }
                     }
                 }
                 if report.rows.isEmpty {

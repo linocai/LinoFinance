@@ -14,9 +14,10 @@ struct iOSRootView: View {
                 mainTabs
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .preferredColorScheme(.light)
         .tint(FinanceColor.brand)
-        .background(Color(.systemBackground))
+        .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .onChange(of: requiresConnectionSetup) { _, needsSetup in
             if needsSetup {
                 selectedTab = .more
@@ -56,6 +57,8 @@ struct iOSRootView: View {
                 .tabItem { Label("更多", systemImage: "ellipsis.circle.fill") }
                 .tag(iOSTab.more)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .sheet(item: detailSelection) { selection in
             NavigationStack {
                 ScrollView {
@@ -83,19 +86,10 @@ struct iOSRootView: View {
         NavigationStack {
             SettingsView(environment: environment)
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            Task { try? await environment.settingsViewModel.refresh() }
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                        .accessibilityLabel("刷新连接状态")
-                    }
-                }
-                .toolbarBackground(Color(.systemBackground), for: .navigationBar)
-                .toolbarBackground(.visible, for: .navigationBar)
+                .toolbar(.hidden, for: .navigationBar)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemGroupedBackground).ignoresSafeArea())
     }
 
     private var requiresConnectionSetup: Bool {

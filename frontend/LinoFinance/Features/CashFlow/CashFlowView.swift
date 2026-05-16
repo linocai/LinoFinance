@@ -89,7 +89,7 @@ struct CashFlowView: View {
                 ErrorBanner(message: message)
             }
         }
-        .padding(24)
+        .padding(FinanceSpacing.page)
         .moduleFrame()
         .task {
             try? await environment.cashFlowViewModel.refresh()
@@ -208,10 +208,29 @@ private struct CashFlowRow: View {
     }
 
     var body: some View {
+        #if os(iOS)
+        HStack(alignment: .top, spacing: 12) {
+            directionIcon
+            VStack(alignment: .leading, spacing: 6) {
+                Text(item.title)
+                    .font(.headline)
+                    .lineLimit(2)
+                HStack(spacing: 8) {
+                    StatusTag(status: item.status)
+                    StatusTag(title: item.cashFlowType.financeStatusTitle, style: .expected)
+                }
+                Text("\(FinanceFormatter.mediumDate(item.expectedDate)) · \(accountName)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                MoneyText(amount: item.amount, currency: item.currency, convertedCNY: item.convertedCnyAmount, prominence: .headline)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 6)
+        #else
         HStack(spacing: 12) {
-            Image(systemName: item.direction == "inflow" ? "arrow.down.circle.fill" : "arrow.up.circle.fill")
-                .foregroundStyle(tint)
-                .frame(width: 28)
+            directionIcon
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text(item.title)
@@ -227,6 +246,7 @@ private struct CashFlowRow: View {
             MoneyText(amount: item.amount, currency: item.currency, convertedCNY: item.convertedCnyAmount, prominence: .headline)
         }
         .padding(.vertical, 6)
+        #endif
     }
 
     private var accountName: String {
@@ -235,6 +255,12 @@ private struct CashFlowRow: View {
             return "未关联账户"
         }
         return account.name
+    }
+
+    private var directionIcon: some View {
+        Image(systemName: item.direction == "inflow" ? "arrow.down.circle.fill" : "arrow.up.circle.fill")
+            .foregroundStyle(tint)
+            .frame(width: 28)
     }
 }
 

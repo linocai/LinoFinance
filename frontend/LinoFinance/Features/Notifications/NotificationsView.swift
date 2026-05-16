@@ -61,7 +61,7 @@ struct NotificationsView: View {
                 ErrorBanner(message: message)
             }
         }
-        .padding(24)
+        .padding(FinanceSpacing.page)
         .moduleFrame()
         .task {
             try? await environment.notificationsViewModel.refresh()
@@ -108,10 +108,25 @@ private struct NotificationRuleRow: View {
     let rule: NotificationRuleDTO
 
     var body: some View {
+        #if os(iOS)
+        HStack(alignment: .top, spacing: 12) {
+            notificationIcon
+            VStack(alignment: .leading, spacing: 6) {
+                Text(rule.title)
+                    .font(.headline)
+                    .lineLimit(2)
+                Text("\(rule.ruleType.financeStatusTitle) · \(rule.channel.financeStatusTitle) · \(rule.nextTriggerDate.map(FinanceFormatter.mediumDate) ?? "未排期")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                StatusTag(status: rule.status)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 6)
+        #else
         HStack(spacing: 12) {
-            Image(systemName: "bell.badge.fill")
-                .foregroundStyle(rule.status == "active" ? FinanceColor.brand : FinanceColor.pending)
-                .frame(width: 28)
+            notificationIcon
             VStack(alignment: .leading, spacing: 4) {
                 Text(rule.title)
                     .font(.headline)
@@ -123,6 +138,13 @@ private struct NotificationRuleRow: View {
             StatusTag(status: rule.status)
         }
         .padding(.vertical, 6)
+        #endif
+    }
+
+    private var notificationIcon: some View {
+        Image(systemName: "bell.badge.fill")
+            .foregroundStyle(rule.status == "active" ? FinanceColor.brand : FinanceColor.pending)
+            .frame(width: 28)
     }
 }
 

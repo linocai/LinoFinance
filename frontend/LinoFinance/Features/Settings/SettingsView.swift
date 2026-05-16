@@ -9,6 +9,149 @@ struct SettingsView: View {
     @State private var configMessage: String?
 
     var body: some View {
+        #if os(iOS)
+        iOSContent
+        #else
+        macOSContent
+        #endif
+    }
+
+#if os(iOS)
+    private var iOSContent: some View {
+        Form {
+            Section {
+                HStack {
+                    Text("API 连接")
+                        .font(.headline)
+                    Spacer()
+                    Button {
+                        Task { try? await environment.settingsViewModel.refresh() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("刷新连接状态")
+                }
+                DetailLine(title: "地址", value: environment.apiClient.baseURL.absoluteString)
+                DetailLine(title: "Token", value: environment.apiClient.authToken == nil ? "未配置" : "已配置")
+                DetailLine(title: "状态", value: environment.settingsViewModel.health?.status ?? "未知")
+                DetailLine(title: "环境", value: environment.settingsViewModel.health?.environment ?? "未知")
+                if let health = environment.settingsViewModel.health {
+                    DetailLine(title: "鉴权", value: health.authRequired == true ? "已启用" : "未启用")
+                    DetailLine(title: "限流", value: health.rateLimitEnabled == true ? "已启用" : "未启用")
+                }
+                if let message = environment.lastErrorMessage {
+                    ErrorBanner(message: message)
+                }
+            } header: {
+                settingsHeader(title: "设置", subtitle: "API 连接、AI 配置、汇率和运行状态")
+            }
+
+            Section("连接配置") {
+                TextField("API 地址", text: $apiBaseURL)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+                    .autocorrectionDisabled()
+                SecureField(environment.apiClient.authToken == nil ? "API Token" : "留空则保留当前 Token", text: $apiToken)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+
+                Button {
+                    Task { await saveAPIConfiguration() }
+                } label: {
+                    Label("保存并重连", systemImage: "arrow.triangle.2.circlepath")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button(role: .destructive) {
+                    Task { await clearToken() }
+                } label: {
+                    Label("清除 Token", systemImage: "key.slash")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(environment.apiClient.authToken == nil)
+
+                if let configMessage {
+                    Text(configMessage)
+                        .font(.caption)
+                        .foregroundStyle(FinanceColor.income)
+                }
+            }
+
+            Section("AI 配置") {
+                if let config = environment.settingsViewModel.aiConfig {
+                    DetailLine(title: "Provider", value: config.provider)
+                    DetailLine(title: "模型", value: config.model ?? "未配置")
+                    DetailLine(title: "端点", value: config.baseUrlConfigured ? "已配置" : "未配置")
+                    DetailLine(title: "API Key", value: config.apiKeyConfigured ? "已配置" : "未配置")
+                    DetailLine(title: "自动确认阈值", value: FinanceFormatter.money(config.autoConfirmLimitCny))
+                } else {
+                    Text("尚未读取 AI 配置")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("手动汇率") {
+                TextField("USD/CNY", text: $usdRate)
+                    .keyboardType(.decimalPad)
+                    .autocorrectionDisabled()
+                Button {
+                    Task { await createRate() }
+                } label: {
+                    Label("写入今日汇率", systemImage: "plus.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+
+                ForEach(environment.settingsViewModel.rates.prefix(8)) { rate in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("\(rate.fromCurrency.rawValue)/\(rate.toCurrency.rawValue)")
+                                .font(.headline.monospaced())
+                            Spacer()
+                            Text(FinanceFormatter.shortDate(rate.date))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Text(NSDecimalNumber(decimal: rate.rate.value).stringValue)
+                            .font(.body.monospacedDigit())
+                    }
+                }
+            }
+
+            if let message = errorMessage ?? environment.settingsViewModel.errorMessage {
+                Section {
+                    ErrorBanner(message: message)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .background(Color(.systemGroupedBackground))
+        .moduleFrame()
+        .task {
+            syncDrafts()
+            try? await environment.settingsViewModel.refresh()
+        }
+    }
+
+    private func settingsHeader(title: String, subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(.primary)
+                .textCase(nil)
+            Text(subtitle)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .textCase(nil)
+        }
+        .padding(.top, 8)
+    }
+#endif
+
+    private var macOSContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 PageHeader(title: "设置", subtitle: "API 连接、AI 配置、汇率和运行状态")
@@ -107,7 +250,7 @@ struct SettingsView: View {
                     ErrorBanner(message: message)
                 }
             }
-            .padding(24)
+            .padding(FinanceSpacing.page)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .moduleFrame()

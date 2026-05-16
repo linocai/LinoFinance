@@ -57,7 +57,7 @@ struct AccountsView: View {
                 .listStyle(.inset)
             }
         }
-        .padding(24)
+        .padding(FinanceSpacing.page)
         .moduleFrame()
         .task {
             try? await environment.accountsViewModel.refresh()
@@ -82,10 +82,32 @@ private struct AccountRow: View {
     let convertedCNY: DecimalValue?
 
     var body: some View {
+        #if os(iOS)
+        HStack(alignment: .top, spacing: 12) {
+            accountIcon
+            VStack(alignment: .leading, spacing: 6) {
+                Text(account.name)
+                    .font(.headline)
+                    .lineLimit(2)
+                HStack(spacing: 8) {
+                    StatusTag(title: account.type.title, style: account.type == .credit ? .warning : .confirmed)
+                    Text(account.currency.rawValue)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+                MoneyText(
+                    amount: account.type == .credit ? account.currentLiability : account.currentBalance,
+                    currency: account.currency,
+                    convertedCNY: convertedCNY,
+                    prominence: .headline
+                )
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 6)
+        #else
         HStack(spacing: 12) {
-            Image(systemName: account.type == .credit ? "creditcard.fill" : "wallet.pass.fill")
-                .foregroundStyle(account.type == .credit ? FinanceColor.credit : FinanceColor.brand)
-                .frame(width: 28)
+            accountIcon
             VStack(alignment: .leading, spacing: 4) {
                 Text(account.name)
                     .font(.headline)
@@ -105,6 +127,13 @@ private struct AccountRow: View {
             )
         }
         .padding(.vertical, 6)
+        #endif
+    }
+
+    private var accountIcon: some View {
+        Image(systemName: account.type == .credit ? "creditcard.fill" : "wallet.pass.fill")
+            .foregroundStyle(account.type == .credit ? FinanceColor.credit : FinanceColor.brand)
+            .frame(width: 28)
     }
 }
 

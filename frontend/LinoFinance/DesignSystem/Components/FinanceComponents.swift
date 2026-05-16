@@ -7,18 +7,45 @@ struct MoneyText: View {
     var prominence: Font = .body
 
     var body: some View {
+        ViewThatFits(in: .horizontal) {
+            horizontalContent
+#if os(iOS)
+            verticalContent
+#endif
+        }
+    }
+
+    private var horizontalContent: some View {
         HStack(spacing: 6) {
-            Text(FinanceFormatter.money(amount, currency: currency))
-                .font(prominence.monospacedDigit())
+            primaryAmount
+            convertedAmount(prefix: "· ")
+        }
+    }
+
+#if os(iOS)
+    private var verticalContent: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            primaryAmount
+            convertedAmount(prefix: "")
+        }
+    }
+#endif
+
+    private var primaryAmount: some View {
+        Text(FinanceFormatter.money(amount, currency: currency))
+            .font(prominence.monospacedDigit())
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+    }
+
+    @ViewBuilder
+    private func convertedAmount(prefix: String) -> some View {
+        if let convertedCNY, currency != .cny {
+            Text("\(prefix)\(FinanceFormatter.money(convertedCNY, currency: .cny, approximate: true))")
+                .font(.subheadline.monospacedDigit())
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
-            if let convertedCNY, currency != .cny {
-                Text("· \(FinanceFormatter.money(convertedCNY, currency: .cny, approximate: true))")
-                    .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-            }
+                .minimumScaleFactor(0.7)
         }
     }
 }
@@ -119,7 +146,11 @@ struct KPIStat: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
+#if os(iOS)
+        .background(Color(.secondarySystemGroupedBackground))
+#else
         .background(.regularMaterial)
+#endif
         .clipShape(RoundedRectangle(cornerRadius: FinanceSpacing.cornerRadius))
     }
 }
@@ -160,7 +191,12 @@ struct FinancePanel<Content: View>: View {
     var body: some View {
         content
             .padding(FinanceSpacing.panel)
+#if os(iOS)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemGroupedBackground))
+#else
             .background(.regularMaterial)
+#endif
             .clipShape(RoundedRectangle(cornerRadius: FinanceSpacing.cornerRadius))
     }
 }

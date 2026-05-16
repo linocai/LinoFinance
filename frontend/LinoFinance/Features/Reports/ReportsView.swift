@@ -20,7 +20,11 @@ struct ReportsView: View {
                 Text("订阅").tag("subscriptions")
                 Text("CSV 导出").tag("exports")
             }
+#if os(iOS)
+            .pickerStyle(.menu)
+#else
             .pickerStyle(.segmented)
+#endif
 
             if let bundle = environment.reportsViewModel.bundle {
                 ScrollView {
@@ -59,12 +63,20 @@ struct ReportsView: View {
                     .foregroundStyle(FinanceColor.income)
             }
         }
-        .padding(24)
+        .padding(FinanceSpacing.page)
         .moduleFrame()
         .task {
             try? await environment.reportsViewModel.refresh()
         }
     }
+}
+
+private func reportGridColumns(minimum: CGFloat = 150) -> [GridItem] {
+#if os(iOS)
+    [GridItem(.adaptive(minimum: minimum), spacing: 12)]
+#else
+    Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
+#endif
 }
 
 private struct MonthlyReportPanel: View {
@@ -101,11 +113,23 @@ private struct CategoryReportPanel: View {
                     MoneyText(amount: report.totalExpenseCny, currency: .cny, prominence: .headline)
                 }
                 ForEach(report.rows) { row in
-                    HStack {
-                        Text(row.categoryName)
-                            .frame(minWidth: 72, idealWidth: 140, maxWidth: 160, alignment: .leading)
-                        ThinBar(value: row.expenseCny, maxValue: maxValue, tint: FinanceColor.expense)
-                        MoneyText(amount: row.expenseCny, currency: .cny)
+                    ViewThatFits(in: .horizontal) {
+                        HStack {
+                            Text(row.categoryName)
+                                .frame(minWidth: 72, idealWidth: 140, maxWidth: 160, alignment: .leading)
+                            ThinBar(value: row.expenseCny, maxValue: maxValue, tint: FinanceColor.expense)
+                            MoneyText(amount: row.expenseCny, currency: .cny)
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text(row.categoryName)
+                                    .font(.subheadline.weight(.medium))
+                                Spacer()
+                                MoneyText(amount: row.expenseCny, currency: .cny)
+                            }
+                            ThinBar(value: row.expenseCny, maxValue: maxValue, tint: FinanceColor.expense)
+                        }
                     }
                 }
                 if report.rows.isEmpty {
@@ -150,17 +174,22 @@ private struct CreditReportPanel: View {
                     MoneyText(amount: report.totalRemainingCny, currency: .cny, prominence: .headline)
                 }
                 ForEach(report.rows) { row in
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(row.accountName)
-                                .font(.headline)
-                            Text("出账 \(FinanceFormatter.shortDate(row.statementDate)) · 到期 \(FinanceFormatter.shortDate(row.dueDate))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    ViewThatFits(in: .horizontal) {
+                        HStack {
+                            creditTrendSummary(row)
+                            Spacer()
+                            StatusTag(status: row.status)
+                            MoneyText(amount: row.remainingAmount, currency: row.currency)
                         }
-                        Spacer()
-                        StatusTag(status: row.status)
-                        MoneyText(amount: row.remainingAmount, currency: row.currency)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            creditTrendSummary(row)
+                            HStack {
+                                StatusTag(status: row.status)
+                                Spacer()
+                                MoneyText(amount: row.remainingAmount, currency: row.currency)
+                            }
+                        }
                     }
                     Divider()
                 }
@@ -170,6 +199,18 @@ private struct CreditReportPanel: View {
             }
         }
     }
+
+    private func creditTrendSummary(_ row: CreditLiabilityTrendRowDTO) -> some View {
+        VStack(alignment: .leading) {
+            Text(row.accountName)
+                .font(.headline)
+                .lineLimit(2)
+            Text("出账 \(FinanceFormatter.shortDate(row.statementDate)) · 到期 \(FinanceFormatter.shortDate(row.dueDate))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
+    }
 }
 
 private struct ReimbursementReportPanel: View {
@@ -177,7 +218,7 @@ private struct ReimbursementReportPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12) {
+            LazyVGrid(columns: reportGridColumns(), spacing: 12) {
                 ToolbarPill(title: "报销前支出", value: FinanceFormatter.money(report.preReimbursementExpenseCny), tint: FinanceColor.expense)
                 ToolbarPill(title: "预计抵扣", value: FinanceFormatter.money(report.expectedOffsetCny), tint: FinanceColor.ai)
                 ToolbarPill(title: "个人净支出", value: FinanceFormatter.money(report.personalNetExpenseCny), tint: FinanceColor.brand)
@@ -187,13 +228,25 @@ private struct ReimbursementReportPanel: View {
                     Text("状态拆分")
                         .font(.headline)
                     ForEach(report.statusBreakdown) { row in
-                        HStack {
-                            StatusTag(status: row.status)
-                            Text("\(row.claimCount) 笔")
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            MoneyText(amount: row.amountCny, currency: .cny)
+                        ViewThatFits(in: .horizontal) {
+                            HStack {
+                                StatusTag(status: row.status)
+                                Text("\(row.claimCount) 笔")
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                MoneyText(amount: row.amountCny, currency: .cny)
+                            }
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    StatusTag(status: row.status)
+                                    Text("\(row.claimCount) 笔")
+                                        .font(.caption.monospacedDigit())
+                                        .foregroundStyle(.secondary)
+                                }
+                                MoneyText(amount: row.amountCny, currency: .cny)
+                            }
                         }
                     }
                 }
@@ -206,7 +259,7 @@ private struct SubscriptionReportPanel: View {
     let report: SubscriptionReportDTO
 
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12) {
+        LazyVGrid(columns: reportGridColumns(), spacing: 12) {
             ToolbarPill(title: "启用订阅", value: "\(report.activeSubscriptionCount)", tint: FinanceColor.brand)
             ToolbarPill(title: "月化总额", value: FinanceFormatter.money(report.monthlyTotalCny), tint: FinanceColor.expense)
             ToolbarPill(title: "未来 30 天", value: FinanceFormatter.money(report.upcoming30DaysCny), tint: FinanceColor.warning)
@@ -231,24 +284,40 @@ private struct ExportsPanel: View {
                     }
                 }
                 ForEach(exports) { dataset in
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(dataset.name)
-                                .font(.headline)
-                            Text(dataset.filename)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    ViewThatFits(in: .horizontal) {
+                        HStack {
+                            exportSummary(dataset)
+                            Spacer()
+                            exportButton(dataset)
                         }
-                        Spacer()
-                        Button {
-                            Task { await export(dataset) }
-                        } label: {
-                            Label("导出", systemImage: "square.and.arrow.down")
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            exportSummary(dataset)
+                            exportButton(dataset)
                         }
                     }
                     Divider()
                 }
             }
+        }
+    }
+
+    private func exportSummary(_ dataset: ExportDatasetDTO) -> some View {
+        VStack(alignment: .leading) {
+            Text(dataset.name)
+                .font(.headline)
+            Text(dataset.filename)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
+    }
+
+    private func exportButton(_ dataset: ExportDatasetDTO) -> some View {
+        Button {
+            Task { await export(dataset) }
+        } label: {
+            Label("导出", systemImage: "square.and.arrow.down")
         }
     }
 

@@ -14,6 +14,15 @@ struct DetailLine: View {
     let value: String
 
     var body: some View {
+        ViewThatFits(in: .horizontal) {
+            horizontalLine
+#if os(iOS)
+            verticalLine
+#endif
+        }
+    }
+
+    private var horizontalLine: some View {
         HStack(alignment: .firstTextBaseline) {
             Text(title)
                 .foregroundStyle(.secondary)
@@ -21,10 +30,26 @@ struct DetailLine: View {
             Text(value)
                 .font(.body.monospacedDigit())
                 .multilineTextAlignment(.trailing)
-                .lineLimit(2)
+                .lineLimit(1)
                 .minimumScaleFactor(0.75)
         }
     }
+
+#if os(iOS)
+    private var verticalLine: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.body.monospacedDigit())
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+#endif
 }
 
 struct ErrorBanner: View {
@@ -59,7 +84,11 @@ struct ToolbarPill: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
+#if os(iOS)
+        .background(Color(.secondarySystemGroupedBackground))
+#else
         .background(.regularMaterial)
+#endif
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
@@ -88,7 +117,13 @@ struct ThinBar: View {
 
 extension View {
     func moduleFrame() -> some View {
+#if os(iOS)
+        self
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(Color(.systemGroupedBackground))
+#else
         self.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+#endif
     }
 }
 
