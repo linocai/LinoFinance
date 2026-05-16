@@ -4,10 +4,10 @@ Last updated: 2026-05-16
 
 ## Current Goal
 
-Execute `plan.md` from Phase 0 onward. The backend is complete through Phase 7.
-The current frontend is the real Xcode macOS app against the local `6868` API,
-with the full macOS Sidebar + Content + Inspector shell wired across the Phase
-1-7 API surface.
+Execute `plan.md` from Phase 0 onward. The backend is complete through Phase 7
+and has the first Phase 8 production-hardening slice implemented. The current
+frontend is the real Xcode macOS app against the local `6868` API by default,
+with environment/UserDefaults support for a deployed domain API and API token.
 
 ## Completed
 
@@ -147,10 +147,24 @@ with the full macOS Sidebar + Content + Inspector shell wired across the Phase
   - Settings shows local API state, AI config state, and manual USD/CNY rate entry;
   - Inspector details are implemented for accounts, entries, cash-flow items, reimbursements, credit cycles, installments, subscriptions, AI plans, and notification rules;
   - root content/empty/error states are top-aligned in the macOS three-column layout.
+- Phase 8 production-hardening slice implemented:
+  - backend settings added for production token auth, rate limiting, trusted proxy headers, CORS origins, public docs toggle, log level, and backup dir;
+  - production startup now refuses to run without `LINOFINANCE_API_AUTH_TOKEN`;
+  - non-public API routes support `Authorization: Bearer <token>` and `X-LinoFinance-API-Token`;
+  - public `GET /health`, OpenAPI, and docs routes stay open;
+  - in-memory per-client rate limiting added with `429`, `Retry-After`, and `X-RateLimit-*` headers;
+  - request ID and JSON structured request/error logs added;
+  - health response now reports auth/rate-limit flags;
+  - PostgreSQL backup, restore, and production migration scripts added under `backend/scripts/`;
+  - local PostgreSQL `docker-compose.yml`, systemd API service example, nginx HTTPS reverse-proxy example, and `docs/deployment.md` runbook added;
+  - `Makefile` targets added for local PostgreSQL startup, manual backup, and production migration;
+  - macOS `LinoAPIClient` and shared Swift package `APIClient` can attach Bearer tokens;
+  - macOS app can read `LINOFINANCE_API_BASE_URL` / `LINOFINANCE_API_TOKEN`, `UserDefaults`, or bundle defaults before falling back to local `6868`;
+  - Settings now shows API URL, token configured state, backend auth state, and backend rate-limit state.
 - Verification passed:
   - `python3 -m compileall backend/app backend/tests`
   - `python3 -m compileall backend/app backend/scripts`
-  - `cd backend && . .venv/bin/activate && pytest` (`42 passed`)
+  - `cd backend && . .venv/bin/activate && pytest` (`46 passed`)
   - `cd backend && . .venv/bin/activate && ruff check .`
   - `cd backend && . .venv/bin/activate && alembic upgrade head --sql`
   - `cd frontend && swift test` (`12 passed`)
@@ -161,13 +175,13 @@ with the full macOS Sidebar + Content + Inspector shell wired across the Phase
 
 ## Remaining
 
-1. Start Phase 8 cloud deployment, domain API, production migration flow, backups, auth/rate limit, and end-to-end stabilization.
+1. Perform actual cloud server provisioning, DNS, HTTPS certificates, production env file setup, and first live deployment using `docs/deployment.md`.
 2. Add partial cash-flow settlement once reimbursement and partial payments need it.
 3. Add credit statement cycle update/close endpoints if manual statement reconciliation needs editing after creation.
 4. Add account balance recalculation/reconciliation command to rebuild balances from movements and cycle amounts.
 5. Add seed scripts for default categories and initial USD/CNY rate in local/test setup.
 6. Add app-level smoke/UI tests once the first macOS workflow stabilizes.
-7. Prepare local PostgreSQL instructions or Docker Compose if a local database runner is desired.
+7. Add stronger production observability if needed: external error tracking, persistent rate-limit backend, log shipping, and uptime checks.
 8. Later frontend polish still outstanding from the design direction: command palette (`⌘K`), Menu Bar Extra, account reconciliation UI, multi-window mode, richer charts, and deeper AI narrative insights.
 
 ## Decisions
@@ -176,6 +190,8 @@ with the full macOS Sidebar + Content + Inspector shell wired across the Phase
 - Frontend official macOS path is `frontend/LinoFinance.xcodeproj`; SwiftPM remains for shared modules and tests.
 - Client storage is not the primary source of truth; it is only cache/offline draft support.
 - The backend venv lives at `backend/.venv` and is intentionally ignored by Git.
+- Local development remains token-optional; configuring `LINOFINANCE_API_AUTH_TOKEN`
+  enables auth locally, and production requires it.
 - The test FastAPI server on port 8000 was stopped after verification.
 - At last local macOS verification, the SQLite API on port `6868` was responding
   and `frontend/.derivedData/Build/Products/Debug/LinoFinance.app` had been opened.

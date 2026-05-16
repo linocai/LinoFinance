@@ -6,4 +6,5 @@ class HealthResponse(BaseModel):
     app: str
     version: str
     environment: str
-
+    auth_required: bool
+    rate_limit_enabled: bool

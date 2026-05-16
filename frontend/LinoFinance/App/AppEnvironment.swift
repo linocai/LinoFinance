@@ -32,8 +32,11 @@ final class AppEnvironment {
     var dateRange: DateRangeChoice = .month
     var lastErrorMessage: String?
 
-    init(baseURL: URL = URL(string: "http://127.0.0.1:6868/api/v1")!) {
-        let apiClient = LinoAPIClient(baseURL: baseURL)
+    init(
+        baseURL: URL = AppEnvironment.defaultAPIBaseURL(),
+        apiToken: String? = AppEnvironment.defaultAPIToken()
+    ) {
+        let apiClient = LinoAPIClient(baseURL: baseURL, authToken: apiToken)
         self.apiClient = apiClient
         self.dashboardViewModel = DashboardViewModel(apiClient: apiClient)
         self.accountsViewModel = AccountsViewModel(apiClient: apiClient)
@@ -118,6 +121,34 @@ final class AppEnvironment {
     func beginAI() {
         selectedModule = .ai
         inspectorSelection = .module(.ai)
+    }
+
+    nonisolated static func defaultAPIBaseURL() -> URL {
+        let environment = ProcessInfo.processInfo.environment
+        if let value = environment["LINOFINANCE_API_BASE_URL"], let url = URL(string: value) {
+            return url
+        }
+        if let value = UserDefaults.standard.string(forKey: "linofinance.apiBaseURL"),
+           let url = URL(string: value) {
+            return url
+        }
+        if let value = Bundle.main.object(forInfoDictionaryKey: "LinoFinanceAPIBaseURL") as? String,
+           let url = URL(string: value) {
+            return url
+        }
+        return URL(string: "http://127.0.0.1:6868/api/v1")!
+    }
+
+    nonisolated static func defaultAPIToken() -> String? {
+        let environment = ProcessInfo.processInfo.environment
+        if let value = environment["LINOFINANCE_API_TOKEN"], !value.isEmpty {
+            return value
+        }
+        if let value = UserDefaults.standard.string(forKey: "linofinance.apiToken"),
+           !value.isEmpty {
+            return value
+        }
+        return nil
     }
 }
 

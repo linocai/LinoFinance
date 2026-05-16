@@ -5,6 +5,8 @@ struct AppHealthDTO: Decodable, Equatable {
     let app: String
     let version: String
     let environment: String
+    let authRequired: Bool?
+    let rateLimitEnabled: Bool?
 }
 
 struct DashboardSummaryDTO: Decodable, Equatable {

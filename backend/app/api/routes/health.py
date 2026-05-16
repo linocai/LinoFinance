@@ -14,5 +14,6 @@ def health_check() -> HealthResponse:
         app=settings.app_name,
         version=settings.app_version,
         environment=settings.environment,
+        auth_required=settings.auth_required,
+        rate_limit_enabled=settings.rate_limit_active,
     )
-

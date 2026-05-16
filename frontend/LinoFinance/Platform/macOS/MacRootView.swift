@@ -139,7 +139,7 @@ private struct ConnectionFooter: View {
                 Circle()
                     .fill(environment.lastErrorMessage == nil ? .green : .orange)
                     .frame(width: 8, height: 8)
-                Text(environment.lastErrorMessage == nil ? "本地 API 已连接" : "离线 / 待连接")
+                Text(environment.lastErrorMessage == nil ? "API 已连接" : "离线 / 待连接")
                     .font(.caption.weight(.semibold))
             }
             Text(environment.apiClient.baseURL.absoluteString)

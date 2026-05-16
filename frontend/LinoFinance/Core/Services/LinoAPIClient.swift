@@ -2,7 +2,14 @@ import Foundation
 
 struct LinoAPIClient {
     let baseURL: URL
+    let authToken: String?
     var urlSession: URLSession = .shared
+
+    init(baseURL: URL, authToken: String? = nil, urlSession: URLSession = .shared) {
+        self.baseURL = baseURL
+        self.authToken = authToken?.isEmpty == false ? authToken : nil
+        self.urlSession = urlSession
+    }
 
     private let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
@@ -226,7 +233,7 @@ struct LinoAPIClient {
     }
 
     func downloadCSV(dataset: String) async throws -> Data {
-        let request = URLRequest(url: url(for: "exports/csv/\(dataset)"))
+        let request = request(for: "exports/csv/\(dataset)")
         return try await sendData(request)
     }
 
@@ -298,12 +305,12 @@ struct LinoAPIClient {
     }
 
     private func get<Response: Decodable>(_ path: String, queryItems: [URLQueryItem] = []) async throws -> Response {
-        let request = URLRequest(url: url(for: path, queryItems: queryItems))
+        let request = request(for: path, queryItems: queryItems)
         return try await send(request)
     }
 
     private func post<Response: Decodable>(_ path: String) async throws -> Response {
-        var request = URLRequest(url: url(for: path))
+        var request = request(for: path)
         request.httpMethod = "POST"
         return try await send(request)
     }
@@ -312,11 +319,22 @@ struct LinoAPIClient {
         _ path: String,
         body: Request
     ) async throws -> Response {
-        var request = URLRequest(url: url(for: path))
+        var request = request(for: path)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try encoder.encode(body)
         return try await send(request)
+    }
+
+    private func request(
+        for path: String,
+        queryItems: [URLQueryItem] = []
+    ) -> URLRequest {
+        var request = URLRequest(url: url(for: path, queryItems: queryItems))
+        if let authToken {
+            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        }
+        return request
     }
 
     private func url(for path: String, queryItems: [URLQueryItem] = []) -> URL {
@@ -364,13 +382,13 @@ enum APIError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
-            return "本地 API 返回了无法识别的响应。"
+            return "API 返回了无法识别的响应。"
         case .badStatus(let status, let detail):
             return detail.map { "API \(status)：\($0)" } ?? "API 请求失败：\(status)"
         case .decoding(let message):
             return "API 数据解析失败：\(message)"
         case .transport:
-            return "无法连接 6868 本地 API。请确认后端已经启动。"
+            return "无法连接 API。请确认后端已经启动，或检查域名/API Token 配置。"
         }
     }
 }

@@ -13,6 +13,7 @@
 # Logs and caches
 *.log
 .local/
+.backups/
 .cache/
 .pytest_cache/
 .ruff_cache/

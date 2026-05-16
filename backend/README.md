@@ -27,6 +27,20 @@ LINOFINANCE_AI_MODEL=replace-me
 The backend treats this as an OpenAI-compatible chat-completions endpoint. The API
 never returns the key, only whether the key/base URL is configured.
 
+Production hardening values:
+
+```bash
+LINOFINANCE_ENVIRONMENT=production
+LINOFINANCE_API_AUTH_TOKEN=replace-with-a-long-random-token
+LINOFINANCE_API_RATE_LIMIT_ENABLED=true
+LINOFINANCE_API_RATE_LIMIT_PER_MINUTE=120
+LINOFINANCE_TRUSTED_PROXY_HEADERS=true
+```
+
+Non-health API routes require `Authorization: Bearer <token>` whenever a token is
+configured. See `../docs/deployment.md` for nginx, systemd, backup, restore, and
+migration flow notes.
+
 Health check:
 
 ```bash

@@ -32,6 +32,15 @@ Health endpoint:
 curl http://127.0.0.1:8000/api/v1/health
 ```
 
+## Local PostgreSQL
+
+```bash
+docker compose up -d postgres
+cd backend
+source .venv/bin/activate
+alembic upgrade head
+```
+
 ## Frontend Quick Check
 
 ```bash
@@ -64,6 +73,13 @@ open frontend/.derivedData/Build/Products/Debug/LinoFinance.app
 
 The local database lives at `backend/.local/linofinance.sqlite3` and is ignored
 by Git.
+
+## Production Notes
+
+Phase 8 deployment scaffolding lives in [docs/deployment.md](docs/deployment.md).
+Production API startup requires `LINOFINANCE_API_AUTH_TOKEN`; macOS clients can
+point to a domain API with `LINOFINANCE_API_BASE_URL` and authenticate with
+`LINOFINANCE_API_TOKEN`.
 
 ## Confirmed Product Defaults
 

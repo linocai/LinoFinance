@@ -13,7 +13,7 @@ struct DashboardView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                PageHeader(title: "总览", subtitle: "本地 API 驱动的财务控制台")
+                PageHeader(title: "总览", subtitle: "API 驱动的财务控制台")
 
                 if let summary = environment.dashboardViewModel.summary {
                     SummaryGrid(
@@ -38,11 +38,11 @@ struct DashboardView: View {
                         )
                     }
                 } else if environment.dashboardViewModel.isLoading {
-                    EmptyState(title: "正在等待总览数据", message: "本地 API 正在计算账户与记录摘要。", systemImage: "network")
+                    EmptyState(title: "正在等待总览数据", message: "API 正在计算账户与记录摘要。", systemImage: "network")
                 } else {
                     EmptyState(
-                        title: "连接不到本地 API",
-                        message: "请确认 6868 本地服务已启动，前端会保持可用并显示错误状态。",
+                        title: "连接不到 API",
+                        message: "请确认后端服务已启动，或检查域名/API Token 配置。",
                         systemImage: "wifi.exclamationmark",
                         actionTitle: "重试",
                         action: { Task { await environment.refreshPrimaryData() } }

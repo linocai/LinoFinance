@@ -2,6 +2,17 @@
 
 Base path: `/api/v1`
 
+## Phase 8 Transport Rules
+
+- `GET /health`, OpenAPI, and docs routes are public.
+- Non-public routes require `Authorization: Bearer <token>` when
+  `LINOFINANCE_API_AUTH_TOKEN` is configured.
+- Production startup requires `LINOFINANCE_API_AUTH_TOKEN`.
+- Rate limiting is enabled when `LINOFINANCE_API_RATE_LIMIT_ENABLED=true` or
+  `LINOFINANCE_ENVIRONMENT=production`.
+- Responses include `x-request-id`; rate-limited responses return `429` with
+  `Retry-After`, `X-RateLimit-Limit`, and `X-RateLimit-Remaining`.
+
 ## Health
 
 `GET /health`
@@ -13,7 +24,9 @@ Response:
   "status": "ok",
   "app": "LinoFinance API",
   "version": "0.1.0",
-  "environment": "local"
+  "environment": "local",
+  "auth_required": false,
+  "rate_limit_enabled": false
 }
 ```
 

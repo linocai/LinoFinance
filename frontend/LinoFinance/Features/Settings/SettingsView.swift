@@ -8,15 +8,20 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                PageHeader(title: "设置", subtitle: "本地 API、AI 配置、汇率和运行状态")
+                PageHeader(title: "设置", subtitle: "API 连接、AI 配置、汇率和运行状态")
 
                 FinancePanel {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("本地 API")
+                        Text("API 连接")
                             .font(.headline)
                         DetailLine(title: "地址", value: environment.apiClient.baseURL.absoluteString)
+                        DetailLine(title: "Token", value: environment.apiClient.authToken == nil ? "未配置" : "已配置")
                         DetailLine(title: "状态", value: environment.settingsViewModel.health?.status ?? "未知")
                         DetailLine(title: "环境", value: environment.settingsViewModel.health?.environment ?? "未知")
+                        if let health = environment.settingsViewModel.health {
+                            DetailLine(title: "鉴权", value: health.authRequired == true ? "已启用" : "未启用")
+                            DetailLine(title: "限流", value: health.rateLimitEnabled == true ? "已启用" : "未启用")
+                        }
                         if let message = environment.lastErrorMessage {
                             ErrorBanner(message: message)
                         }

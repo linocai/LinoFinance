@@ -1,7 +1,8 @@
-from functools import lru_cache
 from decimal import Decimal
+from functools import lru_cache
 from typing import Optional
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +16,14 @@ class Settings(BaseSettings):
     )
     api_host: str = "127.0.0.1"
     api_port: int = 8000
+    api_auth_token: Optional[str] = None
+    api_rate_limit_enabled: bool = False
+    api_rate_limit_per_minute: int = Field(default=120, ge=1)
+    trusted_proxy_headers: bool = False
+    cors_allowed_origins: list[str] = []
+    public_docs_enabled: bool = True
+    log_level: str = "INFO"
+    backup_dir: str = ".backups"
     ai_provider: str = "openai_compatible"
     ai_api_base_url: Optional[str] = None
     ai_api_key: Optional[str] = None
@@ -27,6 +36,29 @@ class Settings(BaseSettings):
         env_prefix="LINOFINANCE_",
         extra="ignore",
     )
+
+    @property
+    def normalized_environment(self) -> str:
+        return self.environment.strip().lower()
+
+    @property
+    def is_production(self) -> bool:
+        return self.normalized_environment in {"prod", "production"}
+
+    @property
+    def auth_required(self) -> bool:
+        return bool(self.api_auth_token) or self.is_production
+
+    @property
+    def rate_limit_active(self) -> bool:
+        return self.api_rate_limit_enabled or self.is_production
+
+    def validate_runtime(self) -> None:
+        if self.is_production and not self.api_auth_token:
+            raise RuntimeError(
+                "LINOFINANCE_API_AUTH_TOKEN is required when LINOFINANCE_ENVIRONMENT "
+                "is production."
+            )
 
 
 @lru_cache
