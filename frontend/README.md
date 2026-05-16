@@ -1,7 +1,6 @@
 # LinoFinance Frontend
 
-Swift package for shared iOS/macOS code. The app shell will be added as an Xcode
-project after the shared modules stabilize.
+Swift package for shared iOS/macOS code plus the real Xcode macOS app project.
 
 ## Modules
 
@@ -10,6 +9,8 @@ project after the shared modules stabilize.
   and `CurrencyBadge`.
 - `LinoFinanceFeatures`: feature-level placeholder views that compose core and
   design-system modules.
+- `LinoFinance.xcodeproj`: macOS app target `LinoFinance`, bundle id
+  `com.lino.linofinance`, built from `frontend/LinoFinance/`.
 
 ## Local Check
 
@@ -18,3 +19,17 @@ cd frontend
 swift test
 ```
 
+## Build Local macOS App
+
+```bash
+xcodebuild \
+  -project LinoFinance.xcodeproj \
+  -scheme LinoFinance \
+  -configuration Debug \
+  -destination 'platform=macOS' \
+  -derivedDataPath .derivedData \
+  build
+open .derivedData/Build/Products/Debug/LinoFinance.app
+```
+
+The app expects the local backend at `http://127.0.0.1:6868/api/v1`.

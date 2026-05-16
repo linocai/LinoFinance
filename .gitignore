@@ -12,6 +12,7 @@
 
 # Logs and caches
 *.log
+.local/
 .cache/
 .pytest_cache/
 .ruff_cache/
@@ -34,5 +35,6 @@ build/
 .build/
 .swiftpm/
 DerivedData/
+.derivedData/
 *.xcuserstate
 xcuserdata/

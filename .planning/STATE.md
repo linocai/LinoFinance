@@ -4,8 +4,10 @@ Last updated: 2026-05-16
 
 ## Current Goal
 
-Execute `plan.md` from Phase 0 onward. The current completed slice is Phase 7:
-report aggregation APIs and CSV export.
+Execute `plan.md` from Phase 0 onward. The backend is complete through Phase 7.
+The current frontend is the real Xcode macOS app against the local `6868` API,
+with the full macOS Sidebar + Content + Inspector shell wired across the Phase
+1-7 API surface.
 
 ## Completed
 
@@ -120,12 +122,42 @@ report aggregation APIs and CSV export.
   - report summary models and reimbursement report view enum;
   - `ExportDataset`;
   - placeholder reports view.
+- Local macOS app added:
+  - `frontend/LinoFinance.xcodeproj` with app target `LinoFinance`;
+  - bundle id `com.lino.linofinance`;
+  - Debug app path `frontend/.derivedData/Build/Products/Debug/LinoFinance.app`;
+  - app icon source confirmed as `/Users/linotsai/Pictures/GPT Image/冈部伦太郎-简笔2.png`;
+  - Xcode asset catalog generated under `frontend/LinoFinance/Resources/Assets.xcassets`;
+  - local SQLite API runner added at `backend/scripts/run_local_sqlite.py`;
+  - local preview API runs on `http://127.0.0.1:6868/api/v1`;
+  - local SQLite DB path is `backend/.local/linofinance.sqlite3`;
+  - macOS UI uses Sidebar + Content + Inspector with Dashboard, Accounts, and Entries wired to real API calls.
+- macOS frontend full API-backed pass completed:
+  - `LinoAPIClient` supports query GET, body/empty POST, CSV download, and structured API errors;
+  - DTO/request coverage added for currency rates, entries confirm/void, cash flow, reimbursements, credit cycles, installments, subscriptions, reports, CSV exports, AI plans/actions, notification rules, and audit logs;
+  - Dashboard now uses real report/AI summaries and shows the 30-day cash-flow net KPI when available;
+  - Accounts supports balance/credit grouping and credit account fields;
+  - Entries supports balance expense/income, credit charge, credit repayment, reimbursable lines, confirm, and void;
+  - Cash Flow supports 7/30/90 pressure KPIs, create, confirm, cancel, and settle-to-entry;
+  - Reimbursements supports Kanban status columns and submit/approve/reject/abandon/mark-received actions;
+  - Credit supports credit account cards, statement cycles, installment plans, subscriptions, and status actions;
+  - Reports supports monthly, category, cash-flow, credit, reimbursement, subscription, and CSV export views;
+  - AI supports config status, natural-language plan creation, approve/reject/execute/rollback, and high-risk `EXECUTE_HIGH_RISK` confirmation;
+  - Notifications supports rule list/create/pause/resume/cancel;
+  - Settings shows local API state, AI config state, and manual USD/CNY rate entry;
+  - Inspector details are implemented for accounts, entries, cash-flow items, reimbursements, credit cycles, installments, subscriptions, AI plans, and notification rules;
+  - root content/empty/error states are top-aligned in the macOS three-column layout.
 - Verification passed:
   - `python3 -m compileall backend/app backend/tests`
+  - `python3 -m compileall backend/app backend/scripts`
   - `cd backend && . .venv/bin/activate && pytest` (`42 passed`)
   - `cd backend && . .venv/bin/activate && ruff check .`
   - `cd backend && . .venv/bin/activate && alembic upgrade head --sql`
   - `cd frontend && swift test` (`12 passed`)
+  - `xcodebuild -project frontend/LinoFinance.xcodeproj -scheme LinoFinance -configuration Debug -destination 'platform=macOS' -derivedDataPath frontend/.derivedData build` (`BUILD SUCCEEDED`)
+  - `curl http://127.0.0.1:6868/api/v1/health` returned `status: ok`
+  - screenshot review saved at `.planning/screenshots/macos-dashboard-focused.png`
+  - screenshot review saved at `.planning/screenshots/macos-accounts-focused.png`
 
 ## Remaining
 
@@ -134,16 +166,19 @@ report aggregation APIs and CSV export.
 3. Add credit statement cycle update/close endpoints if manual statement reconciliation needs editing after creation.
 4. Add account balance recalculation/reconciliation command to rebuild balances from movements and cycle amounts.
 5. Add seed scripts for default categories and initial USD/CNY rate in local/test setup.
-6. Add real iOS/macOS app targets after shared Swift modules settle.
+6. Add app-level smoke/UI tests once the first macOS workflow stabilizes.
 7. Prepare local PostgreSQL instructions or Docker Compose if a local database runner is desired.
+8. Later frontend polish still outstanding from the design direction: command palette (`⌘K`), Menu Bar Extra, account reconciliation UI, multi-window mode, richer charts, and deeper AI narrative insights.
 
 ## Decisions
 
 - Backend stack: FastAPI + SQLAlchemy + Alembic + PostgreSQL.
-- Frontend first step: Swift package for shared iOS/macOS code, with Xcode app shell added later.
+- Frontend official macOS path is `frontend/LinoFinance.xcodeproj`; SwiftPM remains for shared modules and tests.
 - Client storage is not the primary source of truth; it is only cache/offline draft support.
 - The backend venv lives at `backend/.venv` and is intentionally ignored by Git.
 - The test FastAPI server on port 8000 was stopped after verification.
+- At last local macOS verification, the SQLite API on port `6868` was responding
+  and `frontend/.derivedData/Build/Products/Debug/LinoFinance.app` had been opened.
 
 ## Resume Command
 
