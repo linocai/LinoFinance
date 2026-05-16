@@ -217,6 +217,10 @@ the existing cloud API, DTOs, repositories, view models, and business screens.
   - submit creates one monthly salary cash-flow item from the first expected date through the cutoff date;
   - generated salary cash flows carry `FREQ=MONTHLY;UNTIL=yyyy-MM-dd` in `recurrence_rule`;
   - local `/Users/linotsai/Applications/LinoF.app` rebuilt, replaced, and relaunched.
+- iOS Xcode signing/icon fix completed:
+  - shared `AppIcon` now includes iPhone and iOS marketing icon slots generated from `/Users/linotsai/Pictures/GPT Image/personal-bookkeeping-appicon-v1.png`;
+  - iOS target `LinoFinanceiOS` now uses automatic Apple Development signing instead of `CODE_SIGNING_ALLOWED = NO`;
+  - macOS target remains manual/no-sign for local builds.
 - Verification passed:
   - `python3 -m compileall backend/app backend/tests`
   - `python3 -m compileall backend/app backend/scripts`
@@ -246,6 +250,8 @@ the existing cloud API, DTOs, repositories, view models, and business screens.
   - after salary recurrence change: `cd frontend && swift test` (`12 passed`)
   - after salary recurrence change: macOS Debug build `BUILD SUCCEEDED`
   - after salary recurrence change: iOS simulator SDK Swift typecheck passed
+  - after iOS signing/icon fix: macOS Debug build `BUILD SUCCEEDED`
+  - after iOS signing/icon fix: iOS generic device build succeeded with command-line `CODE_SIGNING_ALLOWED=NO` to validate compile/assets without requiring a local Apple team
 
 ## Remaining
 
