@@ -26,8 +26,8 @@ def create_app() -> FastAPI:
             allow_methods=["*"],
             allow_headers=["*"],
         )
-    app.add_middleware(APIAuthMiddleware, settings=settings)
     app.add_middleware(RateLimitMiddleware, settings=settings)
+    app.add_middleware(APIAuthMiddleware, settings=settings)
     app.add_middleware(RequestContextMiddleware)
     app.include_router(api_router, prefix=settings.api_v1_prefix)
     return app

@@ -54,6 +54,35 @@ def create_reimbursable_entry(client, account, expense_category, status="confirm
     return response.json()
 
 
+def create_plain_expense_entry(client, account, expense_category, amount="500"):
+    response = client.post(
+        "/api/v1/entries",
+        json={
+            "title": "Client dinner",
+            "date": "2026-05-16",
+            "status": "confirmed",
+            "category_lines": [
+                {
+                    "category_id": expense_category["id"],
+                    "direction": "expense",
+                    "amount": amount,
+                    "currency": "CNY",
+                }
+            ],
+            "account_movements": [
+                {
+                    "account_id": account["id"],
+                    "movement_type": "balance_out",
+                    "amount": amount,
+                    "currency": "CNY",
+                }
+            ],
+        },
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
 def test_confirmed_reimbursable_entry_creates_claim_and_future_cash_flow(client) -> None:
     account = create_account(client, balance="1000")
     category = create_category(client)
@@ -211,6 +240,88 @@ def test_void_original_reimbursable_entry_abandons_claim_and_cancels_cash_flow(c
     assert abandoned_claim["status"] == "abandoned"
     cash_flow = client.get(f"/api/v1/cash-flow-items/{claim['cash_flow_item_id']}").json()
     assert cash_flow["status"] == "cancelled"
+
+
+def test_manual_claim_rejects_duplicate_linked_entry_line(client) -> None:
+    account = create_account(client, balance="1000")
+    category = create_category(client)
+    entry = create_reimbursable_entry(client, account, category)
+    line = entry["category_lines"][0]
+
+    response = client.post(
+        "/api/v1/reimbursement-claims",
+        json={
+            "linked_entry_id": entry["id"],
+            "linked_entry_line_id": line["id"],
+            "amount": "500",
+            "currency": "CNY",
+            "payer": "company",
+            "expected_date": "2026-06-10",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Reimbursement claim already exists for linked expense line"
+
+
+def test_manual_claim_must_match_confirmed_expense_line(client) -> None:
+    account = create_account(client, balance="1000")
+    expense_category = create_category(client)
+    income_category = create_category(client, name="Refund Income", category_type="income")
+    expense_entry = create_plain_expense_entry(client, account, expense_category)
+
+    amount_mismatch = client.post(
+        "/api/v1/reimbursement-claims",
+        json={
+            "linked_entry_id": expense_entry["id"],
+            "linked_entry_line_id": expense_entry["category_lines"][0]["id"],
+            "amount": "499",
+            "currency": "CNY",
+            "payer": "company",
+            "expected_date": "2026-06-10",
+        },
+    )
+    assert amount_mismatch.status_code == 400
+    assert amount_mismatch.json()["detail"] == "Reimbursement amount must match linked expense line"
+
+    income_entry = client.post(
+        "/api/v1/entries",
+        json={
+            "title": "Refund",
+            "date": "2026-05-17",
+            "status": "confirmed",
+            "category_lines": [
+                {
+                    "category_id": income_category["id"],
+                    "direction": "income",
+                    "amount": "100",
+                    "currency": "CNY",
+                }
+            ],
+            "account_movements": [
+                {
+                    "account_id": account["id"],
+                    "movement_type": "balance_in",
+                    "amount": "100",
+                    "currency": "CNY",
+                }
+            ],
+        },
+    ).json()
+
+    income_line_response = client.post(
+        "/api/v1/reimbursement-claims",
+        json={
+            "linked_entry_id": income_entry["id"],
+            "linked_entry_line_id": income_entry["category_lines"][0]["id"],
+            "amount": "100",
+            "currency": "CNY",
+            "payer": "company",
+            "expected_date": "2026-06-10",
+        },
+    )
+    assert income_line_response.status_code == 400
+    assert income_line_response.json()["detail"] == "Reimbursement claims must link an expense line"
 
 
 def test_reimbursement_center_can_filter_by_status(client) -> None:

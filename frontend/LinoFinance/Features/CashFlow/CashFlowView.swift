@@ -71,7 +71,9 @@ struct CashFlowView: View {
                         .tag(item.id)
                         .contextMenu {
                             Button("确认发生") { confirm(item, operation: "confirm") }
-                            Button("结算为正式记录") { confirm(item, operation: "settle") }
+                            if item.direction != "transfer" {
+                                Button("结算为正式记录") { confirm(item, operation: "settle") }
+                            }
                             Button("取消", role: .destructive) { confirm(item, operation: "cancel") }
                         }
                 }
@@ -143,13 +145,18 @@ struct CashFlowView: View {
             }
             try? await environment.dashboardViewModel.refresh()
             try? await environment.accountsViewModel.refresh()
+            try? await environment.entriesViewModel.refresh()
             try? await environment.reportsViewModel.refresh()
         } catch {
+            environment.cashFlowViewModel.errorMessage = error.localizedDescription
             environment.lastErrorMessage = error.localizedDescription
         }
     }
 
     private func settle(_ item: CashFlowItemDTO) async throws {
+        guard item.direction != "transfer" else {
+            throw APIError.badStatus(400, "转账现金流请通过记账里的信用还款流程结算")
+        }
         guard let accountId = item.accountId, let categoryId = item.categoryId else {
             throw APIError.badStatus(400, "结算需要现金流已关联账户和分类")
         }

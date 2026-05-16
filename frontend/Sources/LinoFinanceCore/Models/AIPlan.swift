@@ -23,6 +23,8 @@ public enum AIActionType: String, Codable, Equatable, Sendable {
     case createInstallmentPlan = "CreateInstallmentPlan"
     case recordCreditRepayment = "RecordCreditRepayment"
     case generateNotificationRule = "GenerateNotificationRule"
+    case setCashFlowStatus = "SetCashFlowStatus"
+    case updateReimbursementStatus = "UpdateReimbursementStatus"
     case voidEntry = "VoidEntry"
 }
 

@@ -162,13 +162,13 @@ struct CreditView: View {
             confirmTitle: early ? "提前结清" : "标记还清",
             role: nil
         ) {
-            Task { try? await environment.creditViewModel.markInstallmentPaidOff(plan.id, early: early) }
+            Task { await performInstallmentPaidOff(plan, early: early) }
         }
     }
 
     private func confirmInstallmentCancel(_ plan: InstallmentPlanDTO) {
         confirmation = ConfirmAction(title: "取消分期计划？", message: "取消后会取消未发生的分期现金流。", confirmTitle: "取消分期", role: .destructive) {
-            Task { try? await environment.creditViewModel.cancelInstallment(plan.id) }
+            Task { await performInstallmentCancel(plan) }
         }
     }
 
@@ -179,16 +179,56 @@ struct CreditView: View {
         case "generate": "生成下次现金流？"
         default: "取消订阅规则？"
         }
-        confirmation = ConfirmAction(title: title, message: "操作会同步到本地 API。", confirmTitle: title.replacingOccurrences(of: "？", with: ""), role: operation == "cancel" ? .destructive : nil) {
-            Task {
-                switch operation {
-                case "pause": try? await environment.creditViewModel.pauseSubscription(rule.id)
-                case "resume": try? await environment.creditViewModel.resumeSubscription(rule.id)
-                case "generate": try? await environment.creditViewModel.generateNextSubscription(rule.id)
-                default: try? await environment.creditViewModel.cancelSubscription(rule.id)
-                }
-            }
+        confirmation = ConfirmAction(title: title, message: "操作会同步到 API。", confirmTitle: title.replacingOccurrences(of: "？", with: ""), role: operation == "cancel" ? .destructive : nil) {
+            Task { await performSubscription(rule, operation: operation) }
         }
+    }
+
+    private func performInstallmentPaidOff(_ plan: InstallmentPlanDTO, early: Bool) async {
+        do {
+            try await environment.creditViewModel.markInstallmentPaidOff(plan.id, early: early)
+            await refreshCreditDependencies()
+        } catch {
+            environment.creditViewModel.errorMessage = error.localizedDescription
+            environment.lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func performInstallmentCancel(_ plan: InstallmentPlanDTO) async {
+        do {
+            try await environment.creditViewModel.cancelInstallment(plan.id)
+            await refreshCreditDependencies()
+        } catch {
+            environment.creditViewModel.errorMessage = error.localizedDescription
+            environment.lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func performSubscription(_ rule: SubscriptionRuleDTO, operation: String) async {
+        do {
+            switch operation {
+            case "pause":
+                try await environment.creditViewModel.pauseSubscription(rule.id)
+            case "resume":
+                try await environment.creditViewModel.resumeSubscription(rule.id)
+            case "generate":
+                try await environment.creditViewModel.generateNextSubscription(rule.id)
+            default:
+                try await environment.creditViewModel.cancelSubscription(rule.id)
+            }
+            await refreshCreditDependencies()
+        } catch {
+            environment.creditViewModel.errorMessage = error.localizedDescription
+            environment.lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func refreshCreditDependencies() async {
+        try? await environment.accountsViewModel.refresh()
+        try? await environment.entriesViewModel.refresh()
+        try? await environment.cashFlowViewModel.refresh()
+        try? await environment.reportsViewModel.refresh()
+        try? await environment.dashboardViewModel.refresh()
     }
 }
 

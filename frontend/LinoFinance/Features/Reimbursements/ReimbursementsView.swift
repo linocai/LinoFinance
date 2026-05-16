@@ -4,7 +4,17 @@ struct ReimbursementsView: View {
     @Bindable var environment: AppEnvironment
     @State private var confirmation: ConfirmAction?
 
-    private let columns = ["reimbursable", "submitted", "approved", "waiting_received", "received"]
+    private let columns = [
+        "reimbursable",
+        "invoice_pending",
+        "submitted",
+        "approved",
+        "waiting_received",
+        "partial_received",
+        "received",
+        "rejected",
+        "abandoned",
+    ]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -102,16 +112,21 @@ struct ReimbursementsView: View {
             }
             try? await environment.dashboardViewModel.refresh()
             try? await environment.accountsViewModel.refresh()
+            try? await environment.entriesViewModel.refresh()
+            try? await environment.cashFlowViewModel.refresh()
             try? await environment.reportsViewModel.refresh()
         } catch {
+            environment.reimbursementsViewModel.errorMessage = error.localizedDescription
             environment.lastErrorMessage = error.localizedDescription
         }
     }
 
     private func markReceived(_ claim: ReimbursementClaimDTO) async throws {
-        guard let account = environment.accountsViewModel.accounts.balanceAccounts.first,
-              let category = environment.entriesViewModel.categories.first(where: { $0.type == .income }) else {
-            throw APIError.badStatus(400, "标记到账需要至少一个余额账户和收入分类")
+        guard let account = environment.accountsViewModel.accounts.balanceAccounts.first(where: { $0.currency == claim.currency }) else {
+            throw APIError.badStatus(400, "标记到账需要一个 \(claim.currency.rawValue) 余额账户")
+        }
+        guard let category = environment.entriesViewModel.categories.first(where: { $0.type == .income }) else {
+            throw APIError.badStatus(400, "标记到账需要至少一个收入分类")
         }
         let entry = EntryCreateRequest(
             title: "报销到账",
@@ -177,14 +192,14 @@ private struct ReimbursementColumn: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         HStack {
-                            if claim.status == "reimbursable" {
+                            if claim.status == "reimbursable" || claim.status == "invoice_pending" {
                                 Button("提交") { action(claim, "submit") }
                             }
                             if claim.status == "submitted" {
                                 Button("批准") { action(claim, "approve") }
                                 Button("拒绝") { action(claim, "reject") }
                             }
-                            if claim.status == "approved" || claim.status == "waiting_received" {
+                            if ["approved", "waiting_received", "partial_received"].contains(claim.status) {
                                 Button("到账") { action(claim, "receive") }
                             }
                             if !["received", "rejected", "abandoned"].contains(claim.status) {

@@ -55,6 +55,8 @@ final class FinanceDefaultsTests: XCTestCase {
         XCTAssertEqual(AIPlanStatus.requiresConfirmation.rawValue, "requires_confirmation")
         XCTAssertEqual(AIActionType.createCashFlowItem.rawValue, "CreateCashFlowItem")
         XCTAssertEqual(AIActionType.generateNotificationRule.rawValue, "GenerateNotificationRule")
+        XCTAssertEqual(AIActionType.setCashFlowStatus.rawValue, "SetCashFlowStatus")
+        XCTAssertEqual(AIActionType.updateReimbursementStatus.rawValue, "UpdateReimbursementStatus")
         XCTAssertEqual(AIActionStatus.rolledBack.rawValue, "rolled_back")
     }
 

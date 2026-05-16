@@ -132,6 +132,117 @@ def test_monthly_category_and_reimbursement_reports(client) -> None:
     assert reimbursement_body["selected_net_expense_cny"] == "0"
 
 
+def test_reimbursement_reports_use_original_and_received_dates_separately(client) -> None:
+    checking = create_account(client, "Checking", "balance", balance="1000")
+    travel = create_category(client, "Travel")
+    reimbursement_income = create_category(client, "Reimbursement Income", "income")
+
+    expense = client.post(
+        "/api/v1/entries",
+        json={
+            "title": "May client trip",
+            "date": "2026-05-16",
+            "status": "confirmed",
+            "category_lines": [
+                {
+                    "category_id": travel["id"],
+                    "direction": "expense",
+                    "amount": "200",
+                    "currency": "CNY",
+                    "reimbursable_flag": True,
+                    "reimbursement_payer": "Company",
+                    "reimbursement_expected_date": "2026-06-10",
+                    "reimbursement_status": "approved",
+                }
+            ],
+            "account_movements": [
+                {
+                    "account_id": checking["id"],
+                    "movement_type": "balance_out",
+                    "amount": "200",
+                    "currency": "CNY",
+                }
+            ],
+        },
+    )
+    assert expense.status_code == 201
+    claim = client.get("/api/v1/reimbursement-claims").json()[0]
+
+    receive_response = client.post(
+        f"/api/v1/reimbursement-claims/{claim['id']}/mark-received",
+        json={
+            "actual_received_date": "2026-06-11",
+            "received_account_id": checking["id"],
+            "entry": {
+                "title": "Company reimbursement",
+                "date": "2026-06-11",
+                "category_lines": [
+                    {
+                        "category_id": reimbursement_income["id"],
+                        "direction": "income",
+                        "amount": "200",
+                        "currency": "CNY",
+                    }
+                ],
+                "account_movements": [
+                    {
+                        "account_id": checking["id"],
+                        "movement_type": "balance_in",
+                        "amount": "200",
+                        "currency": "CNY",
+                    }
+                ],
+            },
+        },
+    )
+    assert receive_response.status_code == 200
+
+    may_report = client.get(
+        "/api/v1/reports/reimbursements",
+        params={
+            "date_from": "2026-05-01",
+            "date_to": "2026-05-31",
+            "view": "received_net",
+        },
+    ).json()
+    assert may_report["gross_reimbursable_expense_cny"] == "200"
+    assert may_report["expected_offset_cny"] == "200"
+    assert may_report["approved_offset_cny"] == "200"
+    assert may_report["received_offset_cny"] == "0"
+    assert may_report["received_net_expense_cny"] == "200"
+
+    june_report = client.get(
+        "/api/v1/reports/reimbursements",
+        params={
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-30",
+            "view": "received_net",
+        },
+    ).json()
+    assert june_report["gross_reimbursable_expense_cny"] == "0"
+    assert june_report["expected_offset_cny"] == "0"
+    assert june_report["received_offset_cny"] == "200"
+    assert june_report["received_net_expense_cny"] == "-200"
+
+    may_overview = client.get(
+        "/api/v1/reports/monthly-overview",
+        params={"date_from": "2026-05-01", "date_to": "2026-05-31"},
+    ).json()
+    assert may_overview["expense_cny"] == "200"
+    assert may_overview["expected_reimbursement_cny"] == "200"
+    assert may_overview["received_reimbursement_cny"] == "0"
+    assert may_overview["personal_net_expense_cny"] == "0"
+
+    june_overview = client.get(
+        "/api/v1/reports/monthly-overview",
+        params={"date_from": "2026-06-01", "date_to": "2026-06-30"},
+    ).json()
+    assert june_overview["income_cny"] == "200"
+    assert june_overview["expense_cny"] == "0"
+    assert june_overview["expected_reimbursement_cny"] == "0"
+    assert june_overview["received_reimbursement_cny"] == "200"
+
+
 def test_cash_flow_pressure_and_subscription_report(client) -> None:
     checking = create_account(client, "Checking", "balance", balance="1000")
     streaming = create_category(client, "Streaming")

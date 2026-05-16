@@ -263,6 +263,63 @@ def test_settling_subscription_cash_flow_advances_rule_and_generates_next(client
     assert subscription_cash_flows[1]["status"] == "expected"
 
 
+def test_subscription_cash_flow_advances_only_after_matching_settlement(client) -> None:
+    account = create_account(client, "Checking", "balance", "CNY", balance="100")
+    category = create_category(client, name="Streaming")
+    rule = client.post(
+        "/api/v1/subscription-rules",
+        json={
+            "title": "Streaming",
+            "amount": "30",
+            "currency": "CNY",
+            "account_id": account["id"],
+            "category_id": category["id"],
+            "billing_interval": "monthly",
+            "billing_day": 5,
+            "start_date": "2026-06-05",
+        },
+    ).json()
+    first_cash_flow = [
+        item
+        for item in client.get("/api/v1/cash-flow-items").json()
+        if item["linked_subscription_rule_id"] == rule["id"]
+    ][0]
+
+    settle_response = client.post(
+        f"/api/v1/cash-flow-items/{first_cash_flow['id']}/settle",
+        json={
+            "entry": {
+                "title": "Wrong streaming charge",
+                "date": "2026-06-05",
+                "category_lines": [
+                    {
+                        "category_id": category["id"],
+                        "direction": "expense",
+                        "amount": "25",
+                        "currency": "CNY",
+                    }
+                ],
+                "account_movements": [
+                    {
+                        "account_id": account["id"],
+                        "movement_type": "balance_out",
+                        "amount": "25",
+                        "currency": "CNY",
+                    }
+                ],
+            }
+        },
+    )
+
+    assert settle_response.status_code == 400
+    updated_rule = client.get(f"/api/v1/subscription-rules/{rule['id']}").json()
+    assert updated_rule["next_charge_date"] == "2026-06-05"
+    assert updated_rule["generated_cash_flow_count"] == 1
+    unchanged_cash_flow = client.get(f"/api/v1/cash-flow-items/{first_cash_flow['id']}").json()
+    assert unchanged_cash_flow["status"] == "expected"
+    assert client.get(f"/api/v1/accounts/{account['id']}").json()["current_balance"] == "100.00"
+
+
 def test_cancel_subscription_rule_cancels_open_cash_flows(client) -> None:
     account = create_account(client, "Checking", "balance", "CNY", balance="100")
     category = create_category(client, name="Streaming")

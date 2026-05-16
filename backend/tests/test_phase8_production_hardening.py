@@ -62,9 +62,13 @@ def test_rate_limit_returns_429(monkeypatch) -> None:
 
     headers = {"Authorization": "Bearer secret-token"}
     with TestClient(create_app()) as client:
+        unauthorized = client.get("/api/v1/ai/config")
         first = client.get("/api/v1/ai/config", headers=headers)
         second = client.get("/api/v1/ai/config", headers=headers)
 
+    assert unauthorized.status_code == 401
+    assert unauthorized.headers["x-request-id"]
+    assert "x-ratelimit-limit" not in unauthorized.headers
     assert first.status_code == 200
     assert first.headers["x-ratelimit-limit"] == "1"
     assert second.status_code == 429

@@ -5,7 +5,7 @@ from typing import Iterable, List, Optional, Tuple
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.constants import BASE_CURRENCY
+from app.core.constants import BASE_CURRENCY, SUPPORTED_CURRENCIES
 from app.models.account import Account
 from app.models.cash_flow import CashFlowItem
 from app.models.category import Category
@@ -184,12 +184,21 @@ def convert_to_cny(
     entry_date: DateType,
     exchange_rate_id: Optional[str] = None,
 ) -> Tuple[Decimal, Optional[str]]:
-    normalized_currency = currency.upper()
+    normalized_currency = normalize_currency(currency)
     if normalized_currency == BASE_CURRENCY:
+        if exchange_rate_id is not None:
+            raise LedgerValidationError("CNY amounts cannot use an exchange rate")
         return quantize_money(amount), None
 
     rate = _resolve_rate(db, normalized_currency, entry_date, exchange_rate_id)
     return quantize_money(amount * rate.rate), rate.id
+
+
+def normalize_currency(currency: str) -> str:
+    normalized_currency = currency.upper()
+    if normalized_currency not in SUPPORTED_CURRENCIES:
+        raise LedgerValidationError("Unsupported currency for V1")
+    return normalized_currency
 
 
 def _create_category_line(db: Session, entry_id: str, entry_date: DateType, payload) -> EntryCategoryLine:
@@ -286,9 +295,16 @@ def _resolve_payload_conversion(
     exchange_rate_id: Optional[str],
     converted_cny_amount: Optional[Decimal],
 ) -> Tuple[Decimal, Optional[str]]:
-    if converted_cny_amount is not None:
-        return quantize_money(converted_cny_amount), exchange_rate_id
-    return convert_to_cny(db, amount, currency, entry_date, exchange_rate_id)
+    expected_cny_amount, resolved_exchange_rate_id = convert_to_cny(
+        db,
+        amount,
+        currency,
+        entry_date,
+        exchange_rate_id,
+    )
+    if converted_cny_amount is not None and quantize_money(converted_cny_amount) != expected_cny_amount:
+        raise LedgerValidationError("converted_cny_amount does not match the exchange rate")
+    return expected_cny_amount, resolved_exchange_rate_id
 
 
 def _resolve_statement_cycle_for_movement(
@@ -353,6 +369,10 @@ def _resolve_rate(
         rate = db.get(CurrencyRate, exchange_rate_id)
         if rate is None:
             raise LedgerValidationError("Currency rate not found")
+        if rate.from_currency != from_currency or rate.to_currency != BASE_CURRENCY:
+            raise LedgerValidationError("Currency rate does not match the requested currency pair")
+        if rate.date > entry_date:
+            raise LedgerValidationError("Currency rate cannot be dated after the entry date")
         return rate
 
     rate = db.execute(

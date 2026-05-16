@@ -27,7 +27,10 @@ def create_reimbursement_claim(
     payload: ReimbursementClaimCreate,
 ) -> ReimbursementClaimRead:
     entry = _get_confirmed_entry(db, payload.linked_entry_id)
+    if payload.linked_entry_line_id is None:
+        raise LedgerValidationError("Manual reimbursement claims must link an expense line")
     line = _get_entry_line(db, payload.linked_entry_line_id, entry.id)
+    _validate_claim_matches_line(db, payload, line)
     converted_cny_amount, exchange_rate_id = _resolve_payload_conversion(
         db,
         quantize_money(payload.amount),
@@ -54,6 +57,37 @@ def create_reimbursement_claim(
     _sync_reimbursement_cash_flow(db, claim)
     db.commit()
     db.refresh(claim)
+    return ReimbursementClaimRead.model_validate(claim)
+
+
+def update_claim_status(
+    db: Session,
+    claim_id: str,
+    status: str,
+    commit: bool = True,
+    allow_final_source: bool = False,
+) -> ReimbursementClaimRead:
+    claim = _get_claim_or_raise(db, claim_id)
+    if not allow_final_source:
+        _ensure_not_final(claim)
+    if status == "received" or status == "partial_received":
+        raise LedgerValidationError("Received reimbursement status requires mark-received")
+    if status not in {
+        "reimbursable",
+        "invoice_pending",
+        "submitted",
+        "approved",
+        "waiting_received",
+        "rejected",
+        "abandoned",
+    }:
+        raise LedgerValidationError("Unsupported reimbursement status")
+    claim.status = status
+    _sync_reimbursement_cash_flow(db, claim)
+    if commit:
+        db.commit()
+        return get_reimbursement_claim(db, claim_id)
+    db.flush()
     return ReimbursementClaimRead.model_validate(claim)
 
 
@@ -251,9 +285,16 @@ def _resolve_payload_conversion(
     exchange_rate_id: Optional[str],
     converted_cny_amount: Optional[Decimal],
 ) -> tuple:
-    if converted_cny_amount is not None:
-        return quantize_money(converted_cny_amount), exchange_rate_id
-    return ledger.convert_to_cny(db, amount, currency, expected_date, exchange_rate_id)
+    expected_cny_amount, resolved_exchange_rate_id = ledger.convert_to_cny(
+        db,
+        amount,
+        currency,
+        expected_date,
+        exchange_rate_id,
+    )
+    if converted_cny_amount is not None and quantize_money(converted_cny_amount) != expected_cny_amount:
+        raise LedgerValidationError("converted_cny_amount does not match the exchange rate")
+    return expected_cny_amount, resolved_exchange_rate_id
 
 
 def _get_confirmed_entry(db: Session, entry_id: str) -> FinancialEntry:
@@ -278,6 +319,24 @@ def _get_entry_line(
     if line.entry_id != entry_id:
         raise LedgerValidationError("Linked entry line must belong to linked entry")
     return line
+
+
+def _validate_claim_matches_line(
+    db: Session,
+    payload: ReimbursementClaimCreate,
+    line: EntryCategoryLine,
+) -> None:
+    if line.direction != "expense":
+        raise LedgerValidationError("Reimbursement claims must link an expense line")
+    if line.currency != payload.currency.upper():
+        raise LedgerValidationError("Reimbursement currency must match linked expense line")
+    if quantize_money(line.amount) != quantize_money(payload.amount):
+        raise LedgerValidationError("Reimbursement amount must match linked expense line")
+    existing = db.execute(
+        select(ReimbursementClaim).where(ReimbursementClaim.linked_entry_line_id == line.id)
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise LedgerValidationError("Reimbursement claim already exists for linked expense line")
 
 
 def _get_claim_or_raise(db: Session, claim_id: str) -> ReimbursementClaim:

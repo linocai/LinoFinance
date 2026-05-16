@@ -171,6 +171,136 @@ def test_usd_credit_charge_uses_manual_rate_and_increases_liability(client) -> N
     assert client.get(f"/api/v1/accounts/{account['id']}").json()["current_liability"] == "100.00"
 
 
+def test_v1_currency_paths_and_payload_conversion_are_strict(client) -> None:
+    unsupported_account = client.post(
+        "/api/v1/accounts",
+        json={
+            "name": "EUR Wallet",
+            "type": "balance",
+            "currency": "EUR",
+        },
+    )
+    assert unsupported_account.status_code == 400
+    assert unsupported_account.json()["detail"] == "Unsupported currency for V1"
+
+    unsupported_pair = client.post(
+        "/api/v1/currency-rates",
+        json={
+            "from_currency": "USD",
+            "to_currency": "USD",
+            "rate": "1",
+            "date": "2026-05-16",
+            "source": "manual",
+        },
+    )
+    assert unsupported_pair.status_code == 400
+    assert unsupported_pair.json()["detail"] == "V1 currency rates must convert a non-CNY currency to CNY"
+
+    account = create_account(client, balance="1000")
+    category = create_category(client)
+    bad_converted_amount = client.post(
+        "/api/v1/entries",
+        json={
+            "title": "Bad converted amount",
+            "date": "2026-05-16",
+            "status": "confirmed",
+            "category_lines": [
+                {
+                    "category_id": category["id"],
+                    "direction": "expense",
+                    "amount": "100",
+                    "currency": "CNY",
+                    "converted_cny_amount": "99",
+                }
+            ],
+            "account_movements": [
+                {
+                    "account_id": account["id"],
+                    "movement_type": "balance_out",
+                    "amount": "100",
+                    "currency": "CNY",
+                }
+            ],
+        },
+    )
+    assert bad_converted_amount.status_code == 400
+    assert bad_converted_amount.json()["detail"] == "converted_cny_amount does not match the exchange rate"
+
+
+def test_explicit_exchange_rate_must_be_valid_for_entry_date_and_currency(client) -> None:
+    future_rate = client.post(
+        "/api/v1/currency-rates",
+        json={
+            "from_currency": "USD",
+            "to_currency": "CNY",
+            "rate": "6.9",
+            "date": "2026-06-01",
+            "source": "manual",
+        },
+    ).json()
+    usd_account = create_account(client, name="USD Wallet", currency="USD")
+    usd_category = create_category(client, name="USD Dining")
+
+    future_rate_response = client.post(
+        "/api/v1/entries",
+        json={
+            "title": "Future-rate expense",
+            "date": "2026-05-16",
+            "status": "confirmed",
+            "category_lines": [
+                {
+                    "category_id": usd_category["id"],
+                    "direction": "expense",
+                    "amount": "10",
+                    "currency": "USD",
+                    "exchange_rate_id": future_rate["id"],
+                }
+            ],
+            "account_movements": [
+                {
+                    "account_id": usd_account["id"],
+                    "movement_type": "balance_out",
+                    "amount": "10",
+                    "currency": "USD",
+                    "exchange_rate_id": future_rate["id"],
+                }
+            ],
+        },
+    )
+    assert future_rate_response.status_code == 400
+    assert future_rate_response.json()["detail"] == "Currency rate cannot be dated after the entry date"
+
+    cny_account = create_account(client, name="CNY Wallet")
+    cny_category = create_category(client, name="CNY Dining")
+    cny_with_rate_response = client.post(
+        "/api/v1/entries",
+        json={
+            "title": "CNY with rate",
+            "date": "2026-06-02",
+            "status": "confirmed",
+            "category_lines": [
+                {
+                    "category_id": cny_category["id"],
+                    "direction": "expense",
+                    "amount": "10",
+                    "currency": "CNY",
+                    "exchange_rate_id": future_rate["id"],
+                }
+            ],
+            "account_movements": [
+                {
+                    "account_id": cny_account["id"],
+                    "movement_type": "balance_out",
+                    "amount": "10",
+                    "currency": "CNY",
+                }
+            ],
+        },
+    )
+    assert cny_with_rate_response.status_code == 400
+    assert cny_with_rate_response.json()["detail"] == "CNY amounts cannot use an exchange rate"
+
+
 def test_confirmed_entry_rejects_mismatched_category_and_movement_totals(client) -> None:
     account = create_account(client, balance="1000")
     category = create_category(client)

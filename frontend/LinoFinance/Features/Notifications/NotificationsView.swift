@@ -77,14 +77,24 @@ struct NotificationsView: View {
 
     private func confirm(_ rule: NotificationRuleDTO, _ operation: String) {
         let title = operation == "pause" ? "暂停通知规则？" : operation == "resume" ? "恢复通知规则？" : "取消通知规则？"
-        confirmation = ConfirmAction(title: title, message: "规则状态会同步到本地 API。", confirmTitle: title.replacingOccurrences(of: "？", with: ""), role: operation == "cancel" ? .destructive : nil) {
-            Task {
-                switch operation {
-                case "pause": try? await environment.notificationsViewModel.pause(rule.id)
-                case "resume": try? await environment.notificationsViewModel.resume(rule.id)
-                default: try? await environment.notificationsViewModel.cancel(rule.id)
-                }
+        confirmation = ConfirmAction(title: title, message: "规则状态会同步到 API。", confirmTitle: title.replacingOccurrences(of: "？", with: ""), role: operation == "cancel" ? .destructive : nil) {
+            Task { await perform(rule, operation) }
+        }
+    }
+
+    private func perform(_ rule: NotificationRuleDTO, _ operation: String) async {
+        do {
+            switch operation {
+            case "pause":
+                try await environment.notificationsViewModel.pause(rule.id)
+            case "resume":
+                try await environment.notificationsViewModel.resume(rule.id)
+            default:
+                try await environment.notificationsViewModel.cancel(rule.id)
             }
+        } catch {
+            environment.notificationsViewModel.errorMessage = error.localizedDescription
+            environment.lastErrorMessage = error.localizedDescription
         }
     }
 }

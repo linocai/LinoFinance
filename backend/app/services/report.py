@@ -210,13 +210,7 @@ def reimbursement_report(
     if view not in REIMBURSEMENT_REPORT_VIEWS:
         raise LedgerValidationError("Unsupported reimbursement report view")
     start, end = _date_range(date_from, date_to)
-    claims = list(
-        db.execute(
-            select(ReimbursementClaim)
-            .where(ReimbursementClaim.expected_date >= start, ReimbursementClaim.expected_date <= end)
-            .order_by(ReimbursementClaim.expected_date.asc())
-        ).scalars()
-    )
+    claims = list(db.execute(select(ReimbursementClaim)).scalars())
     gross = Decimal("0")
     expected = Decimal("0")
     approved = Decimal("0")
@@ -226,7 +220,14 @@ def reimbursement_report(
 
     for claim in claims:
         amount_cny = quantize_money(claim.converted_cny_amount or Decimal("0"))
-        if claim.status != "abandoned":
+        original_date = _claim_original_entry_date(db, claim)
+        received_date = _claim_received_date(db, claim)
+        original_in_range = original_date is not None and start <= original_date <= end
+        received_in_range = received_date is not None and start <= received_date <= end
+        if not original_in_range and not received_in_range:
+            continue
+
+        if original_in_range and claim.status != "abandoned":
             gross = quantize_money(gross + amount_cny)
             currency_totals[claim.currency][0] = quantize_money(
                 currency_totals[claim.currency][0] + claim.amount
@@ -234,11 +235,11 @@ def reimbursement_report(
             currency_totals[claim.currency][1] = quantize_money(
                 currency_totals[claim.currency][1] + amount_cny
             )
-        if claim.status in EXPECTED_REIMBURSEMENT_STATUSES:
+        if original_in_range and claim.status in EXPECTED_REIMBURSEMENT_STATUSES:
             expected = quantize_money(expected + amount_cny)
-        if claim.status in APPROVED_REIMBURSEMENT_STATUSES:
+        if original_in_range and claim.status in APPROVED_REIMBURSEMENT_STATUSES:
             approved = quantize_money(approved + amount_cny)
-        if claim.status in RECEIVED_REIMBURSEMENT_STATUSES:
+        if received_in_range and claim.status in RECEIVED_REIMBURSEMENT_STATUSES:
             received = quantize_money(received + amount_cny)
         status_amount, status_count = status_totals[claim.status]
         status_totals[claim.status] = (
@@ -405,20 +406,35 @@ def _reimbursement_offsets(
     approved = Decimal("0")
     received = Decimal("0")
     claims = db.execute(
-        select(ReimbursementClaim).where(
-            ReimbursementClaim.expected_date >= start,
-            ReimbursementClaim.expected_date <= end,
-        )
+        select(ReimbursementClaim)
     ).scalars()
     for claim in claims:
         amount = quantize_money(claim.converted_cny_amount or Decimal("0"))
-        if claim.status in EXPECTED_REIMBURSEMENT_STATUSES:
+        original_date = _claim_original_entry_date(db, claim)
+        received_date = _claim_received_date(db, claim)
+        original_in_range = original_date is not None and start <= original_date <= end
+        received_in_range = received_date is not None and start <= received_date <= end
+        if original_in_range and claim.status in EXPECTED_REIMBURSEMENT_STATUSES:
             expected = quantize_money(expected + amount)
-        if claim.status in APPROVED_REIMBURSEMENT_STATUSES:
+        if original_in_range and claim.status in APPROVED_REIMBURSEMENT_STATUSES:
             approved = quantize_money(approved + amount)
-        if claim.status in RECEIVED_REIMBURSEMENT_STATUSES:
+        if received_in_range and claim.status in RECEIVED_REIMBURSEMENT_STATUSES:
             received = quantize_money(received + amount)
     return expected, approved, received
+
+
+def _claim_original_entry_date(db: Session, claim: ReimbursementClaim) -> Optional[DateType]:
+    entry = db.get(FinancialEntry, claim.linked_entry_id)
+    return None if entry is None else entry.date
+
+
+def _claim_received_date(db: Session, claim: ReimbursementClaim) -> Optional[DateType]:
+    if claim.actual_received_date is not None:
+        return claim.actual_received_date
+    if claim.received_entry_id is None:
+        return None
+    entry = db.get(FinancialEntry, claim.received_entry_id)
+    return None if entry is None else entry.date
 
 
 def _credit_liability_total(db: Session, effective_date: DateType) -> Decimal:

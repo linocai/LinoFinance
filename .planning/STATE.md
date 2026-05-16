@@ -161,12 +161,25 @@ with environment/UserDefaults support for a deployed domain API and API token.
   - macOS `LinoAPIClient` and shared Swift package `APIClient` can attach Bearer tokens;
   - macOS app can read `LINOFINANCE_API_BASE_URL` / `LINOFINANCE_API_TOKEN`, `UserDefaults`, or bundle defaults before falling back to local `6868`;
   - Settings now shows API URL, token configured state, backend auth state, and backend rate-limit state.
+- Pre-cloud final audit and blocking-bug repair completed:
+  - `.planning/PRECLOUD_AUDIT.md` added, cross-checking `LinoFinance前置计划.md` and `LinoFinance前端设计方向.md`;
+  - audit explicitly records shipped scope, fixed cloud blockers, and non-blocking backlog;
+  - middleware order fixed so request IDs wrap all responses, auth runs before rate limiting, and `401` auth failures do not consume rate-limit quota;
+  - V1 currency handling tightened to `CNY`/`USD`, with strict `exchange_rate_id` pair/date validation and `converted_cny_amount` consistency checks;
+  - manual reimbursement claims now require a confirmed linked expense line, exact amount/currency match, and no existing claim for that `EntryCategoryLine`;
+  - cash-flow settlement now requires matching direction, currency, amount, account, category, and entry shape before creating a confirmed entry;
+  - subscription rules advance only after a matching subscription cash-flow settlement succeeds;
+  - reimbursement report date semantics split original expense month from actual received month;
+  - AI now supports `SetCashFlowStatus` and `UpdateReimbursementStatus` as medium-risk confirm-required actions with execution logs and rollback;
+  - macOS Credit and Notifications context actions surface errors instead of silently swallowing them;
+  - macOS Reimbursements shows all key statuses, chooses same-currency balance accounts for received reimbursements, and surfaces clear missing-account/category errors;
+  - macOS Cash Flow no longer offers generic settlement for `transfer` cash flows.
 - Verification passed:
   - `python3 -m compileall backend/app backend/tests`
   - `python3 -m compileall backend/app backend/scripts`
-  - `cd backend && . .venv/bin/activate && pytest` (`46 passed`)
-  - `cd backend && . .venv/bin/activate && ruff check .`
-  - `cd backend && . .venv/bin/activate && alembic upgrade head --sql`
+  - `cd backend && .venv/bin/pytest` (`56 passed`)
+  - `cd backend && .venv/bin/ruff check .`
+  - `cd backend && .venv/bin/alembic upgrade head --sql`
   - `cd frontend && swift test` (`12 passed`)
   - `xcodebuild -project frontend/LinoFinance.xcodeproj -scheme LinoFinance -configuration Debug -destination 'platform=macOS' -derivedDataPath frontend/.derivedData build` (`BUILD SUCCEEDED`)
   - `curl http://127.0.0.1:6868/api/v1/health` returned `status: ok`
@@ -182,7 +195,9 @@ with environment/UserDefaults support for a deployed domain API and API token.
 5. Add seed scripts for default categories and initial USD/CNY rate in local/test setup.
 6. Add app-level smoke/UI tests once the first macOS workflow stabilizes.
 7. Add stronger production observability if needed: external error tracking, persistent rate-limit backend, log shipping, and uptime checks.
-8. Later frontend polish still outstanding from the design direction: command palette (`⌘K`), Menu Bar Extra, account reconciliation UI, multi-window mode, richer charts, and deeper AI narrative insights.
+8. Later frontend polish still outstanding from the design direction: command palette (`⌘K`), Menu Bar Extra, account reconciliation UI, multi-window mode, richer charts, privacy blur, and deeper AI narrative insights.
+9. Original cross-platform vision items intentionally deferred until after cloud baseline: iOS app, Widget, Live Activity, Shortcuts, real system notification delivery, attachment model/preview/printing, offline draft sync/conflict handling, and AI monthly narrative memo.
+10. AI action backlog remains for `GenerateReport` and `CreateRecurringRule`; current report APIs and subscription APIs cover the blocking user workflows.
 
 ## Decisions
 

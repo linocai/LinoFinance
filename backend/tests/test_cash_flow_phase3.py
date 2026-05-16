@@ -155,6 +155,109 @@ def test_settle_cash_flow_item_creates_confirmed_entry_and_changes_balance(clien
     assert client.get(f"/api/v1/accounts/{account['id']}").json()["current_balance"] == "1100.00"
 
 
+def test_settle_cash_flow_item_requires_matching_entry_payload(client) -> None:
+    account = create_account(client, balance="100")
+    category = create_category(client)
+    item = client.post(
+        "/api/v1/cash-flow-items",
+        json={
+            "title": "Expected salary",
+            "direction": "inflow",
+            "cash_flow_type": "salary",
+            "amount": "1000",
+            "currency": "CNY",
+            "expected_date": "2026-06-01",
+            "account_id": account["id"],
+            "category_id": category["id"],
+            "status": "confirmed",
+        },
+    ).json()
+
+    settle_response = client.post(
+        f"/api/v1/cash-flow-items/{item['id']}/settle",
+        json={
+            "entry": {
+                "title": "Wrong salary amount",
+                "entry_type": "single",
+                "date": "2026-06-01",
+                "category_lines": [
+                    {
+                        "category_id": category["id"],
+                        "direction": "income",
+                        "amount": "999",
+                        "currency": "CNY",
+                    }
+                ],
+                "account_movements": [
+                    {
+                        "account_id": account["id"],
+                        "movement_type": "balance_in",
+                        "amount": "999",
+                        "currency": "CNY",
+                    }
+                ],
+            }
+        },
+    )
+
+    assert settle_response.status_code == 400
+    assert settle_response.json()["detail"] == "Settlement entry category lines must match the cash flow item"
+    unchanged_item = client.get(f"/api/v1/cash-flow-items/{item['id']}").json()
+    assert unchanged_item["status"] == "confirmed"
+    assert unchanged_item["linked_entry_id"] is None
+    assert client.get(f"/api/v1/accounts/{account['id']}").json()["current_balance"] == "100.00"
+
+
+def test_settle_transfer_cash_flow_requires_transfer_only_entry(client) -> None:
+    account = create_account(client, balance="100")
+    category = create_category(client)
+    item = client.post(
+        "/api/v1/cash-flow-items",
+        json={
+            "title": "Transfer preview",
+            "direction": "transfer",
+            "cash_flow_type": "one_time",
+            "amount": "50",
+            "currency": "CNY",
+            "expected_date": "2026-06-01",
+            "account_id": account["id"],
+            "status": "confirmed",
+        },
+    ).json()
+
+    settle_response = client.post(
+        f"/api/v1/cash-flow-items/{item['id']}/settle",
+        json={
+            "entry": {
+                "title": "Wrong transfer settlement",
+                "entry_type": "single",
+                "date": "2026-06-01",
+                "category_lines": [
+                    {
+                        "category_id": category["id"],
+                        "direction": "expense",
+                        "amount": "50",
+                        "currency": "CNY",
+                    }
+                ],
+                "account_movements": [
+                    {
+                        "account_id": account["id"],
+                        "movement_type": "balance_out",
+                        "amount": "50",
+                        "currency": "CNY",
+                    }
+                ],
+            }
+        },
+    )
+
+    assert settle_response.status_code == 400
+    assert settle_response.json()["detail"] == "Settlement entry account movements must match the cash flow item"
+    assert client.get(f"/api/v1/cash-flow-items/{item['id']}").json()["status"] == "confirmed"
+    assert client.get(f"/api/v1/accounts/{account['id']}").json()["current_balance"] == "100.00"
+
+
 def test_credit_statement_cycle_with_amount_generates_repayment_cash_flow(client) -> None:
     create_usd_cny_rate(client)
     credit_account = create_account(client, name="Chase Credit", account_type="credit", currency="USD")

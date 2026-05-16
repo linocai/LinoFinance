@@ -38,6 +38,8 @@ MEDIUM_RISK_ACTIONS = {
     "CreateInstallmentPlan",
     "RecordCreditRepayment",
     "GenerateNotificationRule",
+    "SetCashFlowStatus",
+    "UpdateReimbursementStatus",
 }
 
 
@@ -312,6 +314,12 @@ def _apply_action(
     if action.action_type == "MarkReimbursable":
         return _mark_reimbursable(db, action.payload)
 
+    if action.action_type == "SetCashFlowStatus":
+        return _set_cash_flow_status(db, action.payload)
+
+    if action.action_type == "UpdateReimbursementStatus":
+        return _update_reimbursement_status(db, action.payload)
+
     if action.action_type == "VoidEntry":
         entry_id = action.payload.get("entry_id")
         if not entry_id:
@@ -354,6 +362,47 @@ def _mark_reimbursable(
     return "entry_category_line", line.id, after, rollback_payload, before
 
 
+def _set_cash_flow_status(
+    db: Session,
+    payload: Dict[str, Any],
+) -> Tuple[str, str, Dict[str, Any], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    item_id = payload.get("cash_flow_item_id") or payload.get("item_id")
+    target_status = payload.get("status") or payload.get("target_status")
+    if not item_id or not target_status:
+        raise LedgerValidationError("SetCashFlowStatus requires cash_flow_item_id and status")
+    item = db.get(CashFlowItem, item_id)
+    if item is None:
+        raise LedgerNotFoundError("Cash flow item not found")
+    before = CashFlowItemRead.model_validate(item).model_dump(mode="json")
+    updated = cash_flow.set_cash_flow_status(db, item_id, target_status, commit=False)
+    after = updated.model_dump(mode="json")
+    rollback_payload = {
+        "action_type": "SetCashFlowStatus",
+        "cash_flow_item_id": item_id,
+        "status": before["status"],
+    }
+    return "cash_flow_item", item_id, after, rollback_payload, before
+
+
+def _update_reimbursement_status(
+    db: Session,
+    payload: Dict[str, Any],
+) -> Tuple[str, str, Dict[str, Any], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    claim_id = payload.get("reimbursement_claim_id") or payload.get("claim_id")
+    target_status = payload.get("status") or payload.get("target_status")
+    if not claim_id or not target_status:
+        raise LedgerValidationError("UpdateReimbursementStatus requires reimbursement_claim_id and status")
+    before = reimbursement.get_reimbursement_claim(db, claim_id).model_dump(mode="json")
+    updated = reimbursement.update_claim_status(db, claim_id, target_status, commit=False)
+    after = updated.model_dump(mode="json")
+    rollback_payload = {
+        "action_type": "UpdateReimbursementStatus",
+        "reimbursement_claim_id": claim_id,
+        "status": before["status"],
+    }
+    return "reimbursement_claim", claim_id, after, rollback_payload, before
+
+
 def _rollback_action_target(
     db: Session,
     action: AIAction,
@@ -368,9 +417,31 @@ def _rollback_action_target(
         if item is None:
             raise LedgerNotFoundError("Cash flow item not found")
         before = CashFlowItemRead.model_validate(item).model_dump(mode="json")
-        if item.status not in {"settled", "cancelled"}:
+        rollback_status = (action.rollback_payload or {}).get("status")
+        if rollback_status is not None:
+            if item.status == "settled":
+                raise LedgerValidationError("Settled cash flow items cannot be rolled back")
+            if rollback_status not in {"expected", "confirmed", "cancelled"}:
+                raise LedgerValidationError("Unsupported cash flow rollback status")
+            item.status = rollback_status
+        elif item.status not in {"settled", "cancelled"}:
             item.status = "cancelled"
         after = CashFlowItemRead.model_validate(item).model_dump(mode="json")
+        return before, after
+
+    if action.target_type == "reimbursement_claim" and action.target_id is not None:
+        before = reimbursement.get_reimbursement_claim(db, action.target_id).model_dump(mode="json")
+        rollback_status = (action.rollback_payload or {}).get("status")
+        if rollback_status is None:
+            raise LedgerValidationError("Reimbursement status rollback payload is missing")
+        updated = reimbursement.update_claim_status(
+            db,
+            action.target_id,
+            rollback_status,
+            commit=False,
+            allow_final_source=True,
+        )
+        after = updated.model_dump(mode="json")
         return before, after
 
     if action.target_type == "notification_rule" and action.target_id is not None:
@@ -426,6 +497,19 @@ def _validate_known_payload(action: AIActionProposal) -> None:
             raise LedgerValidationError("VoidEntry requires entry_id")
         elif action.action_type == "MarkReimbursable" and "entry_line_id" not in action.payload:
             raise LedgerValidationError("MarkReimbursable requires entry_line_id")
+        elif action.action_type == "SetCashFlowStatus":
+            if not (action.payload.get("cash_flow_item_id") or action.payload.get("item_id")):
+                raise LedgerValidationError("SetCashFlowStatus requires cash_flow_item_id")
+            if not (action.payload.get("status") or action.payload.get("target_status")):
+                raise LedgerValidationError("SetCashFlowStatus requires status")
+        elif action.action_type == "UpdateReimbursementStatus":
+            if not (
+                action.payload.get("reimbursement_claim_id")
+                or action.payload.get("claim_id")
+            ):
+                raise LedgerValidationError("UpdateReimbursementStatus requires reimbursement_claim_id")
+            if not (action.payload.get("status") or action.payload.get("target_status")):
+                raise LedgerValidationError("UpdateReimbursementStatus requires status")
     except ValidationError as exc:
         raise LedgerValidationError(str(exc)) from exc
 

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.account import Account
 from app.schemas.account import AccountCreate, AccountRead
+from app.services.ledger import LedgerValidationError, normalize_currency
 
 router = APIRouter()
 
@@ -19,7 +20,12 @@ def list_accounts(db: Session = Depends(get_db)) -> List[Account]:
 
 @router.post("", response_model=AccountRead, status_code=status.HTTP_201_CREATED)
 def create_account(payload: AccountCreate, db: Session = Depends(get_db)) -> Account:
-    account = Account(**payload.model_dump())
+    try:
+        data = payload.model_dump()
+        data["currency"] = normalize_currency(data["currency"])
+    except LedgerValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    account = Account(**data)
     db.add(account)
     db.commit()
     db.refresh(account)
@@ -32,4 +38,3 @@ def get_account(account_id: str, db: Session = Depends(get_db)) -> Account:
     if account is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
     return account
-

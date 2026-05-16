@@ -57,22 +57,34 @@ def get_cash_flow_item(db: Session, item_id: str) -> CashFlowItemRead:
 
 
 def confirm_cash_flow_item(db: Session, item_id: str) -> CashFlowItemRead:
-    item = _get_cash_flow_or_raise(db, item_id)
-    if item.status == "expected":
-        item.status = "confirmed"
-    elif item.status != "confirmed":
-        raise LedgerValidationError("Only expected cash flow items can be confirmed")
-    db.commit()
-    return get_cash_flow_item(db, item_id)
+    return set_cash_flow_status(db, item_id, "confirmed")
 
 
 def cancel_cash_flow_item(db: Session, item_id: str) -> CashFlowItemRead:
+    return set_cash_flow_status(db, item_id, "cancelled")
+
+
+def set_cash_flow_status(
+    db: Session,
+    item_id: str,
+    status: str,
+    commit: bool = True,
+) -> CashFlowItemRead:
     item = _get_cash_flow_or_raise(db, item_id)
+    if status not in {"expected", "confirmed", "cancelled"}:
+        raise LedgerValidationError("Unsupported cash flow status")
     if item.status in {"settled", "cancelled"}:
-        raise LedgerValidationError("Settled or cancelled cash flow items cannot be cancelled")
-    item.status = "cancelled"
-    db.commit()
-    return get_cash_flow_item(db, item_id)
+        raise LedgerValidationError("Settled or cancelled cash flow items cannot be changed")
+    if item.status == status:
+        return CashFlowItemRead.model_validate(item)
+    if status == "confirmed" and item.status != "expected":
+        raise LedgerValidationError("Only expected cash flow items can be confirmed")
+    item.status = status
+    if commit:
+        db.commit()
+        return get_cash_flow_item(db, item_id)
+    db.flush()
+    return CashFlowItemRead.model_validate(item)
 
 
 def settle_cash_flow_item(
@@ -83,6 +95,7 @@ def settle_cash_flow_item(
     item = _get_cash_flow_or_raise(db, item_id)
     if item.status in {"settled", "cancelled"}:
         raise LedgerValidationError("Only active cash flow items can be settled")
+    _validate_settlement_payload(item, payload)
 
     entry_payload = payload.entry.model_copy(update={"status": "confirmed"})
     entry = ledger.create_entry(db, entry_payload, commit=False)
@@ -141,9 +154,16 @@ def _resolve_payload_conversion(
     exchange_rate_id: Optional[str],
     converted_cny_amount: Optional[Decimal],
 ) -> tuple:
-    if converted_cny_amount is not None:
-        return quantize_money(converted_cny_amount), exchange_rate_id
-    return ledger.convert_to_cny(db, amount, currency, expected_date, exchange_rate_id)
+    expected_cny_amount, resolved_exchange_rate_id = ledger.convert_to_cny(
+        db,
+        amount,
+        currency,
+        expected_date,
+        exchange_rate_id,
+    )
+    if converted_cny_amount is not None and quantize_money(converted_cny_amount) != expected_cny_amount:
+        raise LedgerValidationError("converted_cny_amount does not match the exchange rate")
+    return expected_cny_amount, resolved_exchange_rate_id
 
 
 def _validate_optional_links(db: Session, payload: CashFlowItemCreate) -> None:
@@ -168,3 +188,50 @@ def _get_cash_flow_or_raise(db: Session, item_id: str) -> CashFlowItem:
     if item is None:
         raise LedgerNotFoundError("Cash flow item not found")
     return item
+
+
+def _validate_settlement_payload(item: CashFlowItem, payload: CashFlowSettle) -> None:
+    if item.direction == "inflow":
+        _require_matching_line(item, payload, "income")
+        _require_matching_movement(item, payload, {"balance_in"})
+    elif item.direction == "outflow":
+        _require_matching_line(item, payload, "expense")
+        _require_matching_movement(item, payload, {"balance_out"})
+    elif item.direction == "transfer":
+        _require_matching_movement(item, payload, {"credit_repayment", "transfer_in", "transfer_out"})
+        if payload.entry.category_lines:
+            raise LedgerValidationError("Transfer cash flow settlement cannot include category lines")
+    else:
+        raise LedgerValidationError("Unsupported cash flow direction")
+
+
+def _require_matching_line(item: CashFlowItem, payload: CashFlowSettle, direction: str) -> None:
+    for line in payload.entry.category_lines:
+        if line.direction != direction:
+            continue
+        if line.currency.upper() != item.currency:
+            continue
+        if quantize_money(line.amount) != item.amount:
+            continue
+        if item.category_id is not None and line.category_id != item.category_id:
+            continue
+        return
+    raise LedgerValidationError("Settlement entry category lines must match the cash flow item")
+
+
+def _require_matching_movement(
+    item: CashFlowItem,
+    payload: CashFlowSettle,
+    movement_types: set[str],
+) -> None:
+    for movement in payload.entry.account_movements:
+        if movement.movement_type not in movement_types:
+            continue
+        if movement.currency.upper() != item.currency:
+            continue
+        if quantize_money(movement.amount) != item.amount:
+            continue
+        if item.account_id is not None and movement.account_id != item.account_id:
+            continue
+        return
+    raise LedgerValidationError("Settlement entry account movements must match the cash flow item")

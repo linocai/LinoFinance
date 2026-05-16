@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.currency_rate import CurrencyRate
 from app.schemas.currency_rate import CurrencyRateCreate, CurrencyRateRead
+from app.services.ledger import LedgerValidationError, normalize_currency
 
 router = APIRouter()
 
@@ -28,7 +29,20 @@ def create_currency_rate(
     payload: CurrencyRateCreate,
     db: Session = Depends(get_db),
 ) -> CurrencyRate:
-    currency_rate = CurrencyRate(**payload.normalized_dump())
+    data = payload.normalized_dump()
+    try:
+        from_currency = normalize_currency(data["from_currency"])
+        to_currency = normalize_currency(data["to_currency"])
+    except LedgerValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if to_currency != "CNY" or from_currency == to_currency:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="V1 currency rates must convert a non-CNY currency to CNY",
+        )
+    data["from_currency"] = from_currency
+    data["to_currency"] = to_currency
+    currency_rate = CurrencyRate(**data)
     db.add(currency_rate)
     db.commit()
     db.refresh(currency_rate)
@@ -41,4 +55,3 @@ def get_currency_rate(currency_rate_id: str, db: Session = Depends(get_db)) -> C
     if currency_rate is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Currency rate not found")
     return currency_rate
-
