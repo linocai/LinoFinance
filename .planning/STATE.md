@@ -26,9 +26,18 @@ and durable setup documentation.
   - accounts list/create/get;
   - categories list/create/get;
   - currency rates list/create/get with normalized currency codes and trimmed rate output.
+- Phase 1 entries API implemented:
+  - entries list/create/get;
+  - draft entries do not affect balances;
+  - confirmed entries apply account movements immediately;
+  - draft confirmation applies movements;
+  - voiding confirmed entries rolls movements back;
+  - expense/income category totals must match account movements in CNY;
+  - USD entries use available manual USD/CNY rates.
+- Dashboard summary API added with backend-computed balance total, credit liability total, net worth, and entry status counts.
 - Verification passed:
   - `python3 -m compileall backend/app backend/tests`
-  - `cd backend && . .venv/bin/activate && pytest` (`4 passed`)
+  - `cd backend && . .venv/bin/activate && pytest` (`10 passed`)
   - `cd backend && . .venv/bin/activate && ruff check .`
   - `cd backend && . .venv/bin/activate && alembic upgrade head --sql`
   - `cd frontend && swift test` (`2 passed`)
@@ -36,9 +45,9 @@ and durable setup documentation.
 
 ## Remaining
 
-1. Implement Phase 1 entries API: draft creation, confirmed creation, category lines, account movements.
-2. Add service-layer rules for draft vs confirmed entries and balance calculation.
-3. Add dashboard summary API with backend-computed balances.
+1. Add entry edit/update rules, especially what can be edited after confirmation.
+2. Add account balance recalculation/reconciliation command to rebuild balances from movements.
+3. Add seed scripts for default categories and initial USD/CNY rate in local/test setup.
 4. Add real iOS/macOS app targets after shared Swift modules settle.
 5. Prepare local PostgreSQL instructions or Docker Compose if a local database runner is desired.
 

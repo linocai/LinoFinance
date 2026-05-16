@@ -29,12 +29,26 @@ Response:
   - `GET /currency-rates`
   - `POST /currency-rates`
   - `GET /currency-rates/{currency_rate_id}`
-- Planned next:
   - `GET /entries`
   - `POST /entries`
   - `POST /entries/{entry_id}/confirm`
   - `POST /entries/{entry_id}/void`
   - `GET /dashboard/summary`
+- Planned next:
+  - Expand `GET /dashboard/summary` into richer report cards after Phase 1 entries settle.
+  - Add entry update/edit endpoints after basic create/confirm/void semantics are stable.
+
+## Entry Rules Implemented
+
+- `draft` entries can be incomplete and do not affect account balances.
+- `confirmed` entries must include account movements.
+- Confirmed non-transfer entries must include category lines.
+- Expense category totals must match `balance_out + credit_charge` movement totals in CNY.
+- Income category totals must match `balance_in` movement totals in CNY.
+- CNY amounts convert to themselves.
+- Non-CNY amounts use the latest available rate on or before the entry date.
+- Voiding a confirmed entry reverses its balance/liability effect.
+- Credit card charges increase `current_liability`; credit repayment decreases it and is treated as transfer movement.
 
 ## Domain Rules For API Design
 
