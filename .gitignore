@@ -13,14 +13,26 @@
 # Logs and caches
 *.log
 .cache/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
 
 # Python
 __pycache__/
 *.py[cod]
 .venv/
 venv/
+*.egg-info/
+.eggs/
 
 # Node
 node_modules/
 dist/
 build/
+
+# Swift / Xcode
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+xcuserdata/
