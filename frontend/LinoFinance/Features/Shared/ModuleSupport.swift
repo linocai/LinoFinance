@@ -21,6 +21,8 @@ struct DetailLine: View {
             Text(value)
                 .font(.body.monospacedDigit())
                 .multilineTextAlignment(.trailing)
+                .lineLimit(2)
+                .minimumScaleFactor(0.75)
         }
     }
 }

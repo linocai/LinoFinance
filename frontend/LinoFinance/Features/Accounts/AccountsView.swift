@@ -41,12 +41,16 @@ struct AccountsView: View {
                         ForEach(environment.accountsViewModel.accounts.balanceAccounts) { account in
                             AccountRow(account: account)
                                 .tag(account.id)
+                                .contentShape(Rectangle())
+                                .onTapGesture { environment.inspectorSelection = .account(account) }
                         }
                     }
                     Section("信用账户") {
                         ForEach(environment.accountsViewModel.accounts.creditAccounts) { account in
                             AccountRow(account: account)
                                 .tag(account.id)
+                                .contentShape(Rectangle())
+                                .onTapGesture { environment.inspectorSelection = .account(account) }
                         }
                     }
                 }

@@ -19,31 +19,14 @@ struct EntriesView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             PageHeader(title: "记账", subtitle: "单笔记录、分类拆分和账户流水")
-            HStack(spacing: 10) {
-                Picker("状态", selection: $statusFilter) {
-                    Text("全部").tag("all")
-                    Text("草稿").tag("draft")
-                    Text("已确认").tag("confirmed")
-                    Text("已作废").tag("voided")
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    entryControls
+                    Spacer()
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 300)
-
-                Button {
-                    environment.beginNewEntry()
-                } label: {
-                    Label("新建记录", systemImage: "plus")
+                VStack(alignment: .leading, spacing: 10) {
+                    entryControls
                 }
-                .buttonStyle(.borderedProminent)
-
-                Button {
-                    Task { await createQuickExpenseCategory() }
-                } label: {
-                    Label("补一个支出分类", systemImage: "tag")
-                }
-                .disabled(environment.entriesViewModel.expenseCategories.contains(where: { $0.name == "日常支出" }))
-
-                Spacer()
             }
 
             if environment.entriesViewModel.entries.isEmpty {
@@ -67,16 +50,21 @@ struct EntriesView: View {
                         environment.inspectorSelection = .entry(entry)
                     }
                 )) { entry in
-                    EntryRow(entry: entry, accounts: environment.accountsViewModel.accounts, categories: environment.entriesViewModel.categories)
-                        .tag(entry.id)
-                        .contextMenu {
-                            if entry.status == .draft {
-                                Button("确认") { confirm(entry, operation: "confirm") }
-                            }
-                            if entry.status != .voided {
-                                Button("作废", role: .destructive) { confirm(entry, operation: "void") }
-                            }
+                    HStack {
+                        EntryRow(entry: entry, accounts: environment.accountsViewModel.accounts, categories: environment.entriesViewModel.categories)
+                        EntryActionMenu(entry: entry, confirm: confirm)
+                    }
+                    .tag(entry.id)
+                    .contentShape(Rectangle())
+                    .onTapGesture { environment.inspectorSelection = .entry(entry) }
+                    .contextMenu {
+                        if entry.status == .draft {
+                            Button("确认") { confirm(entry, operation: "confirm") }
                         }
+                        if entry.status != .voided {
+                            Button("作废", role: .destructive) { confirm(entry, operation: "void") }
+                        }
+                    }
                 }
                 .listStyle(.inset)
             }
@@ -103,6 +91,33 @@ struct EntriesView: View {
             Button("取消", role: .cancel) { confirmation = nil }
         } message: { item in
             Text(item.message)
+        }
+    }
+
+    private var entryControls: some View {
+        Group {
+                Picker("状态", selection: $statusFilter) {
+                    Text("全部").tag("all")
+                    Text("草稿").tag("draft")
+                    Text("已确认").tag("confirmed")
+                    Text("已作废").tag("voided")
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 320)
+
+                Button {
+                    environment.beginNewEntry()
+                } label: {
+                    Label("新建记录", systemImage: "plus")
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button {
+                    Task { await createQuickExpenseCategory() }
+                } label: {
+                    Label("补一个支出分类", systemImage: "tag")
+                }
+                .disabled(environment.entriesViewModel.expenseCategories.contains(where: { $0.name == "日常支出" }))
         }
     }
 
@@ -196,6 +211,26 @@ private struct EntryRow: View {
             }
         }
         .padding(.vertical, 6)
+    }
+}
+
+private struct EntryActionMenu: View {
+    let entry: EntryDTO
+    let confirm: (EntryDTO, String) -> Void
+
+    var body: some View {
+        Menu {
+            if entry.status == .draft {
+                Button("确认") { confirm(entry, "confirm") }
+            }
+            if entry.status != .voided {
+                Button("作废", role: .destructive) { confirm(entry, "void") }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .foregroundStyle(.secondary)
+        }
+        .menuStyle(.button)
     }
 }
 

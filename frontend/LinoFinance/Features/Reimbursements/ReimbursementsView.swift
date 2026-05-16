@@ -38,6 +38,20 @@ struct ReimbursementsView: View {
                     action: environment.beginNewReimbursement
                 )
             } else {
+#if os(iOS)
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        ForEach(columns, id: \.self) { status in
+                            ReimbursementColumn(
+                                title: status.financeStatusTitle,
+                                claims: environment.reimbursementsViewModel.claims.filter { $0.status == status },
+                                select: { environment.inspectorSelection = .reimbursement($0) },
+                                action: confirm
+                            )
+                        }
+                    }
+                }
+#else
                 ScrollView(.horizontal) {
                     HStack(alignment: .top, spacing: 12) {
                         ForEach(columns, id: \.self) { status in
@@ -52,6 +66,7 @@ struct ReimbursementsView: View {
                     }
                     .padding(.vertical, 2)
                 }
+#endif
             }
 
             if let message = environment.reimbursementsViewModel.errorMessage {

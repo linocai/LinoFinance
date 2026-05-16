@@ -21,7 +21,7 @@ struct CashFlowView: View {
         VStack(alignment: .leading, spacing: 16) {
             PageHeader(title: "现金流", subtitle: "未来事件、预计收支和正式结算")
 
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
                 ForEach(pressureWindows.prefix(3)) { window in
                     ToolbarPill(
                         title: "未来 \(window.days) 天净额",
@@ -67,15 +67,20 @@ struct CashFlowView: View {
                         environment.inspectorSelection = .cashFlow(item)
                     }
                 )) { item in
-                    CashFlowRow(item: item, accounts: environment.accountsViewModel.accounts)
-                        .tag(item.id)
-                        .contextMenu {
-                            Button("确认发生") { confirm(item, operation: "confirm") }
-                            if item.direction != "transfer" {
-                                Button("结算为正式记录") { confirm(item, operation: "settle") }
-                            }
-                            Button("取消", role: .destructive) { confirm(item, operation: "cancel") }
+                    HStack {
+                        CashFlowRow(item: item, accounts: environment.accountsViewModel.accounts)
+                        CashFlowActionMenu(item: item, confirm: confirm)
+                    }
+                    .tag(item.id)
+                    .contentShape(Rectangle())
+                    .onTapGesture { environment.inspectorSelection = .cashFlow(item) }
+                    .contextMenu {
+                        Button("确认发生") { confirm(item, operation: "confirm") }
+                        if item.direction != "transfer" {
+                            Button("结算为正式记录") { confirm(item, operation: "settle") }
                         }
+                        Button("取消", role: .destructive) { confirm(item, operation: "cancel") }
+                    }
                 }
                 .listStyle(.inset)
             }
@@ -230,6 +235,24 @@ private struct CashFlowRow: View {
             return "未关联账户"
         }
         return account.name
+    }
+}
+
+private struct CashFlowActionMenu: View {
+    let item: CashFlowItemDTO
+    let confirm: (CashFlowItemDTO, String) -> Void
+
+    var body: some View {
+        Menu {
+            Button("确认发生") { confirm(item, "confirm") }
+            if item.direction != "transfer" {
+                Button("结算为正式记录") { confirm(item, "settle") }
+            }
+            Button("取消", role: .destructive) { confirm(item, "cancel") }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .foregroundStyle(.secondary)
+        }
     }
 }
 

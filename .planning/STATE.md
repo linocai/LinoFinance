@@ -4,15 +4,14 @@ Last updated: 2026-05-16
 
 ## Current Goal
 
-Execute `plan.md` from Phase 0 onward. The backend is complete through Phase 7
-and has the first Phase 8 production-hardening slice implemented. The current
-frontend is the real Xcode macOS app against the local `6868` API by default,
-with environment/UserDefaults support for a deployed domain API and API token.
+Execute the post-cloud client expansion. Backend and macOS app are deployed
+and production-smoked; the current work adds an iPhone-only iOS app that reuses
+the existing cloud API, DTOs, repositories, view models, and business screens.
 
 ## Completed
 
 - Git repository initialized on `main`.
-- Remote recorded as `origin = git@github.com:linocai/LinoFinance.git`; not pushed.
+- Remote recorded as `origin = git@github.com:linocai/LinoFinance.git`; main is pushed.
 - `plan.md` created with confirmed product decisions:
   - manual USD/CNY rate starts at `6.8`;
   - credit cards need `CreditStatementCycle`;
@@ -126,7 +125,7 @@ with environment/UserDefaults support for a deployed domain API and API token.
   - `frontend/LinoFinance.xcodeproj` with app target `LinoFinance`;
   - bundle id `com.lino.linofinance`;
   - Debug app path `frontend/.derivedData/Build/Products/Debug/LinoFinance.app`;
-  - app icon source confirmed as `/Users/linotsai/Pictures/GPT Image/冈部伦太郎-简笔2.png`;
+  - app icon updated from `/Users/linotsai/Pictures/GPT Image/personal-bookkeeping-appicon-v1.png`;
   - Xcode asset catalog generated under `frontend/LinoFinance/Resources/Assets.xcassets`;
   - local SQLite API runner added at `backend/scripts/run_local_sqlite.py`;
   - local preview API runs on `http://127.0.0.1:6868/api/v1`;
@@ -191,6 +190,19 @@ with environment/UserDefaults support for a deployed domain API and API token.
   - `backend/app/services/ai_provider.py` hotfixed with stricter action schema prompt and common payload field normalization;
   - remote `linofinance-api` restarted successfully;
   - authenticated `POST https://lf.linotsai.top/api/v1/ai/plans` created a medium-risk `CreateCashFlowItem` plan through the live provider, then the smoke plan was rejected for cleanup.
+- iPhone Air iOS app implementation completed locally:
+  - Xcode target `LinoFinanceiOS` added with product name `LinoF`, bundle id `com.lino.linofinance.ios`, iPhone-only device family, iOS 18.0 deployment target, and shared scheme `LinoFinance iOS`;
+  - iOS app uses the same `AppIcon` catalog and default API `https://lf.linotsai.top/api/v1`;
+  - `FinanceModule` and `InspectorSelection` moved into shared navigation for macOS/iOS reuse;
+  - `LinoFinanceApp` now routes to `MacRootView` on macOS and `iOSRootView` on iOS;
+  - iOS root has fixed tabs `总览 / 记账 / 现金流 / 信用 / 更多`, with 更多 linking to accounts, reimbursements, reports, AI, notifications, and settings;
+  - shared `FinanceModuleContentView` and `SelectionDetailView` let macOS inspector and iOS detail sheets render the same business content;
+  - `SecureTokenStore` added with Security/Keychain storage for `linofinance.apiToken`;
+  - `AppEnvironment` can reconfigure API URL/token at runtime, rebuild clients/view models, and skip protected refreshes until a token is configured;
+  - Settings now exposes API URL/token save and token clear actions;
+  - Reports no longer hard-depend on AppKit and exports CSV to ShareLink on iOS while preserving Finder reveal on macOS;
+  - mobile-visible action menus were added for entries, cash flow, credit installment/subscription, and notification rows;
+  - dashboard, reports, credit, entries, reimbursements, and detail rows were adjusted to avoid fixed desktop-only widths on iPhone.
 - Verification passed:
   - `python3 -m compileall backend/app backend/tests`
   - `python3 -m compileall backend/app backend/scripts`
@@ -208,19 +220,26 @@ with environment/UserDefaults support for a deployed domain API and API token.
   - `curl https://lf.linotsai.top/api/v1/ai/config` without token returned `401`
   - authenticated `GET https://lf.linotsai.top/api/v1/ai/config` returned `200` with `api_key_configured: true`
   - authenticated AI provider smoke created plan `35ed12c9-f582-4061-99bc-5ac5f243931e` and rejected it after verification
+  - `cd frontend && swift test` (`12 passed`) after iOS shared-code changes
+  - macOS Debug build still succeeds after iOS changes:
+    `xcodebuild -project frontend/LinoFinance.xcodeproj -scheme LinoFinance -configuration Debug -destination 'platform=macOS' -derivedDataPath frontend/.derivedData build`
+  - iOS Swift typecheck passed with simulator SDK:
+    `xcrun --sdk iphonesimulator swiftc -typecheck -target arm64-apple-ios18.0-simulator ...`
+  - full iOS Simulator xcodebuild is blocked on this machine because no iOS simulator runtime is installed; `iPhone Air` exists only as unavailable `iOS 26.4`
 
 ## Remaining
 
-1. User action: edit `/etc/linofinance/api.env` on `hz`, fill `LINOFINANCE_AI_API_KEY` plus optional `LINOFINANCE_AI_API_BASE_URL` / `LINOFINANCE_AI_MODEL`, then restart `sudo systemctl restart linofinance-api`.
-2. Configure the macOS app to use `LINOFINANCE_API_BASE_URL=https://lf.linotsai.top/api/v1` and the production API auth token from `/etc/linofinance/api.env`.
+1. Install an iOS simulator runtime on the Mac, then run:
+   `xcodebuild -project frontend/LinoFinance.xcodeproj -scheme 'LinoFinance iOS' -configuration Debug -destination 'platform=iOS Simulator,name=iPhone Air' -derivedDataPath frontend/.derivedData-ios build`.
+2. Manual iPhone Air smoke after simulator runtime is available: first-launch no-token settings prompt, token save, `/health`, `/ai/config`, all 10 modules, create flows, status actions, and CSV sharing.
 3. Add partial cash-flow settlement once reimbursement and partial payments need it.
 4. Add credit statement cycle update/close endpoints if manual statement reconciliation needs editing after creation.
 5. Add account balance recalculation/reconciliation command to rebuild balances from movements and cycle amounts.
 6. Add seed scripts for default categories and initial USD/CNY rate in local/test setup.
-7. Add app-level smoke/UI tests once the first macOS workflow stabilizes.
+7. Add app-level smoke/UI tests once macOS/iOS workflow stabilizes.
 8. Add stronger production observability if needed: external error tracking, persistent rate-limit backend, log shipping, and uptime checks.
 9. Later frontend polish still outstanding from the design direction: command palette (`⌘K`), Menu Bar Extra, account reconciliation UI, multi-window mode, richer charts, privacy blur, and deeper AI narrative insights.
-10. Original cross-platform vision items intentionally deferred until after cloud baseline: iOS app, Widget, Live Activity, Shortcuts, real system notification delivery, attachment model/preview/printing, offline draft sync/conflict handling, and AI monthly narrative memo.
+10. Remaining cross-platform vision items intentionally deferred: Widget, Live Activity, Shortcuts, real system notification delivery, attachment model/preview/printing, offline draft sync/conflict handling, and AI monthly narrative memo.
 11. AI action backlog remains for `GenerateReport` and `CreateRecurringRule`; current report APIs and subscription APIs cover the blocking user workflows.
 
 ## Decisions

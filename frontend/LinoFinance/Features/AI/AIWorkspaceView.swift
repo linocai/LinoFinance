@@ -58,6 +58,8 @@ struct AIWorkspaceView: View {
                 )) { plan in
                     AIPlanCard(plan: plan, strongConfirm: strongConfirm, action: confirm)
                         .tag(plan.id)
+                        .contentShape(Rectangle())
+                        .onTapGesture { environment.inspectorSelection = .aiPlan(plan) }
                 }
                 .listStyle(.inset)
             }

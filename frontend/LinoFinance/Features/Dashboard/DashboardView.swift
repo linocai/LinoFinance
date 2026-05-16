@@ -22,7 +22,7 @@ struct DashboardView: View {
                     )
 
                     if let bundle = environment.reportsViewModel.bundle {
-                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 2), spacing: 16) {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16)], spacing: 16) {
                             DashboardCashFlowCard(report: bundle.cashFlow)
                             DashboardCategoryCard(report: bundle.categories)
                             DashboardReimbursementCard(report: bundle.reimbursement)
@@ -70,7 +70,7 @@ private struct SummaryGrid: View {
     let future30Net: DecimalValue?
 
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 4), spacing: 14) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 14)], spacing: 14) {
             KPIStat(title: "净资产", value: FinanceFormatter.money(summary.netWorthCny), systemImage: "chart.pie.fill", tint: FinanceColor.brand)
             KPIStat(title: "余额合计", value: FinanceFormatter.money(summary.balanceTotalCny), systemImage: "wallet.pass.fill", tint: FinanceColor.income)
             KPIStat(title: "信用负债", value: FinanceFormatter.money(summary.creditLiabilityTotalCny), systemImage: "creditcard.trianglebadge.exclamationmark", tint: FinanceColor.credit)
@@ -136,9 +136,9 @@ private struct DashboardCategoryCard: View {
                     MoneyText(amount: report.totalExpenseCny, currency: .cny, prominence: .headline)
                 }
                 ForEach(report.rows.prefix(5)) { row in
-                    HStack {
+                    HStack(alignment: .top) {
                         Text(row.categoryName)
-                            .frame(width: 110, alignment: .leading)
+                            .frame(minWidth: 72, idealWidth: 110, maxWidth: 120, alignment: .leading)
                             .lineLimit(1)
                         ThinBar(value: row.expenseCny, maxValue: maxValue, tint: FinanceColor.expense)
                         MoneyText(amount: row.expenseCny, currency: .cny)

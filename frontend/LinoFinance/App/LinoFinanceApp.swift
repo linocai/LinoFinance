@@ -6,9 +6,14 @@ struct LinoFinanceApp: App {
 
     var body: some Scene {
         WindowGroup {
+#if os(macOS)
             MacRootView(environment: environment)
                 .frame(minWidth: 1180, minHeight: 760)
+#else
+            iOSRootView(environment: environment)
+#endif
         }
+#if os(macOS)
         .windowStyle(.titleBar)
         .commands {
             CommandGroup(replacing: .newItem) {
@@ -71,5 +76,6 @@ struct LinoFinanceApp: App {
                 .keyboardShortcut("a", modifiers: [.command, .shift])
             }
         }
+#endif
     }
 }

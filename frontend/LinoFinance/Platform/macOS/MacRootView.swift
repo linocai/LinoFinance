@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 struct MacRootView: View {
@@ -9,7 +10,7 @@ struct MacRootView: View {
             SidebarView(environment: environment)
                 .navigationSplitViewColumnWidth(min: 210, ideal: 240)
         } content: {
-            ModuleContentView(environment: environment)
+            FinanceModuleContentView(environment: environment)
                 .navigationSplitViewColumnWidth(min: 560, ideal: 760)
         } detail: {
             InspectorView(environment: environment)
@@ -109,17 +110,17 @@ private struct SidebarView: View {
     var body: some View {
         List(selection: $environment.selectedModule) {
             Section {
-                ForEach([MacModule.dashboard, .accounts, .entries, .cashFlow, .reimbursements, .credit, .reports, .ai]) { module in
+                ForEach([FinanceModule.dashboard, .accounts, .entries, .cashFlow, .reimbursements, .credit, .reports, .ai]) { module in
                     Label(module.title, systemImage: module.symbolName)
                         .tag(module)
                 }
             }
 
             Section {
-                Label(MacModule.notifications.title, systemImage: MacModule.notifications.symbolName)
-                    .tag(MacModule.notifications)
-                Label(MacModule.settings.title, systemImage: MacModule.settings.symbolName)
-                    .tag(MacModule.settings)
+                Label(FinanceModule.notifications.title, systemImage: FinanceModule.notifications.symbolName)
+                    .tag(FinanceModule.notifications)
+                Label(FinanceModule.settings.title, systemImage: FinanceModule.settings.symbolName)
+                    .tag(FinanceModule.settings)
             }
         }
         .navigationTitle("LinoF")
@@ -157,31 +158,4 @@ private struct ConnectionFooter: View {
     }
 }
 
-private struct ModuleContentView: View {
-    @Bindable var environment: AppEnvironment
-
-    var body: some View {
-        switch environment.selectedModule {
-        case .dashboard:
-            DashboardView(environment: environment)
-        case .accounts:
-            AccountsView(environment: environment)
-        case .entries:
-            EntriesView(environment: environment)
-        case .cashFlow:
-            CashFlowView(environment: environment)
-        case .reimbursements:
-            ReimbursementsView(environment: environment)
-        case .credit:
-            CreditView(environment: environment)
-        case .reports:
-            ReportsView(environment: environment)
-        case .ai:
-            AIWorkspaceView(environment: environment)
-        case .notifications:
-            NotificationsView(environment: environment)
-        case .settings:
-            SettingsView(environment: environment)
-        }
-    }
-}
+#endif

@@ -13,32 +13,14 @@ struct CreditView: View {
             VStack(alignment: .leading, spacing: 18) {
                 PageHeader(title: "信用", subtitle: "信用卡、账单周期、分期和订阅")
 
-                HStack(spacing: 10) {
-                    Button {
-                        environment.isShowingNewStatementCycleSheet = true
-                    } label: {
-                        Label("新建账单周期", systemImage: "calendar.badge.plus")
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        creditActions
+                        Spacer()
                     }
-                    .buttonStyle(.borderedProminent)
-
-                    Button {
-                        environment.beginNewEntry()
-                    } label: {
-                        Label("信用消费 / 还款", systemImage: "creditcard")
+                    VStack(alignment: .leading, spacing: 10) {
+                        creditActions
                     }
-
-                    Button {
-                        environment.isShowingNewInstallmentSheet = true
-                    } label: {
-                        Label("新建分期", systemImage: "rectangle.stack.badge.plus")
-                    }
-
-                    Button {
-                        environment.isShowingNewSubscriptionSheet = true
-                    } label: {
-                        Label("新建订阅", systemImage: "repeat")
-                    }
-                    Spacer()
                 }
 
                 if creditAccounts.isEmpty {
@@ -50,7 +32,7 @@ struct CreditView: View {
                         action: environment.beginNewAccount
                     )
                 } else {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 240), spacing: 12)], spacing: 12) {
                         ForEach(creditAccounts) { account in
                             Button {
                                 environment.inspectorSelection = .account(account)
@@ -78,7 +60,7 @@ struct CreditView: View {
                     }
                 }
 
-                HStack(alignment: .top, spacing: 16) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 16)], spacing: 16) {
                     FinancePanel {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("分期计划")
@@ -87,6 +69,9 @@ struct CreditView: View {
                                 InstallmentRow(plan: plan, accountName: accountName(plan.creditAccountId))
                                     .contentShape(Rectangle())
                                     .onTapGesture { environment.inspectorSelection = .installment(plan) }
+                                    .overlay(alignment: .trailing) {
+                                        InstallmentActionMenu(plan: plan, confirmPaidOff: confirmInstallment, confirmCancel: confirmInstallmentCancel)
+                                    }
                                     .contextMenu {
                                         Button("标记还清") { confirmInstallment(plan, early: false) }
                                         Button("提前结清") { confirmInstallment(plan, early: true) }
@@ -107,6 +92,9 @@ struct CreditView: View {
                                 SubscriptionRow(rule: rule)
                                     .contentShape(Rectangle())
                                     .onTapGesture { environment.inspectorSelection = .subscription(rule) }
+                                    .overlay(alignment: .trailing) {
+                                        SubscriptionActionMenu(rule: rule, confirm: confirmSubscription)
+                                    }
                                     .contextMenu {
                                         if rule.status == "active" {
                                             Button("暂停") { confirmSubscription(rule, operation: "pause") }
@@ -148,6 +136,35 @@ struct CreditView: View {
             Button("取消", role: .cancel) { confirmation = nil }
         } message: { item in
             Text(item.message)
+        }
+    }
+
+    private var creditActions: some View {
+        Group {
+            Button {
+                environment.isShowingNewStatementCycleSheet = true
+            } label: {
+                Label("新建账单周期", systemImage: "calendar.badge.plus")
+            }
+            .buttonStyle(.borderedProminent)
+
+            Button {
+                environment.beginNewEntry()
+            } label: {
+                Label("信用消费 / 还款", systemImage: "creditcard")
+            }
+
+            Button {
+                environment.isShowingNewInstallmentSheet = true
+            } label: {
+                Label("新建分期", systemImage: "rectangle.stack.badge.plus")
+            }
+
+            Button {
+                environment.isShowingNewSubscriptionSheet = true
+            } label: {
+                Label("新建订阅", systemImage: "repeat")
+            }
         }
     }
 
@@ -314,6 +331,23 @@ private struct InstallmentRow: View {
     }
 }
 
+private struct InstallmentActionMenu: View {
+    let plan: InstallmentPlanDTO
+    let confirmPaidOff: (InstallmentPlanDTO, Bool) -> Void
+    let confirmCancel: (InstallmentPlanDTO) -> Void
+
+    var body: some View {
+        Menu {
+            Button("标记还清") { confirmPaidOff(plan, false) }
+            Button("提前结清") { confirmPaidOff(plan, true) }
+            Button("取消", role: .destructive) { confirmCancel(plan) }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
 private struct SubscriptionRow: View {
     let rule: SubscriptionRuleDTO
 
@@ -331,6 +365,26 @@ private struct SubscriptionRow: View {
             MoneyText(amount: rule.amount, currency: rule.currency)
         }
         .padding(.vertical, 6)
+    }
+}
+
+private struct SubscriptionActionMenu: View {
+    let rule: SubscriptionRuleDTO
+    let confirm: (SubscriptionRuleDTO, String) -> Void
+
+    var body: some View {
+        Menu {
+            if rule.status == "active" {
+                Button("暂停") { confirm(rule, "pause") }
+            } else if rule.status == "paused" {
+                Button("恢复") { confirm(rule, "resume") }
+            }
+            Button("生成下次现金流") { confirm(rule, "generate") }
+            Button("取消", role: .destructive) { confirm(rule, "cancel") }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .foregroundStyle(.secondary)
+        }
     }
 }
 

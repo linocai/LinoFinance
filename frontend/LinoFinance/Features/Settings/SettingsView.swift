@@ -2,8 +2,11 @@ import SwiftUI
 
 struct SettingsView: View {
     @Bindable var environment: AppEnvironment
+    @State private var apiBaseURL = ""
+    @State private var apiToken = ""
     @State private var usdRate = "6.8"
     @State private var errorMessage: String?
+    @State private var configMessage: String?
 
     var body: some View {
         ScrollView {
@@ -24,6 +27,33 @@ struct SettingsView: View {
                         }
                         if let message = environment.lastErrorMessage {
                             ErrorBanner(message: message)
+                        }
+                    }
+                }
+
+                FinancePanel {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("连接配置")
+                            .font(.headline)
+                        TextField("API 地址", text: $apiBaseURL)
+                            .autocorrectionDisabled()
+                        SecureField(environment.apiClient.authToken == nil ? "API Token" : "留空则保留当前 Token", text: $apiToken)
+                            .autocorrectionDisabled()
+                        HStack {
+                            Button("保存并重连") {
+                                Task { await saveAPIConfiguration() }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            Button("清除 Token", role: .destructive) {
+                                Task { await clearToken() }
+                            }
+                            .disabled(environment.apiClient.authToken == nil)
+                            Spacer()
+                        }
+                        if let configMessage {
+                            Text(configMessage)
+                                .font(.caption)
+                                .foregroundStyle(FinanceColor.income)
                         }
                     }
                 }
@@ -82,8 +112,37 @@ struct SettingsView: View {
         }
         .moduleFrame()
         .task {
+            syncDrafts()
             try? await environment.settingsViewModel.refresh()
         }
+    }
+
+    private func syncDrafts() {
+        apiBaseURL = environment.apiClient.baseURL.absoluteString
+        apiToken = ""
+    }
+
+    private func saveAPIConfiguration() async {
+        let trimmedURL = apiBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmedURL), !trimmedURL.isEmpty else {
+            errorMessage = "请输入合法 API 地址"
+            return
+        }
+        let trimmedToken = apiToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        let token = trimmedToken.isEmpty ? environment.apiClient.authToken : trimmedToken
+        await environment.configureAPI(baseURL: url, apiToken: token)
+        apiToken = ""
+        configMessage = "连接配置已保存"
+        errorMessage = nil
+    }
+
+    private func clearToken() async {
+        guard let url = URL(string: apiBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)) ?? URL(string: environment.apiClient.baseURL.absoluteString) else {
+            return
+        }
+        await environment.configureAPI(baseURL: url, apiToken: nil)
+        apiToken = ""
+        configMessage = "Token 已清除"
     }
 
     private func createRate() async {

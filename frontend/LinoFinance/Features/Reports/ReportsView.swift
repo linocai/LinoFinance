@@ -1,4 +1,6 @@
+#if os(macOS)
 import AppKit
+#endif
 import SwiftUI
 
 struct ReportsView: View {
@@ -69,7 +71,7 @@ private struct MonthlyReportPanel: View {
     let report: MonthlyOverviewReportDTO
 
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
             ToolbarPill(title: "收入", value: FinanceFormatter.money(report.incomeCny), tint: FinanceColor.income)
             ToolbarPill(title: "支出", value: FinanceFormatter.money(report.expenseCny), tint: FinanceColor.expense)
             ToolbarPill(title: "个人净支出", value: FinanceFormatter.money(report.personalNetExpenseCny), tint: FinanceColor.brand)
@@ -101,7 +103,7 @@ private struct CategoryReportPanel: View {
                 ForEach(report.rows) { row in
                     HStack {
                         Text(row.categoryName)
-                            .frame(width: 160, alignment: .leading)
+                            .frame(minWidth: 72, idealWidth: 140, maxWidth: 160, alignment: .leading)
                         ThinBar(value: row.expenseCny, maxValue: maxValue, tint: FinanceColor.expense)
                         MoneyText(amount: row.expenseCny, currency: .cny)
                     }
@@ -118,7 +120,7 @@ private struct CashFlowPressurePanel: View {
     let report: CashFlowPressureReportDTO
 
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 12)], spacing: 12) {
             ForEach(report.windows) { window in
                 FinancePanel {
                     VStack(alignment: .leading, spacing: 10) {
@@ -216,12 +218,18 @@ private struct SubscriptionReportPanel: View {
 private struct ExportsPanel: View {
     @Bindable var environment: AppEnvironment
     let exports: [ExportDatasetDTO]
+    @State private var exportedURL: URL?
 
     var body: some View {
         FinancePanel {
             VStack(alignment: .leading, spacing: 12) {
                 Text("CSV 数据集")
                     .font(.headline)
+                if let exportedURL {
+                    ShareLink(item: exportedURL) {
+                        Label("分享最近导出的 CSV", systemImage: "square.and.arrow.up")
+                    }
+                }
                 ForEach(exports) { dataset in
                     HStack {
                         VStack(alignment: .leading) {
@@ -246,10 +254,13 @@ private struct ExportsPanel: View {
 
     private func export(_ dataset: ExportDatasetDTO) async {
         do {
-            try await environment.reportsViewModel.exportCSV(dataset)
+            let url = try await environment.reportsViewModel.exportCSV(dataset)
+            exportedURL = url
+#if os(macOS)
             if let path = environment.reportsViewModel.lastExportPath {
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
             }
+#endif
         } catch {
             environment.lastErrorMessage = error.localizedDescription
         }

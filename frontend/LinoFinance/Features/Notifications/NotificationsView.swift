@@ -38,16 +38,21 @@ struct NotificationsView: View {
                         environment.inspectorSelection = .notification(rule)
                     }
                 )) { rule in
-                    NotificationRuleRow(rule: rule)
-                        .tag(rule.id)
-                        .contextMenu {
-                            if rule.status == "active" {
-                                Button("暂停") { confirm(rule, "pause") }
-                            } else if rule.status == "paused" {
-                                Button("恢复") { confirm(rule, "resume") }
-                            }
-                            Button("取消", role: .destructive) { confirm(rule, "cancel") }
+                    HStack {
+                        NotificationRuleRow(rule: rule)
+                        NotificationActionMenu(rule: rule, confirm: confirm)
+                    }
+                    .tag(rule.id)
+                    .contentShape(Rectangle())
+                    .onTapGesture { environment.inspectorSelection = .notification(rule) }
+                    .contextMenu {
+                        if rule.status == "active" {
+                            Button("暂停") { confirm(rule, "pause") }
+                        } else if rule.status == "paused" {
+                            Button("恢复") { confirm(rule, "resume") }
                         }
+                        Button("取消", role: .destructive) { confirm(rule, "cancel") }
+                    }
                 }
                 .listStyle(.inset)
             }
@@ -118,6 +123,25 @@ private struct NotificationRuleRow: View {
             StatusTag(status: rule.status)
         }
         .padding(.vertical, 6)
+    }
+}
+
+private struct NotificationActionMenu: View {
+    let rule: NotificationRuleDTO
+    let confirm: (NotificationRuleDTO, String) -> Void
+
+    var body: some View {
+        Menu {
+            if rule.status == "active" {
+                Button("暂停") { confirm(rule, "pause") }
+            } else if rule.status == "paused" {
+                Button("恢复") { confirm(rule, "resume") }
+            }
+            Button("取消", role: .destructive) { confirm(rule, "cancel") }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .foregroundStyle(.secondary)
+        }
     }
 }
 

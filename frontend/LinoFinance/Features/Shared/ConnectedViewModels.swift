@@ -189,6 +189,7 @@ final class ReportsViewModel {
     var isLoading = false
     var errorMessage: String?
     var lastExportPath: String?
+    var lastExportURL: URL?
 
     init(apiClient: LinoAPIClient) {
         repository = FinanceRepository(apiClient: apiClient)
@@ -206,12 +207,19 @@ final class ReportsViewModel {
         }
     }
 
-    func exportCSV(_ dataset: ExportDatasetDTO) async throws {
+    @discardableResult
+    func exportCSV(_ dataset: ExportDatasetDTO) async throws -> URL {
         let data = try await repository.downloadCSV(dataset: dataset.name)
+#if os(macOS)
         let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
+#else
+        let downloads = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory
+#endif
         let url = downloads.appendingPathComponent(dataset.filename)
         try data.write(to: url, options: .atomic)
+        lastExportURL = url
         lastExportPath = url.path
+        return url
     }
 }
 
@@ -335,8 +343,13 @@ final class SettingsViewModel {
         defer { isLoading = false }
         do {
             health = try await repository.apiClient.health()
-            aiConfig = try await repository.aiConfig()
-            rates = try await repository.currencyRates().sorted { $0.date > $1.date }
+            if repository.apiClient.authToken == nil {
+                aiConfig = nil
+                rates = []
+            } else {
+                aiConfig = try await repository.aiConfig()
+                rates = try await repository.currencyRates().sorted { $0.date > $1.date }
+            }
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription

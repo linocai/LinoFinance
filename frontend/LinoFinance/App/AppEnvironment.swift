@@ -4,19 +4,19 @@ import Observation
 @MainActor
 @Observable
 final class AppEnvironment {
-    let apiClient: LinoAPIClient
-    let dashboardViewModel: DashboardViewModel
-    let accountsViewModel: AccountsViewModel
-    let entriesViewModel: EntriesViewModel
-    let cashFlowViewModel: CashFlowViewModel
-    let reimbursementsViewModel: ReimbursementsViewModel
-    let creditViewModel: CreditViewModel
-    let reportsViewModel: ReportsViewModel
-    let aiViewModel: AIWorkspaceViewModel
-    let notificationsViewModel: NotificationsViewModel
-    let settingsViewModel: SettingsViewModel
+    var apiClient: LinoAPIClient
+    var dashboardViewModel: DashboardViewModel
+    var accountsViewModel: AccountsViewModel
+    var entriesViewModel: EntriesViewModel
+    var cashFlowViewModel: CashFlowViewModel
+    var reimbursementsViewModel: ReimbursementsViewModel
+    var creditViewModel: CreditViewModel
+    var reportsViewModel: ReportsViewModel
+    var aiViewModel: AIWorkspaceViewModel
+    var notificationsViewModel: NotificationsViewModel
+    var settingsViewModel: SettingsViewModel
 
-    var selectedModule: MacModule = .dashboard
+    var selectedModule: FinanceModule = .dashboard
     var inspectorSelection: InspectorSelection?
     var isShowingNewAccountSheet = false
     var isShowingNewEntrySheet = false
@@ -31,23 +31,29 @@ final class AppEnvironment {
     var displayCurrency: CurrencyCode = .cny
     var dateRange: DateRangeChoice = .month
     var lastErrorMessage: String?
+    var isAPITokenConfigured: Bool { apiClient.authToken != nil }
 
     init(
         baseURL: URL = AppEnvironment.defaultAPIBaseURL(),
         apiToken: String? = AppEnvironment.defaultAPIToken()
     ) {
-        let apiClient = LinoAPIClient(baseURL: baseURL, authToken: apiToken)
-        self.apiClient = apiClient
-        self.dashboardViewModel = DashboardViewModel(apiClient: apiClient)
-        self.accountsViewModel = AccountsViewModel(apiClient: apiClient)
-        self.entriesViewModel = EntriesViewModel(apiClient: apiClient)
-        self.cashFlowViewModel = CashFlowViewModel(apiClient: apiClient)
-        self.reimbursementsViewModel = ReimbursementsViewModel(apiClient: apiClient)
-        self.creditViewModel = CreditViewModel(apiClient: apiClient)
-        self.reportsViewModel = ReportsViewModel(apiClient: apiClient)
-        self.aiViewModel = AIWorkspaceViewModel(apiClient: apiClient)
-        self.notificationsViewModel = NotificationsViewModel(apiClient: apiClient)
-        self.settingsViewModel = SettingsViewModel(apiClient: apiClient)
+        let client = LinoAPIClient(baseURL: baseURL, authToken: apiToken)
+        self.apiClient = client
+        self.dashboardViewModel = DashboardViewModel(apiClient: client)
+        self.accountsViewModel = AccountsViewModel(apiClient: client)
+        self.entriesViewModel = EntriesViewModel(apiClient: client)
+        self.cashFlowViewModel = CashFlowViewModel(apiClient: client)
+        self.reimbursementsViewModel = ReimbursementsViewModel(apiClient: client)
+        self.creditViewModel = CreditViewModel(apiClient: client)
+        self.reportsViewModel = ReportsViewModel(apiClient: client)
+        self.aiViewModel = AIWorkspaceViewModel(apiClient: client)
+        self.notificationsViewModel = NotificationsViewModel(apiClient: client)
+        self.settingsViewModel = SettingsViewModel(apiClient: client)
+#if os(iOS)
+        if apiToken == nil {
+            selectedModule = .settings
+        }
+#endif
     }
 
     func refreshCurrentModule() async {
@@ -123,6 +129,41 @@ final class AppEnvironment {
         inspectorSelection = .module(.ai)
     }
 
+    func configureAPI(baseURL: URL, apiToken: String?) async {
+        UserDefaults.standard.set(baseURL.absoluteString, forKey: "linofinance.apiBaseURL")
+        do {
+            try SecureTokenStore.shared.saveToken(apiToken)
+            UserDefaults.standard.removeObject(forKey: "linofinance.apiToken")
+        } catch {
+            lastErrorMessage = error.localizedDescription
+            return
+        }
+        rebuildClients(baseURL: baseURL, apiToken: apiToken)
+        do {
+            try await settingsViewModel.refresh()
+            if isAPITokenConfigured {
+                await refreshPrimaryData()
+            }
+            lastErrorMessage = nil
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func rebuildClients(baseURL: URL, apiToken: String?) {
+        apiClient = LinoAPIClient(baseURL: baseURL, authToken: apiToken)
+        dashboardViewModel = DashboardViewModel(apiClient: apiClient)
+        accountsViewModel = AccountsViewModel(apiClient: apiClient)
+        entriesViewModel = EntriesViewModel(apiClient: apiClient)
+        cashFlowViewModel = CashFlowViewModel(apiClient: apiClient)
+        reimbursementsViewModel = ReimbursementsViewModel(apiClient: apiClient)
+        creditViewModel = CreditViewModel(apiClient: apiClient)
+        reportsViewModel = ReportsViewModel(apiClient: apiClient)
+        aiViewModel = AIWorkspaceViewModel(apiClient: apiClient)
+        notificationsViewModel = NotificationsViewModel(apiClient: apiClient)
+        settingsViewModel = SettingsViewModel(apiClient: apiClient)
+    }
+
     nonisolated static func defaultAPIBaseURL() -> URL {
         let environment = ProcessInfo.processInfo.environment
         if let value = environment["LINOFINANCE_API_BASE_URL"], let url = URL(string: value) {
@@ -142,6 +183,9 @@ final class AppEnvironment {
     nonisolated static func defaultAPIToken() -> String? {
         let environment = ProcessInfo.processInfo.environment
         if let value = environment["LINOFINANCE_API_TOKEN"], !value.isEmpty {
+            return value
+        }
+        if let value = SecureTokenStore.shared.readToken(), !value.isEmpty {
             return value
         }
         if let value = UserDefaults.standard.string(forKey: "linofinance.apiToken"),
