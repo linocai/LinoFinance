@@ -220,7 +220,13 @@ the existing cloud API, DTOs, repositories, view models, and business screens.
 - iOS Xcode signing/icon fix completed:
   - shared `AppIcon` now includes iPhone and iOS marketing icon slots generated from `/Users/linotsai/Pictures/GPT Image/personal-bookkeeping-appicon-v1.png`;
   - iOS target `LinoFinanceiOS` now uses automatic Apple Development signing instead of `CODE_SIGNING_ALLOWED = NO`;
+  - iOS target records the selected Apple development team for Xcode automatic signing;
   - macOS target remains manual/no-sign for local builds.
+- iOS first-screen UI repair completed:
+  - no/invalid API token and `401 Missing or invalid API token` now route directly to the iOS Settings connection screen instead of showing a broken Dashboard error page;
+  - iOS root temporarily forces light appearance so the current shared desktop panels remain readable on iPhone;
+  - duplicate system navigation titles were removed from module stacks; pages now use their own `PageHeader` only;
+  - iOS navigation and tab bars use visible system-background toolbars to avoid transparent overlap with page content.
 - Verification passed:
   - `python3 -m compileall backend/app backend/tests`
   - `python3 -m compileall backend/app backend/scripts`
@@ -252,6 +258,9 @@ the existing cloud API, DTOs, repositories, view models, and business screens.
   - after salary recurrence change: iOS simulator SDK Swift typecheck passed
   - after iOS signing/icon fix: macOS Debug build `BUILD SUCCEEDED`
   - after iOS signing/icon fix: iOS generic device build succeeded with command-line `CODE_SIGNING_ALLOWED=NO` to validate compile/assets without requiring a local Apple team
+  - after iOS first-screen UI repair: `cd frontend && swift test` (`12 passed`)
+  - after iOS first-screen UI repair: iOS generic device build `BUILD SUCCEEDED` with command-line `CODE_SIGNING_ALLOWED=NO`
+  - after iOS first-screen UI repair: macOS Debug build `BUILD SUCCEEDED`
 
 ## Remaining
 

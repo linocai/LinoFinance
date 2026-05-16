@@ -7,6 +7,34 @@ struct iOSRootView: View {
     @State private var morePath: [FinanceModule] = []
 
     var body: some View {
+        Group {
+            if requiresConnectionSetup {
+                connectionSetupStack
+            } else {
+                mainTabs
+            }
+        }
+        .preferredColorScheme(.light)
+        .tint(FinanceColor.brand)
+        .background(Color(.systemBackground))
+        .onChange(of: requiresConnectionSetup) { _, needsSetup in
+            if needsSetup {
+                selectedTab = .more
+                morePath = [.settings]
+            }
+        }
+        .task {
+            if requiresConnectionSetup {
+                selectedTab = .more
+                morePath = [.settings]
+                try? await environment.settingsViewModel.refresh()
+            } else {
+                await environment.refreshPrimaryData()
+            }
+        }
+    }
+
+    private var mainTabs: some View {
         TabView(selection: $selectedTab) {
             moduleStack(.dashboard)
                 .tabItem { Label("总览", systemImage: FinanceModule.dashboard.symbolName) }
@@ -46,16 +74,42 @@ struct iOSRootView: View {
             }
             .presentationDetents([.medium, .large])
         }
+        .toolbarBackground(Color(.systemBackground), for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
         .modifier(NewObjectSheets(environment: environment))
-        .task {
-            if environment.isAPITokenConfigured {
-                await environment.refreshPrimaryData()
-            } else {
-                selectedTab = .more
-                morePath = [.settings]
-                try? await environment.settingsViewModel.refresh()
-            }
+    }
+
+    private var connectionSetupStack: some View {
+        NavigationStack {
+            SettingsView(environment: environment)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            Task { try? await environment.settingsViewModel.refresh() }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .accessibilityLabel("刷新连接状态")
+                    }
+                }
+                .toolbarBackground(Color(.systemBackground), for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
         }
+    }
+
+    private var requiresConnectionSetup: Bool {
+        !environment.isAPITokenConfigured
+            || isAuthError(environment.lastErrorMessage)
+            || isAuthError(environment.dashboardViewModel.errorMessage)
+            || isAuthError(environment.reportsViewModel.errorMessage)
+            || isAuthError(environment.aiViewModel.errorMessage)
+            || isAuthError(environment.settingsViewModel.errorMessage)
+    }
+
+    private func isAuthError(_ message: String?) -> Bool {
+        guard let message else { return false }
+        return message.contains("API 401") || message.localizedCaseInsensitiveContains("invalid API token")
     }
 
     private var detailSelection: Binding<InspectorSelection?> {
@@ -83,9 +137,10 @@ struct iOSRootView: View {
             .navigationTitle("更多")
             .navigationDestination(for: FinanceModule.self) { module in
                 FinanceModuleContentView(environment: environment, module: module)
-                    .navigationTitle(module.title)
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar { toolbarItems(for: module) }
+                    .toolbarBackground(Color(.systemBackground), for: .navigationBar)
+                    .toolbarBackground(.visible, for: .navigationBar)
                     .onAppear {
                         environment.selectedModule = module
                     }
@@ -99,9 +154,10 @@ struct iOSRootView: View {
     private func moduleStack(_ module: FinanceModule) -> some View {
         NavigationStack {
             FinanceModuleContentView(environment: environment, module: module)
-                .navigationTitle(module.title)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarItems(for: module) }
+                .toolbarBackground(Color(.systemBackground), for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
         }
         .onAppear {
             environment.selectedModule = module
