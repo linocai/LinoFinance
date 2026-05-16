@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.routes import (
     accounts,
+    cash_flow,
     categories,
     credit_statement_cycles,
     currency_rates,
@@ -12,6 +13,7 @@ from app.api.routes import (
 
 api_router = APIRouter()
 api_router.include_router(accounts.router, prefix="/accounts", tags=["accounts"])
+api_router.include_router(cash_flow.router, prefix="/cash-flow-items", tags=["cash-flow"])
 api_router.include_router(categories.router, prefix="/categories", tags=["categories"])
 api_router.include_router(
     credit_statement_cycles.router,

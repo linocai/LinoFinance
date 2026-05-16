@@ -32,6 +32,12 @@ Response:
   - `GET /credit-statement-cycles`
   - `POST /credit-statement-cycles`
   - `GET /credit-statement-cycles/{cycle_id}`
+  - `GET /cash-flow-items`
+  - `POST /cash-flow-items`
+  - `GET /cash-flow-items/{item_id}`
+  - `POST /cash-flow-items/{item_id}/confirm`
+  - `POST /cash-flow-items/{item_id}/cancel`
+  - `POST /cash-flow-items/{item_id}/settle`
   - `GET /entries`
   - `POST /entries`
   - `POST /entries/{entry_id}/confirm`
@@ -58,7 +64,19 @@ Response:
 - Credit card charges increase a cycle's `statement_amount`; repayments increase its `paid_amount`.
 - Voiding confirmed credit charges or repayments rolls back both account balances and cycle amounts.
 - Credit repayment entries should use `transfer_out` for the balance account side and `credit_repayment` for the credit account side.
-- Automatic credit repayment cash-flow generation is deferred until `CashFlowItem` is introduced in Phase 3; `linked_cash_flow_item_id` is already reserved on the cycle.
+- Credit statement cycles create/update linked repayment cash-flow items when statement amount changes.
+
+## Cash Flow Rules Implemented
+
+- Cash-flow items represent future expectations and do not affect account balances.
+- Supported statuses: `expected`, `confirmed`, `settled`, `cancelled`, `partial`.
+- V1 create API accepts `expected` and `confirmed`; `partial` is reserved for later partial settlement workflows.
+- `confirm` changes an `expected` item to `confirmed`.
+- `cancel` is allowed only before settlement.
+- `settle` requires an explicit formal entry payload and creates a confirmed `FinancialEntry`.
+- Only the settled formal entry affects account balances and reports.
+- Credit statement cycles generate `credit_repayment` cash-flow items.
+- Fully repaid credit statement cycles mark the linked repayment cash flow as `settled`.
 
 ## Domain Rules For API Design
 

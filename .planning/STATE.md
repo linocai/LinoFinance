@@ -49,22 +49,36 @@ and durable setup documentation.
   - `CreditStatementCycle`;
   - `CreditStatementStatus`;
   - placeholder credit statement view for later app-shell integration.
+- Phase 3 cash-flow core implemented:
+  - `CashFlowItem` model and Alembic migration `202605160002`;
+  - cash-flow list/create/get/confirm/cancel/settle API;
+  - expected/confirmed cash flows do not affect balances;
+  - settlement requires an explicit confirmed formal entry payload and only then affects balances;
+  - credit statement cycles generate/update linked `credit_repayment` cash-flow items;
+  - fully repaid statement cycles mark linked repayment cash flows as settled.
+- Frontend Phase 3 shared types added:
+  - `CashFlowItem`;
+  - `CashFlowDirection`;
+  - `CashFlowStatus`;
+  - `CashFlowType`;
+  - placeholder cash-flow view for later app-shell integration.
 - Verification passed:
   - `python3 -m compileall backend/app backend/tests`
-  - `cd backend && . .venv/bin/activate && pytest` (`16 passed`)
+  - `cd backend && . .venv/bin/activate && pytest` (`21 passed`)
   - `cd backend && . .venv/bin/activate && ruff check .`
   - `cd backend && . .venv/bin/activate && alembic upgrade head --sql`
-  - `cd frontend && swift test` (`3 passed`)
+  - `cd frontend && swift test` (`4 passed`)
   - `curl http://127.0.0.1:8000/api/v1/health`
 
 ## Remaining
 
-1. Add credit statement cycle update/close endpoints if manual statement reconciliation needs editing after creation.
-2. Start Phase 3 `CashFlowItem`, then generate credit repayment cash-flow items from statement cycles.
-3. Add account balance recalculation/reconciliation command to rebuild balances from movements and cycle amounts.
-4. Add seed scripts for default categories and initial USD/CNY rate in local/test setup.
-5. Add real iOS/macOS app targets after shared Swift modules settle.
-6. Prepare local PostgreSQL instructions or Docker Compose if a local database runner is desired.
+1. Start Phase 4 reimbursement: reimbursement object, reimbursable entry linkage, reimbursement cash-flow generation.
+2. Add partial cash-flow settlement once reimbursement and partial payments need it.
+3. Add credit statement cycle update/close endpoints if manual statement reconciliation needs editing after creation.
+4. Add account balance recalculation/reconciliation command to rebuild balances from movements and cycle amounts.
+5. Add seed scripts for default categories and initial USD/CNY rate in local/test setup.
+6. Add real iOS/macOS app targets after shared Swift modules settle.
+7. Prepare local PostgreSQL instructions or Docker Compose if a local database runner is desired.
 
 ## Decisions
 

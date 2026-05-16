@@ -25,4 +25,10 @@ final class FinanceDefaultsTests: XCTestCase {
         XCTAssertEqual(CreditStatementStatus.statementGenerated.rawValue, "statement_generated")
         XCTAssertEqual(CreditStatementStatus.partiallyPaid.rawValue, "partially_paid")
     }
+
+    func testCashFlowEnumsUseApiRawValues() {
+        XCTAssertEqual(CashFlowType.creditRepayment.rawValue, "credit_repayment")
+        XCTAssertEqual(CashFlowType.oneTime.rawValue, "one_time")
+        XCTAssertEqual(CashFlowStatus.settled.rawValue, "settled")
+    }
 }

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.constants import BASE_CURRENCY
 from app.models.account import Account
+from app.models.cash_flow import CashFlowItem
 from app.models.category import Category
 from app.models.credit_statement_cycle import CreditStatementCycle
 from app.models.currency_rate import CurrencyRate
@@ -33,7 +34,7 @@ class LedgerValidationError(LedgerError):
     pass
 
 
-def create_entry(db: Session, payload: EntryCreate) -> EntryRead:
+def create_entry(db: Session, payload: EntryCreate, commit: bool = True) -> EntryRead:
     entry = FinancialEntry(
         title=payload.title,
         entry_type=payload.entry_type,
@@ -60,7 +61,8 @@ def create_entry(db: Session, payload: EntryCreate) -> EntryRead:
         _validate_confirmable(entry, lines, movements)
         _apply_movements(db, movements, sign=Decimal("1"))
 
-    db.commit()
+    if commit:
+        db.commit()
     return get_entry(db, entry.id)
 
 
@@ -114,6 +116,61 @@ def void_entry(db: Session, entry_id: str) -> EntryRead:
 
     db.commit()
     return get_entry(db, entry_id)
+
+
+def sync_credit_statement_cash_flow(db: Session, cycle: CreditStatementCycle) -> None:
+    remaining_amount = quantize_money(cycle.statement_amount - cycle.paid_amount)
+    existing = _get_statement_cash_flow(db, cycle.linked_cash_flow_item_id)
+
+    if remaining_amount <= 0:
+        if existing is not None:
+            existing.amount = Decimal("0")
+            existing.converted_cny_amount = Decimal("0")
+            existing.status = "settled"
+        return
+
+    converted_cny_amount, exchange_rate_id = convert_to_cny(
+        db,
+        remaining_amount,
+        cycle.currency,
+        cycle.due_date,
+    )
+    status = "confirmed" if cycle.status != "open" else "expected"
+
+    if existing is not None:
+        existing.title = f"{cycle.currency} credit card repayment"
+        existing.direction = "transfer"
+        existing.cash_flow_type = "credit_repayment"
+        existing.amount = remaining_amount
+        existing.currency = cycle.currency
+        existing.exchange_rate_id = exchange_rate_id
+        existing.converted_cny_amount = converted_cny_amount
+        existing.expected_date = cycle.due_date
+        existing.account_id = cycle.credit_account_id
+        existing.category_id = None
+        existing.status = status
+        existing.linked_statement_cycle_id = cycle.id
+        return
+
+    item = CashFlowItem(
+        title=f"{cycle.currency} credit card repayment",
+        direction="transfer",
+        cash_flow_type="credit_repayment",
+        amount=remaining_amount,
+        currency=cycle.currency,
+        exchange_rate_id=exchange_rate_id,
+        converted_cny_amount=converted_cny_amount,
+        expected_date=cycle.due_date,
+        account_id=cycle.credit_account_id,
+        category_id=None,
+        recurrence_rule=None,
+        status=status,
+        linked_statement_cycle_id=cycle.id,
+        note="Generated from credit statement cycle.",
+    )
+    db.add(item)
+    db.flush()
+    cycle.linked_cash_flow_item_id = item.id
 
 
 def convert_to_cny(
@@ -382,6 +439,7 @@ def _apply_statement_cycle_movement(
     if cycle.paid_amount < 0:
         raise LedgerValidationError("Statement cycle paid amount cannot be negative")
     _refresh_statement_cycle_status(cycle)
+    sync_credit_statement_cash_flow(db, cycle)
 
 
 def _refresh_statement_cycle_status(cycle: CreditStatementCycle) -> None:
@@ -395,6 +453,12 @@ def _refresh_statement_cycle_status(cycle: CreditStatementCycle) -> None:
         cycle.status = "partially_paid"
     elif cycle.status in {"paid", "partially_paid"}:
         cycle.status = "statement_generated"
+
+
+def _get_statement_cash_flow(db: Session, item_id: Optional[str]) -> Optional[CashFlowItem]:
+    if item_id is None:
+        return None
+    return db.get(CashFlowItem, item_id)
 
 
 def _load_entry_parts(

@@ -6,7 +6,12 @@ from sqlalchemy.orm import Session
 from app.models.account import Account
 from app.models.credit_statement_cycle import CreditStatementCycle
 from app.schemas.credit_statement_cycle import CreditStatementCycleCreate, CreditStatementCycleRead
-from app.services.ledger import LedgerNotFoundError, LedgerValidationError, quantize_money
+from app.services.ledger import (
+    LedgerNotFoundError,
+    LedgerValidationError,
+    quantize_money,
+    sync_credit_statement_cash_flow,
+)
 
 
 def create_statement_cycle(
@@ -24,6 +29,9 @@ def create_statement_cycle(
     _refresh_cycle_status(cycle)
 
     db.add(cycle)
+    db.flush()
+    if cycle.statement_amount > 0:
+        sync_credit_statement_cash_flow(db, cycle)
     db.commit()
     db.refresh(cycle)
     return CreditStatementCycleRead.from_model(cycle)
@@ -78,4 +86,3 @@ def _refresh_cycle_status(cycle: CreditStatementCycle) -> None:
         cycle.status = "paid"
     elif cycle.paid_amount > 0:
         cycle.status = "partially_paid"
-
