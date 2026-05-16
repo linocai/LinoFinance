@@ -33,6 +33,9 @@ class EntryCategoryLine(IDTimestampMixin, Base):
     exchange_rate_id: Mapped[Optional[str]] = mapped_column(ForeignKey("currency_rates.id"))
     converted_cny_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2))
     reimbursable_flag: Mapped[bool] = mapped_column(default=False, nullable=False)
+    reimbursement_payer: Mapped[Optional[str]] = mapped_column(String(120))
+    reimbursement_expected_date: Mapped[Optional[DateType]] = mapped_column(Date)
+    reimbursement_status: Mapped[Optional[str]] = mapped_column(String(32))
     note: Mapped[Optional[str]] = mapped_column(Text)
 
 

@@ -31,4 +31,10 @@ final class FinanceDefaultsTests: XCTestCase {
         XCTAssertEqual(CashFlowType.oneTime.rawValue, "one_time")
         XCTAssertEqual(CashFlowStatus.settled.rawValue, "settled")
     }
+
+    func testReimbursementStatusUsesApiRawValues() {
+        XCTAssertEqual(ReimbursementStatus.invoicePending.rawValue, "invoice_pending")
+        XCTAssertEqual(ReimbursementStatus.waitingReceived.rawValue, "waiting_received")
+        XCTAssertEqual(ReimbursementStatus.partialReceived.rawValue, "partial_received")
+    }
 }

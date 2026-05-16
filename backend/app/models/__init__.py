@@ -5,6 +5,7 @@ from app.models.category import Category
 from app.models.credit_statement_cycle import CreditStatementCycle
 from app.models.currency_rate import CurrencyRate
 from app.models.entry import AccountMovement, EntryCategoryLine, FinancialEntry
+from app.models.reimbursement import ReimbursementClaim
 
 __all__ = [
     "Account",
@@ -16,4 +17,5 @@ __all__ = [
     "CurrencyRate",
     "EntryCategoryLine",
     "FinancialEntry",
+    "ReimbursementClaim",
 ]

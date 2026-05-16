@@ -62,17 +62,29 @@ and durable setup documentation.
   - `CashFlowStatus`;
   - `CashFlowType`;
   - placeholder cash-flow view for later app-shell integration.
+- Phase 4 reimbursement core implemented:
+  - `ReimbursementClaim` model and Alembic migration `202605160003`;
+  - reimbursement claim list/create/get/submit/approve/reject/abandon/mark-received API;
+  - confirmed reimbursable entry category lines auto-create reimbursement claims and reimbursement cash-flow inflows;
+  - draft reimbursable entries create claims only when confirmed;
+  - reimbursable lines require `reimbursement_expected_date` before confirmation;
+  - reimbursement receipt requires a formal confirmed income entry payload, which is the only thing that changes balances;
+  - voiding original reimbursable expense abandons open claims and cancels linked reimbursement cash flows.
+- Frontend Phase 4 shared types added:
+  - `ReimbursementClaim`;
+  - `ReimbursementStatus`;
+  - placeholder reimbursement view for later app-shell integration.
 - Verification passed:
   - `python3 -m compileall backend/app backend/tests`
-  - `cd backend && . .venv/bin/activate && pytest` (`21 passed`)
+  - `cd backend && . .venv/bin/activate && pytest` (`28 passed`)
   - `cd backend && . .venv/bin/activate && ruff check .`
   - `cd backend && . .venv/bin/activate && alembic upgrade head --sql`
-  - `cd frontend && swift test` (`4 passed`)
+  - `cd frontend && swift test` (`5 passed`)
   - `curl http://127.0.0.1:8000/api/v1/health`
 
 ## Remaining
 
-1. Start Phase 4 reimbursement: reimbursement object, reimbursable entry linkage, reimbursement cash-flow generation.
+1. Start Phase 5 installment/subscription plans and related future cash flows.
 2. Add partial cash-flow settlement once reimbursement and partial payments need it.
 3. Add credit statement cycle update/close endpoints if manual statement reconciliation needs editing after creation.
 4. Add account balance recalculation/reconciliation command to rebuild balances from movements and cycle amounts.

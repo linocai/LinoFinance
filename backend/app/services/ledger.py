@@ -60,6 +60,7 @@ def create_entry(db: Session, payload: EntryCreate, commit: bool = True) -> Entr
     if entry.status == "confirmed":
         _validate_confirmable(entry, lines, movements)
         _apply_movements(db, movements, sign=Decimal("1"))
+        _create_reimbursement_claims_for_entry(db, entry, lines)
 
     if commit:
         db.commit()
@@ -95,6 +96,7 @@ def confirm_entry(db: Session, entry_id: str) -> EntryRead:
     _validate_confirmable(entry, lines, movements)
     _apply_movements(db, movements, sign=Decimal("1"))
     entry.status = "confirmed"
+    _create_reimbursement_claims_for_entry(db, entry, lines)
 
     db.commit()
     return get_entry(db, entry_id)
@@ -112,6 +114,7 @@ def void_entry(db: Session, entry_id: str) -> EntryRead:
     lines, movements = _load_entry_parts(db, entry_id)
     if entry.status == "confirmed":
         _apply_movements(db, movements, sign=Decimal("-1"))
+        _abandon_reimbursement_claims_for_entry(db, entry.id)
     entry.status = "voided"
 
     db.commit()
@@ -214,6 +217,9 @@ def _create_category_line(db: Session, entry_id: str, entry_date: DateType, payl
         exchange_rate_id=exchange_rate_id,
         converted_cny_amount=converted_cny_amount,
         reimbursable_flag=payload.reimbursable_flag,
+        reimbursement_payer=payload.reimbursement_payer,
+        reimbursement_expected_date=payload.reimbursement_expected_date,
+        reimbursement_status=payload.reimbursement_status,
         note=payload.note,
     )
     db.add(line)
@@ -377,6 +383,8 @@ def _validate_confirmable(
     for line in lines:
         if line.amount <= 0:
             raise LedgerValidationError("Category line amount must be greater than 0")
+        if line.reimbursable_flag and line.reimbursement_expected_date is None:
+            raise LedgerValidationError("Reimbursable lines require reimbursement_expected_date")
     for movement in movements:
         if movement.amount <= 0:
             raise LedgerValidationError("Account movement amount must be greater than 0")
@@ -507,6 +515,22 @@ def _sum_movement_cny(movements: Iterable[AccountMovement], movement_types: set)
 def _is_transfer_only(movements: Iterable[AccountMovement]) -> bool:
     movement_types = {movement.movement_type for movement in movements}
     return bool(movement_types) and movement_types.issubset(TRANSFER_MOVEMENT_TYPES)
+
+
+def _create_reimbursement_claims_for_entry(
+    db: Session,
+    entry: FinancialEntry,
+    lines: List[EntryCategoryLine],
+) -> None:
+    from app.services.reimbursement import create_claims_for_entry
+
+    create_claims_for_entry(db, entry, lines)
+
+
+def _abandon_reimbursement_claims_for_entry(db: Session, entry_id: str) -> None:
+    from app.services.reimbursement import abandon_claims_for_entry
+
+    abandon_claims_for_entry(db, entry_id)
 
 
 def quantize_money(value: Decimal) -> Decimal:

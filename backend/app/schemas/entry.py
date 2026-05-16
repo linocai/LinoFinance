@@ -20,6 +20,12 @@ class EntryCategoryLineCreate(BaseModel):
     exchange_rate_id: Optional[str] = None
     converted_cny_amount: Optional[Decimal] = None
     reimbursable_flag: bool = False
+    reimbursement_payer: Optional[str] = Field(default=None, max_length=120)
+    reimbursement_expected_date: Optional[DateType] = None
+    reimbursement_status: Optional[str] = Field(
+        default=None,
+        pattern="^(reimbursable|invoice_pending|submitted|approved|waiting_received)$",
+    )
     note: Optional[str] = None
 
 
@@ -62,6 +68,9 @@ class EntryCategoryLineRead(BaseModel):
     exchange_rate_id: Optional[str] = None
     converted_cny_amount: Optional[Decimal] = None
     reimbursable_flag: bool
+    reimbursement_payer: Optional[str] = None
+    reimbursement_expected_date: Optional[DateType] = None
+    reimbursement_status: Optional[str] = None
     note: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -118,4 +127,3 @@ class EntryRead(BaseModel):
             category_lines=[EntryCategoryLineRead.model_validate(line) for line in lines],
             account_movements=[AccountMovementRead.model_validate(movement) for movement in movements],
         )
-

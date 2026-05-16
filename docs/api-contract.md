@@ -38,6 +38,14 @@ Response:
   - `POST /cash-flow-items/{item_id}/confirm`
   - `POST /cash-flow-items/{item_id}/cancel`
   - `POST /cash-flow-items/{item_id}/settle`
+  - `GET /reimbursement-claims`
+  - `POST /reimbursement-claims`
+  - `GET /reimbursement-claims/{claim_id}`
+  - `POST /reimbursement-claims/{claim_id}/submit`
+  - `POST /reimbursement-claims/{claim_id}/approve`
+  - `POST /reimbursement-claims/{claim_id}/reject`
+  - `POST /reimbursement-claims/{claim_id}/abandon`
+  - `POST /reimbursement-claims/{claim_id}/mark-received`
   - `GET /entries`
   - `POST /entries`
   - `POST /entries/{entry_id}/confirm`
@@ -77,6 +85,18 @@ Response:
 - Only the settled formal entry affects account balances and reports.
 - Credit statement cycles generate `credit_repayment` cash-flow items.
 - Fully repaid credit statement cycles mark the linked repayment cash flow as `settled`.
+
+## Reimbursement Rules Implemented
+
+- Confirmed reimbursable entry category lines auto-create reimbursement claims.
+- Reimbursable lines require `reimbursement_expected_date` before an entry can be confirmed.
+- Draft reimbursable entries do not create claims until confirmation.
+- Each claim creates a linked `reimbursement` cash-flow inflow.
+- Submitted/reimbursable claims keep the linked cash flow `expected`.
+- Approved/waiting-received claims mark the linked cash flow `confirmed`.
+- Received claims require a confirmed formal income entry payload via `mark-received`.
+- Received reimbursement entries must include a matching `balance_in` movement and matching income category line.
+- Voiding the original confirmed reimbursable expense abandons open claims and cancels their reimbursement cash flows.
 
 ## Domain Rules For API Design
 
