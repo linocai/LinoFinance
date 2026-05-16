@@ -122,7 +122,7 @@ private struct SidebarView: View {
                     .tag(MacModule.settings)
             }
         }
-        .navigationTitle("LinoFinance")
+        .navigationTitle("LinoF")
         .safeAreaInset(edge: .bottom) {
             ConnectionFooter(environment: environment)
                 .padding(12)

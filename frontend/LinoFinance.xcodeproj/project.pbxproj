@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		A10000000000000000000001 /* LinoFinance.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LinoFinance.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000001 /* LinoF.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LinoF.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -40,7 +40,7 @@
 		A10000000000000000000005 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A10000000000000000000001 /* LinoFinance.app */,
+				A10000000000000000000001 /* LinoF.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -66,8 +66,8 @@
 			name = LinoFinance;
 			packageProductDependencies = (
 			);
-			productName = LinoFinance;
-			productReference = A10000000000000000000001 /* LinoFinance.app */;
+			productName = LinoF;
+			productReference = A10000000000000000000001 /* LinoF.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -259,7 +259,8 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = LinoFinance;
+				INFOPLIST_KEY_CFBundleDisplayName = LinoF;
+				INFOPLIST_KEY_CFBundleName = LinoF;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Lino";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -269,7 +270,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.lino.linofinance;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = LinoF;
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -289,7 +290,8 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = LinoFinance;
+				INFOPLIST_KEY_CFBundleDisplayName = LinoF;
+				INFOPLIST_KEY_CFBundleName = LinoF;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Lino";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -299,7 +301,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.lino.linofinance;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = LinoF;
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;

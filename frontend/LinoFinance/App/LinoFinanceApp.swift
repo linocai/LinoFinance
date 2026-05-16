@@ -22,7 +22,7 @@ struct LinoFinanceApp: App {
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
             }
-            CommandMenu("LinoFinance") {
+            CommandMenu("LinoF") {
                 Button("总览") {
                     environment.selectedModule = .dashboard
                 }

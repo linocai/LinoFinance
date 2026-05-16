@@ -418,7 +418,7 @@ private struct ModuleInspector: View {
         case .notifications:
             "选择通知规则后，可以查看规则状态、触发条件和下一次触发时间。"
         case .settings:
-            "设置页展示本地 API、AI 配置状态、默认币种和手动汇率。"
+            "设置页展示 API 连接、AI 配置状态、默认币种和手动汇率。"
         }
     }
 }

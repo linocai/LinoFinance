@@ -136,7 +136,7 @@ final class AppEnvironment {
            let url = URL(string: value) {
             return url
         }
-        return URL(string: "http://127.0.0.1:6868/api/v1")!
+        return URL(string: "https://lf.linotsai.top/api/v1")!
     }
 
     nonisolated static func defaultAPIToken() -> String? {

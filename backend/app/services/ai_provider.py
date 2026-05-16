@@ -1,7 +1,7 @@
 import json
 import urllib.error
 import urllib.request
-from typing import List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from app.core.config import get_settings
 from app.schemas.ai import AIActionProposal
@@ -13,10 +13,29 @@ You convert personal finance text into JSON actions for LinoFinance.
 Return only a JSON object with this shape:
 {"actions":[{"action_type":"CreateEntry","payload":{},"explanation":"..."}],
 "explanation":"...","confidence":0.0}
+Use exact snake_case backend field names. Do not use aliases like "type" when
+the schema requires "cash_flow_type" or "rule_type".
 Use only supported action_type values:
 CreateEntry, CreateCashFlowItem, MarkReimbursable, CreateInstallmentPlan,
-RecordCreditRepayment, GenerateNotificationRule.
+RecordCreditRepayment, GenerateNotificationRule, SetCashFlowStatus,
+UpdateReimbursementStatus.
 Do not invent account_id or category_id values if the user did not provide them.
+
+Required payload shapes for common actions:
+- CreateCashFlowItem:
+  {"title": string, "direction": "inflow|outflow|transfer",
+   "cash_flow_type": "salary|rent_income|reimbursement|subscription|credit_repayment|installment|one_time|other",
+   "amount": decimal string, "currency": "CNY|USD", "expected_date": "YYYY-MM-DD"}
+- GenerateNotificationRule:
+  {"title": string,
+   "rule_type": "credit_repayment|cash_flow|reimbursement|subscription|anomaly",
+   "channel": "in_app|system|email",
+   "trigger_payload": object, "next_trigger_date": "YYYY-MM-DD"}
+- SetCashFlowStatus:
+  {"cash_flow_item_id": string, "status": "expected|confirmed|cancelled"}
+- UpdateReimbursementStatus:
+  {"reimbursement_claim_id": string,
+   "status": "reimbursable|invoice_pending|submitted|approved|waiting_received|rejected|abandoned"}
 """.strip()
 
 
@@ -61,7 +80,10 @@ def generate_action_proposals(
 
     content = raw_response["choices"][0]["message"]["content"]
     parsed = json.loads(content)
-    actions = [AIActionProposal.model_validate(item) for item in parsed.get("actions", [])]
+    actions = [
+        AIActionProposal.model_validate(_normalize_action_item(item, source_text))
+        for item in parsed.get("actions", [])
+    ]
     return actions, raw_response, parsed.get("explanation"), parsed.get("confidence")
 
 
@@ -70,3 +92,80 @@ def _chat_completions_endpoint(base_url: str) -> str:
     if normalized.endswith("/chat/completions"):
         return normalized
     return f"{normalized}/chat/completions"
+
+
+def _normalize_action_item(item: Dict[str, Any], source_text: str) -> Dict[str, Any]:
+    normalized = dict(item)
+    payload = dict(normalized.get("payload") or {})
+    action_type = str(normalized.get("action_type") or "")
+    if action_type == "CreateCashFlowItem":
+        _rename(payload, "type", "cash_flow_type")
+        _rename(payload, "cashflow_type", "cash_flow_type")
+        _rename(payload, "date", "expected_date")
+        _rename(payload, "expectedDate", "expected_date")
+        if "cash_flow_type" not in payload:
+            payload["cash_flow_type"] = _infer_cash_flow_type(payload, source_text)
+        if "direction" not in payload:
+            payload["direction"] = _infer_cash_flow_direction(payload, source_text)
+    elif action_type == "GenerateNotificationRule":
+        _rename(payload, "type", "rule_type")
+        _rename(payload, "notification_type", "rule_type")
+        _rename(payload, "trigger", "trigger_payload")
+        _rename(payload, "triggerPayload", "trigger_payload")
+        _rename(payload, "date", "next_trigger_date")
+        _rename(payload, "next_date", "next_trigger_date")
+        _rename(payload, "nextTriggerDate", "next_trigger_date")
+        if "rule_type" not in payload:
+            payload["rule_type"] = _infer_notification_rule_type(payload, source_text)
+        payload.setdefault("channel", "in_app")
+        payload.setdefault("trigger_payload", {})
+    normalized["payload"] = payload
+    return normalized
+
+
+def _rename(payload: Dict[str, Any], old_key: str, new_key: str) -> None:
+    if old_key in payload and new_key not in payload:
+        payload[new_key] = payload.pop(old_key)
+
+
+def _payload_text(payload: Dict[str, Any], source_text: str) -> str:
+    return f"{source_text} {json.dumps(payload, ensure_ascii=False)}".lower()
+
+
+def _infer_cash_flow_type(payload: Dict[str, Any], source_text: str) -> str:
+    text = _payload_text(payload, source_text)
+    if any(token in text for token in ("工资", "salary")):
+        return "salary"
+    if any(token in text for token in ("房租收入", "rent_income")):
+        return "rent_income"
+    if any(token in text for token in ("报销", "reimbursement")):
+        return "reimbursement"
+    if any(token in text for token in ("订阅", "subscription")):
+        return "subscription"
+    if any(token in text for token in ("信用卡", "还款", "credit_repayment")):
+        return "credit_repayment"
+    if any(token in text for token in ("分期", "installment")):
+        return "installment"
+    return "other"
+
+
+def _infer_cash_flow_direction(payload: Dict[str, Any], source_text: str) -> str:
+    text = _payload_text(payload, source_text)
+    if any(token in text for token in ("inflow", "进账", "到账", "收入", "回款")):
+        return "inflow"
+    if any(token in text for token in ("transfer", "转账", "还款")):
+        return "transfer"
+    return "outflow"
+
+
+def _infer_notification_rule_type(payload: Dict[str, Any], source_text: str) -> str:
+    text = _payload_text(payload, source_text)
+    if any(token in text for token in ("信用卡", "还款", "credit")):
+        return "credit_repayment"
+    if any(token in text for token in ("报销", "reimbursement")):
+        return "reimbursement"
+    if any(token in text for token in ("订阅", "subscription")):
+        return "subscription"
+    if any(token in text for token in ("异常", "anomaly")):
+        return "anomaly"
+    return "cash_flow"

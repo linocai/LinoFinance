@@ -32,13 +32,13 @@ xcodebuild \
 open .derivedData/Build/Products/Debug/LinoFinance.app
 ```
 
-The app expects the local backend at `http://127.0.0.1:6868/api/v1`.
+The packaged app defaults to the deployed backend at `https://lf.linotsai.top/api/v1`.
 
-For a deployed API, launch the app with:
+For local testing, override the API endpoint when launching the app:
 
 ```bash
-LINOFINANCE_API_BASE_URL=https://finance.example.com/api/v1 \
-LINOFINANCE_API_TOKEN=replace-with-production-token \
+LINOFINANCE_API_BASE_URL=http://127.0.0.1:6868/api/v1 \
+LINOFINANCE_API_TOKEN=replace-with-local-token-if-needed \
 open .derivedData/Build/Products/Debug/LinoFinance.app
 ```
 

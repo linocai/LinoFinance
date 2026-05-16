@@ -174,6 +174,23 @@ with environment/UserDefaults support for a deployed domain API and API token.
   - macOS Credit and Notifications context actions surface errors instead of silently swallowing them;
   - macOS Reimbursements shows all key statuses, chooses same-currency balance accounts for received reimbursements, and surfaces clear missing-account/category errors;
   - macOS Cash Flow no longer offers generic settlement for `transfer` cash flows.
+- First cloud deployment completed on `hz`:
+  - public API domain: `https://lf.linotsai.top/api/v1`;
+  - remote app root: `/opt/linofinance`;
+  - current release symlink: `/opt/linofinance/app/current`;
+  - deployed release: `/opt/linofinance/app/releases/20260516-171352`;
+  - production env file: `/etc/linofinance/api.env` (`root:linofinance`, `640`);
+  - systemd service: `linofinance-api`, running as user/group `linofinance` on `127.0.0.1:8000`;
+  - PostgreSQL database/user: `linofinance` on local PostgreSQL 16;
+  - Nginx site: `/etc/nginx/sites-available/linofinance`;
+  - Let's Encrypt cert issued for `lf.linotsai.top`, expiring `2026-08-14`;
+  - initial production DB backup created at `/opt/linofinance/backups/linofinance-initial-20260516T092054Z.dump`.
+- Production AI provider smoke completed after user filled `/etc/linofinance/api.env`:
+  - `/api/v1/ai/config` now reports `base_url_configured: true`, `api_key_configured: true`, model `deepseek-v4-flash`;
+  - initial natural-language plan attempts proved provider connectivity but exposed loose model payload field names;
+  - `backend/app/services/ai_provider.py` hotfixed with stricter action schema prompt and common payload field normalization;
+  - remote `linofinance-api` restarted successfully;
+  - authenticated `POST https://lf.linotsai.top/api/v1/ai/plans` created a medium-risk `CreateCashFlowItem` plan through the live provider, then the smoke plan was rejected for cleanup.
 - Verification passed:
   - `python3 -m compileall backend/app backend/tests`
   - `python3 -m compileall backend/app backend/scripts`
@@ -185,19 +202,26 @@ with environment/UserDefaults support for a deployed domain API and API token.
   - `curl http://127.0.0.1:6868/api/v1/health` returned `status: ok`
   - screenshot review saved at `.planning/screenshots/macos-dashboard-focused.png`
   - screenshot review saved at `.planning/screenshots/macos-accounts-focused.png`
+  - remote `alembic upgrade head` reached `202605160005`
+  - remote `systemctl is-active linofinance-api nginx postgresql@16-main` returned active
+  - `curl https://lf.linotsai.top/api/v1/health` returned production `status: ok`
+  - `curl https://lf.linotsai.top/api/v1/ai/config` without token returned `401`
+  - authenticated `GET https://lf.linotsai.top/api/v1/ai/config` returned `200` with `api_key_configured: true`
+  - authenticated AI provider smoke created plan `35ed12c9-f582-4061-99bc-5ac5f243931e` and rejected it after verification
 
 ## Remaining
 
-1. Perform actual cloud server provisioning, DNS, HTTPS certificates, production env file setup, and first live deployment using `docs/deployment.md`.
-2. Add partial cash-flow settlement once reimbursement and partial payments need it.
-3. Add credit statement cycle update/close endpoints if manual statement reconciliation needs editing after creation.
-4. Add account balance recalculation/reconciliation command to rebuild balances from movements and cycle amounts.
-5. Add seed scripts for default categories and initial USD/CNY rate in local/test setup.
-6. Add app-level smoke/UI tests once the first macOS workflow stabilizes.
-7. Add stronger production observability if needed: external error tracking, persistent rate-limit backend, log shipping, and uptime checks.
-8. Later frontend polish still outstanding from the design direction: command palette (`⌘K`), Menu Bar Extra, account reconciliation UI, multi-window mode, richer charts, privacy blur, and deeper AI narrative insights.
-9. Original cross-platform vision items intentionally deferred until after cloud baseline: iOS app, Widget, Live Activity, Shortcuts, real system notification delivery, attachment model/preview/printing, offline draft sync/conflict handling, and AI monthly narrative memo.
-10. AI action backlog remains for `GenerateReport` and `CreateRecurringRule`; current report APIs and subscription APIs cover the blocking user workflows.
+1. User action: edit `/etc/linofinance/api.env` on `hz`, fill `LINOFINANCE_AI_API_KEY` plus optional `LINOFINANCE_AI_API_BASE_URL` / `LINOFINANCE_AI_MODEL`, then restart `sudo systemctl restart linofinance-api`.
+2. Configure the macOS app to use `LINOFINANCE_API_BASE_URL=https://lf.linotsai.top/api/v1` and the production API auth token from `/etc/linofinance/api.env`.
+3. Add partial cash-flow settlement once reimbursement and partial payments need it.
+4. Add credit statement cycle update/close endpoints if manual statement reconciliation needs editing after creation.
+5. Add account balance recalculation/reconciliation command to rebuild balances from movements and cycle amounts.
+6. Add seed scripts for default categories and initial USD/CNY rate in local/test setup.
+7. Add app-level smoke/UI tests once the first macOS workflow stabilizes.
+8. Add stronger production observability if needed: external error tracking, persistent rate-limit backend, log shipping, and uptime checks.
+9. Later frontend polish still outstanding from the design direction: command palette (`⌘K`), Menu Bar Extra, account reconciliation UI, multi-window mode, richer charts, privacy blur, and deeper AI narrative insights.
+10. Original cross-platform vision items intentionally deferred until after cloud baseline: iOS app, Widget, Live Activity, Shortcuts, real system notification delivery, attachment model/preview/printing, offline draft sync/conflict handling, and AI monthly narrative memo.
+11. AI action backlog remains for `GenerateReport` and `CreateRecurringRule`; current report APIs and subscription APIs cover the blocking user workflows.
 
 ## Decisions
 

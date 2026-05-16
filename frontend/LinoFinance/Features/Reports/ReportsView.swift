@@ -43,9 +43,9 @@ struct ReportsView: View {
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
             } else if environment.reportsViewModel.isLoading {
-                EmptyState(title: "正在加载报表", message: "本地 API 正在计算聚合数据。", systemImage: "chart.line.uptrend.xyaxis")
+                EmptyState(title: "正在加载报表", message: "API 正在计算聚合数据。", systemImage: "chart.line.uptrend.xyaxis")
             } else {
-                EmptyState(title: "报表尚未加载", message: "点击刷新或确认 6868 本地 API 已启动。", systemImage: "chart.line.uptrend.xyaxis")
+                EmptyState(title: "报表尚未加载", message: "点击刷新或检查域名/API Token 配置。", systemImage: "chart.line.uptrend.xyaxis")
             }
 
             if let message = environment.reportsViewModel.errorMessage {
