@@ -102,7 +102,7 @@ def confirm_entry(db: Session, entry_id: str) -> EntryRead:
     return get_entry(db, entry_id)
 
 
-def void_entry(db: Session, entry_id: str) -> EntryRead:
+def void_entry(db: Session, entry_id: str, commit: bool = True) -> EntryRead:
     entry = db.get(FinancialEntry, entry_id)
     if entry is None:
         raise LedgerNotFoundError("Entry not found")
@@ -117,7 +117,8 @@ def void_entry(db: Session, entry_id: str) -> EntryRead:
         _abandon_reimbursement_claims_for_entry(db, entry.id)
     entry.status = "voided"
 
-    db.commit()
+    if commit:
+        db.commit()
     return get_entry(db, entry_id)
 
 

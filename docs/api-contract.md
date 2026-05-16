@@ -46,6 +46,34 @@ Response:
   - `POST /reimbursement-claims/{claim_id}/reject`
   - `POST /reimbursement-claims/{claim_id}/abandon`
   - `POST /reimbursement-claims/{claim_id}/mark-received`
+  - `GET /installment-plans`
+  - `POST /installment-plans`
+  - `GET /installment-plans/{plan_id}`
+  - `POST /installment-plans/{plan_id}/cancel`
+  - `POST /installment-plans/{plan_id}/mark-paid-off`
+  - `POST /installment-plans/{plan_id}/mark-early-paid-off`
+  - `GET /subscription-rules`
+  - `POST /subscription-rules`
+  - `GET /subscription-rules/{rule_id}`
+  - `POST /subscription-rules/{rule_id}/pause`
+  - `POST /subscription-rules/{rule_id}/resume`
+  - `POST /subscription-rules/{rule_id}/cancel`
+  - `POST /subscription-rules/{rule_id}/generate-next`
+  - `GET /ai/config`
+  - `GET /ai/plans`
+  - `POST /ai/plans`
+  - `GET /ai/plans/{plan_id}`
+  - `POST /ai/plans/{plan_id}/approve`
+  - `POST /ai/plans/{plan_id}/reject`
+  - `POST /ai/plans/{plan_id}/execute`
+  - `POST /ai/actions/{action_id}/rollback`
+  - `GET /notification-rules`
+  - `POST /notification-rules`
+  - `GET /notification-rules/{rule_id}`
+  - `POST /notification-rules/{rule_id}/pause`
+  - `POST /notification-rules/{rule_id}/resume`
+  - `POST /notification-rules/{rule_id}/cancel`
+  - `GET /audit-logs`
   - `GET /entries`
   - `POST /entries`
   - `POST /entries/{entry_id}/confirm`
@@ -97,6 +125,34 @@ Response:
 - Received claims require a confirmed formal income entry payload via `mark-received`.
 - Received reimbursement entries must include a matching `balance_in` movement and matching income category line.
 - Voiding the original confirmed reimbursable expense abandons open claims and cancels their reimbursement cash flows.
+
+## Installment And Subscription Rules Implemented
+
+- Installment plans require a confirmed linked entry with a matching credit-card charge.
+- Installment currency must match the linked credit account currency.
+- Active installment plans generate one `installment` cash-flow item per payment period.
+- Installment cash-flow items are `transfer` direction and do not create duplicate spending.
+- Cancelling, marking paid off, or marking early paid off cancels open installment cash-flow items.
+- Subscription rules support `weekly`, `monthly`, and `yearly` billing intervals.
+- Active subscription rules generate the next `subscription` cash-flow item.
+- Subscription cash-flow items are future outflows and do not affect balances until settled.
+- Settling a subscription cash-flow item creates the formal confirmed entry, advances `next_charge_date`, and generates the next expected subscription cash flow.
+- Paused subscriptions do not auto-advance on settlement; cancelled subscriptions cancel open generated cash flows.
+
+## AI And Notification Rules Implemented
+
+- AI provider settings are read from `.env` via `LINOFINANCE_AI_*` variables.
+- Secrets are not returned by `GET /ai/config`; it only reports whether a key/base URL exists.
+- AI plans are stored as structured actions before execution.
+- Supported action protocol values include `CreateEntry`, `CreateCashFlowItem`, `MarkReimbursable`, `CreateInstallmentPlan`, `RecordCreditRepayment`, `GenerateNotificationRule`, and `VoidEntry`.
+- Low-risk `CreateEntry` actions are complete CNY actions with amount less than or equal to `1000 CNY`; they become `auto_confirm_candidate`.
+- Medium-risk actions require approval before execution.
+- High-risk actions, such as `VoidEntry`, require approval and `strong_confirm = "EXECUTE_HIGH_RISK"`.
+- AI executions write `AuditLog` records with before/after snapshots where available.
+- Executed AI-created entries can be rolled back by voiding the generated entry.
+- Executed AI-created cash-flow items and notification rules can be rolled back by cancellation when still eligible.
+- Notification rules support `credit_repayment`, `cash_flow`, `reimbursement`, `subscription`, and `anomaly`.
+- Notification channels support `in_app`, `system`, and `email`; client delivery is future frontend work.
 
 ## Domain Rules For API Design
 

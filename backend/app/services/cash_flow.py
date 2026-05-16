@@ -14,11 +14,18 @@ from app.services import ledger
 from app.services.ledger import LedgerNotFoundError, LedgerValidationError, quantize_money
 
 
-def create_cash_flow_item(db: Session, payload: CashFlowItemCreate) -> CashFlowItemRead:
+def create_cash_flow_item(
+    db: Session,
+    payload: CashFlowItemCreate,
+    commit: bool = True,
+) -> CashFlowItemRead:
     item = _build_cash_flow_item(db, payload)
     db.add(item)
-    db.commit()
-    db.refresh(item)
+    if commit:
+        db.commit()
+        db.refresh(item)
+    else:
+        db.flush()
     return CashFlowItemRead.model_validate(item)
 
 
@@ -81,6 +88,10 @@ def settle_cash_flow_item(
     entry = ledger.create_entry(db, entry_payload, commit=False)
     item.status = "settled"
     item.linked_entry_id = entry.id
+    if item.linked_subscription_rule_id is not None:
+        from app.services.subscription import advance_subscription_after_settlement
+
+        advance_subscription_after_settlement(db, item.linked_subscription_rule_id)
     db.commit()
 
     return CashFlowSettleRead(
@@ -116,6 +127,7 @@ def _build_cash_flow_item(db: Session, payload: CashFlowItemCreate) -> CashFlowI
         status=payload.status,
         linked_reimbursement_id=payload.linked_reimbursement_id,
         linked_installment_plan_id=payload.linked_installment_plan_id,
+        linked_subscription_rule_id=payload.linked_subscription_rule_id,
         linked_statement_cycle_id=payload.linked_statement_cycle_id,
         note=payload.note,
     )
@@ -156,5 +168,3 @@ def _get_cash_flow_or_raise(db: Session, item_id: str) -> CashFlowItem:
     if item is None:
         raise LedgerNotFoundError("Cash flow item not found")
     return item
-
-

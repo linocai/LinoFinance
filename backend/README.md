@@ -16,6 +16,17 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
+AI provider values are intentionally local-only. Put real values in `backend/.env`:
+
+```bash
+LINOFINANCE_AI_API_BASE_URL=https://example.com/v1
+LINOFINANCE_AI_API_KEY=replace-me
+LINOFINANCE_AI_MODEL=replace-me
+```
+
+The backend treats this as an OpenAI-compatible chat-completions endpoint. The API
+never returns the key, only whether the key/base URL is configured.
+
 Health check:
 
 ```bash

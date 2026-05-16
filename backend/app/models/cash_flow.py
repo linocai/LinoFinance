@@ -27,8 +27,8 @@ class CashFlowItem(IDTimestampMixin, Base):
     linked_entry_id: Mapped[Optional[str]] = mapped_column(ForeignKey("financial_entries.id"))
     linked_reimbursement_id: Mapped[Optional[str]] = mapped_column(String(36))
     linked_installment_plan_id: Mapped[Optional[str]] = mapped_column(String(36))
+    linked_subscription_rule_id: Mapped[Optional[str]] = mapped_column(ForeignKey("subscription_rules.id"))
     linked_statement_cycle_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey("credit_statement_cycles.id"),
     )
     note: Mapped[Optional[str]] = mapped_column(Text)
-

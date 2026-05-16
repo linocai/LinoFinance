@@ -24,6 +24,7 @@ class CashFlowItemCreate(BaseModel):
     status: str = Field(default="expected", pattern="^(expected|confirmed)$")
     linked_reimbursement_id: Optional[str] = None
     linked_installment_plan_id: Optional[str] = None
+    linked_subscription_rule_id: Optional[str] = None
     linked_statement_cycle_id: Optional[str] = None
     note: Optional[str] = None
 
@@ -49,6 +50,7 @@ class CashFlowItemRead(BaseModel):
     linked_entry_id: Optional[str] = None
     linked_reimbursement_id: Optional[str] = None
     linked_installment_plan_id: Optional[str] = None
+    linked_subscription_rule_id: Optional[str] = None
     linked_statement_cycle_id: Optional[str] = None
     note: Optional[str] = None
 
@@ -62,4 +64,3 @@ class CashFlowItemRead(BaseModel):
 class CashFlowSettleRead(BaseModel):
     cash_flow_item: CashFlowItemRead
     entry: EntryRead
-

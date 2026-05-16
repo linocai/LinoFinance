@@ -1,4 +1,6 @@
 from functools import lru_cache
+from decimal import Decimal
+from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -13,6 +15,12 @@ class Settings(BaseSettings):
     )
     api_host: str = "127.0.0.1"
     api_port: int = 8000
+    ai_provider: str = "openai_compatible"
+    ai_api_base_url: Optional[str] = None
+    ai_api_key: Optional[str] = None
+    ai_model: Optional[str] = None
+    ai_request_timeout_seconds: int = 30
+    ai_auto_confirm_limit_cny: Decimal = Decimal("1000")
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -24,4 +32,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

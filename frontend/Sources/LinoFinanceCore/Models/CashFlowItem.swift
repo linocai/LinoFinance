@@ -37,6 +37,8 @@ public struct CashFlowItem: Codable, Equatable, Sendable {
     public let recurrenceRule: String?
     public let status: CashFlowStatus
     public let linkedEntryID: String?
+    public let linkedInstallmentPlanID: String?
+    public let linkedSubscriptionRuleID: String?
 
     public init(
         id: String,
@@ -49,7 +51,9 @@ public struct CashFlowItem: Codable, Equatable, Sendable {
         categoryID: String? = nil,
         recurrenceRule: String? = nil,
         status: CashFlowStatus,
-        linkedEntryID: String? = nil
+        linkedEntryID: String? = nil,
+        linkedInstallmentPlanID: String? = nil,
+        linkedSubscriptionRuleID: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -62,6 +66,7 @@ public struct CashFlowItem: Codable, Equatable, Sendable {
         self.recurrenceRule = recurrenceRule
         self.status = status
         self.linkedEntryID = linkedEntryID
+        self.linkedInstallmentPlanID = linkedInstallmentPlanID
+        self.linkedSubscriptionRuleID = linkedSubscriptionRuleID
     }
 }
-

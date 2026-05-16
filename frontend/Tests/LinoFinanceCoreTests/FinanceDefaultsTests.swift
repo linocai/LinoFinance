@@ -37,4 +37,43 @@ final class FinanceDefaultsTests: XCTestCase {
         XCTAssertEqual(ReimbursementStatus.waitingReceived.rawValue, "waiting_received")
         XCTAssertEqual(ReimbursementStatus.partialReceived.rawValue, "partial_received")
     }
+
+    func testInstallmentStatusUsesApiRawValues() {
+        XCTAssertEqual(InstallmentPlanStatus.paidOff.rawValue, "paid_off")
+        XCTAssertEqual(InstallmentPlanStatus.earlyPaidOff.rawValue, "early_paid_off")
+        XCTAssertEqual(InstallmentPlanStatus.cancelled.rawValue, "cancelled")
+    }
+
+    func testSubscriptionEnumsUseApiRawValues() {
+        XCTAssertEqual(SubscriptionBillingInterval.monthly.rawValue, "monthly")
+        XCTAssertEqual(SubscriptionRuleStatus.paused.rawValue, "paused")
+        XCTAssertEqual(SubscriptionRuleStatus.cancelled.rawValue, "cancelled")
+    }
+
+    func testAIEnumsUseApiRawValues() {
+        XCTAssertEqual(AIPlanStatus.autoConfirmCandidate.rawValue, "auto_confirm_candidate")
+        XCTAssertEqual(AIPlanStatus.requiresConfirmation.rawValue, "requires_confirmation")
+        XCTAssertEqual(AIActionType.createCashFlowItem.rawValue, "CreateCashFlowItem")
+        XCTAssertEqual(AIActionType.generateNotificationRule.rawValue, "GenerateNotificationRule")
+        XCTAssertEqual(AIActionStatus.rolledBack.rawValue, "rolled_back")
+    }
+
+    func testNotificationEnumsUseApiRawValues() {
+        XCTAssertEqual(NotificationRuleType.creditRepayment.rawValue, "credit_repayment")
+        XCTAssertEqual(NotificationRuleType.cashFlow.rawValue, "cash_flow")
+        XCTAssertEqual(NotificationChannel.inApp.rawValue, "in_app")
+    }
+
+    func testJSONValueRoundTripsNestedPayloads() throws {
+        let payload: [String: JSONValue] = [
+            "amount": .number(88),
+            "currency": .string("CNY"),
+            "metadata": .object(["auto": .bool(true)]),
+        ]
+
+        let encoded = try JSONEncoder().encode(payload)
+        let decoded = try JSONDecoder().decode([String: JSONValue].self, from: encoded)
+
+        XCTAssertEqual(decoded, payload)
+    }
 }

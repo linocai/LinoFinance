@@ -4,9 +4,8 @@ Last updated: 2026-05-16
 
 ## Current Goal
 
-Execute `plan.md` from Phase 0 onward. The current slice is project foundation:
-backend API skeleton, database migration baseline, frontend shared Swift modules,
-and durable setup documentation.
+Execute `plan.md` from Phase 0 onward. The current completed slice is Phase 6:
+AI structured actions, risk gating, audit logs, and notification rules.
 
 ## Completed
 
@@ -74,17 +73,48 @@ and durable setup documentation.
   - `ReimbursementClaim`;
   - `ReimbursementStatus`;
   - placeholder reimbursement view for later app-shell integration.
+- Phase 5 installment/subscription core implemented:
+  - `InstallmentPlan` and `SubscriptionRule` models plus Alembic migration `202605160004`;
+  - installment plan list/create/get/cancel/mark-paid-off/mark-early-paid-off API;
+  - active installment plans require a confirmed matching credit-card charge and generate future `installment` transfer cash flows;
+  - cancelling or paying off an installment plan cancels open generated cash flows;
+  - subscription rule list/create/get/pause/resume/cancel/generate-next API;
+  - active subscriptions generate expected future `subscription` cash-flow outflows;
+  - settling a subscription cash flow creates the formal confirmed entry, advances `next_charge_date`, and generates the next expected cash flow.
+- Frontend Phase 5 shared types added:
+  - `InstallmentPlan`;
+  - `InstallmentPlanStatus`;
+  - `SubscriptionRule`;
+  - `SubscriptionBillingInterval`;
+  - `SubscriptionRuleStatus`;
+  - placeholder installment and subscription views for later app-shell integration.
+- Phase 6 AI and notification core implemented:
+  - `.env`-driven AI provider settings added for API base URL, API key, model, timeout, and the `1000 CNY` auto-confirm limit;
+  - `AIPlan`, `AIAction`, `AIActionExecution`, and `NotificationRule` models plus Alembic migration `202605160005`;
+  - AI plan config/list/create/get/approve/reject/execute API;
+  - AI action rollback API for supported created records;
+  - action protocol covers `CreateEntry`, `CreateCashFlowItem`, `MarkReimbursable`, `CreateInstallmentPlan`, `RecordCreditRepayment`, `GenerateNotificationRule`, and `VoidEntry`;
+  - low-risk complete CNY `CreateEntry` actions at or below `1000 CNY` become `auto_confirm_candidate`;
+  - medium-risk actions require approval;
+  - high-risk actions require approval plus `EXECUTE_HIGH_RISK`;
+  - AI executions write `AuditLog` records with before/after snapshots where available;
+  - notification rule list/create/get/pause/resume/cancel API added.
+- Frontend Phase 6 shared types added:
+  - `AIPlan`, `AIAction`, related status/risk/action enums;
+  - `NotificationRule` and notification enums;
+  - `AuditLog`;
+  - `JSONValue` for AI/notification JSON payloads;
+  - placeholder AI plan and notification rule views.
 - Verification passed:
   - `python3 -m compileall backend/app backend/tests`
-  - `cd backend && . .venv/bin/activate && pytest` (`28 passed`)
+  - `cd backend && . .venv/bin/activate && pytest` (`38 passed`)
   - `cd backend && . .venv/bin/activate && ruff check .`
   - `cd backend && . .venv/bin/activate && alembic upgrade head --sql`
-  - `cd frontend && swift test` (`5 passed`)
-  - `curl http://127.0.0.1:8000/api/v1/health`
+  - `cd frontend && swift test` (`10 passed`)
 
 ## Remaining
 
-1. Start Phase 5 installment/subscription plans and related future cash flows.
+1. Start Phase 7 report aggregation and CSV export.
 2. Add partial cash-flow settlement once reimbursement and partial payments need it.
 3. Add credit statement cycle update/close endpoints if manual statement reconciliation needs editing after creation.
 4. Add account balance recalculation/reconciliation command to rebuild balances from movements and cycle amounts.
