@@ -1,6 +1,6 @@
 import Foundation
 
-enum FinanceModule: String, CaseIterable, Identifiable {
+enum FinanceModule: String, CaseIterable, Identifiable, Hashable, Codable {
     case dashboard
     case accounts
     case entries

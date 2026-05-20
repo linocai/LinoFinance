@@ -9,6 +9,7 @@
 /* Begin PBXFileReference section */
 		A10000000000000000000001 /* LinoF.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LinoF.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000001 /* LinoF.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LinoF.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A30000000000000000000001 /* LinoFinanceWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LinoFinanceWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -17,7 +18,53 @@
 			path = LinoFinance;
 			sourceTree = "<group>";
 		};
+		A30000000000000000000002 /* LinoFinanceWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A30000000000000000000014 /* Exceptions for "LinoFinanceWidgets" folder in "LinoFinanceWidgets" target */,
+			);
+			path = LinoFinanceWidgets;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A30000000000000000000014 /* Exceptions for "LinoFinanceWidgets" folder in "LinoFinanceWidgets" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A30000000000000000000006 /* LinoFinanceWidgets */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXBuildFile section */
+		A20000000000000000000012 /* LinoFinanceWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A30000000000000000000001 /* LinoFinanceWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A20000000000000000000011 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000000000000000000009 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A30000000000000000000006;
+			remoteInfo = LinoFinanceWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A20000000000000000000009 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A20000000000000000000012 /* LinoFinanceWidgets.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A10000000000000000000003 /* Frameworks */ = {
@@ -34,6 +81,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A30000000000000000000003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -41,6 +95,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000002 /* LinoFinance */,
+				A30000000000000000000002 /* LinoFinanceWidgets */,
 				A10000000000000000000005 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -50,6 +105,7 @@
 			children = (
 				A10000000000000000000001 /* LinoF.app */,
 				A20000000000000000000001 /* LinoF.app */,
+				A30000000000000000000001 /* LinoFinanceWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -86,10 +142,12 @@
 				A20000000000000000000007 /* Sources */,
 				A20000000000000000000003 /* Frameworks */,
 				A20000000000000000000008 /* Resources */,
+				A20000000000000000000009 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A20000000000000000000010 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				A10000000000000000000002 /* LinoFinance */,
@@ -101,7 +159,37 @@
 			productReference = A20000000000000000000001 /* LinoF.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A30000000000000000000006 /* LinoFinanceWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A30000000000000000000013 /* Build configuration list for PBXNativeTarget "LinoFinanceWidgets" */;
+			buildPhases = (
+				A30000000000000000000007 /* Sources */,
+				A30000000000000000000003 /* Frameworks */,
+				A30000000000000000000008 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A30000000000000000000002 /* LinoFinanceWidgets */,
+			);
+			name = LinoFinanceWidgets;
+			packageProductDependencies = (
+			);
+			productName = LinoFinanceWidgets;
+			productReference = A30000000000000000000001 /* LinoFinanceWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXTargetDependency section */
+		A20000000000000000000010 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A30000000000000000000006 /* LinoFinanceWidgets */;
+			targetProxy = A20000000000000000000011 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXProject section */
 		A10000000000000000000009 /* Project object */ = {
@@ -115,6 +203,9 @@
 						CreatedOnToolsVersion = 26.4.1;
 					};
 					A20000000000000000000006 = {
+						CreatedOnToolsVersion = 26.4.1;
+					};
+					A30000000000000000000006 = {
 						CreatedOnToolsVersion = 26.4.1;
 					};
 				};
@@ -136,6 +227,7 @@
 			targets = (
 				A10000000000000000000006 /* LinoFinance */,
 				A20000000000000000000006 /* LinoFinanceiOS */,
+				A30000000000000000000006 /* LinoFinanceWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -155,6 +247,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A30000000000000000000008 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -166,6 +265,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A20000000000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A30000000000000000000007 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -364,6 +470,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = LinoFinance/LinoFinanceiOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1.02;
 				DEVELOPMENT_TEAM = HX73DFL88G;
@@ -400,6 +507,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = LinoFinance/LinoFinanceiOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1.02;
 				DEVELOPMENT_TEAM = HX73DFL88G;
@@ -422,6 +530,69 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.lino.linofinance.ios;
 				PRODUCT_NAME = LinoF;
 				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		A3000000000000000000000C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = LinoFinanceWidgets/LinoFinanceWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1.02;
+				DEVELOPMENT_TEAM = HX73DFL88G;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LinoFinanceWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.02;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lino.linofinance.ios.widgets;
+				PRODUCT_NAME = LinoFinanceWidgets;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		A3000000000000000000000D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = LinoFinanceWidgets/LinoFinanceWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1.02;
+				DEVELOPMENT_TEAM = HX73DFL88G;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LinoFinanceWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.02;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lino.linofinance.ios.widgets;
+				PRODUCT_NAME = LinoFinanceWidgets;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -458,6 +629,15 @@
 			buildConfigurations = (
 				A2000000000000000000000C /* Debug */,
 				A2000000000000000000000D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A30000000000000000000013 /* Build configuration list for PBXNativeTarget "LinoFinanceWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A3000000000000000000000C /* Debug */,
+				A3000000000000000000000D /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

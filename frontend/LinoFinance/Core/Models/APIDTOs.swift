@@ -262,6 +262,22 @@ struct AuditLogDTO: Identifiable, Decodable, Equatable, Hashable {
     let note: String?
 }
 
+struct SearchHitDTO: Identifiable, Decodable, Equatable, Hashable {
+    let type: String
+    let id: String
+    let title: String
+    let subtitle: String?
+    let relevance: Double
+    let target: String
+    let metadata: [String: JSONValueDTO]
+}
+
+struct SearchResponseDTO: Decodable, Equatable, Hashable {
+    let query: String
+    let limit: Int
+    let items: [SearchHitDTO]
+}
+
 struct CurrencyAmountSummaryDTO: Decodable, Equatable, Hashable {
     let currency: CurrencyCode
     let amount: DecimalValue
@@ -312,10 +328,19 @@ struct CashFlowPressureWindowDTO: Identifiable, Decodable, Equatable, Hashable {
     let itemCount: Int
 }
 
+struct CashFlowDailyNetRowDTO: Identifiable, Decodable, Equatable, Hashable {
+    var id: Date { date }
+    let date: Date
+    let inflowCny: DecimalValue
+    let outflowCny: DecimalValue
+    let netCny: DecimalValue
+}
+
 struct CashFlowPressureReportDTO: Decodable, Equatable, Hashable {
     let anchorDate: Date
     let baseCurrency: String
     let windows: [CashFlowPressureWindowDTO]
+    let dailyNetCny: [CashFlowDailyNetRowDTO]?
 }
 
 struct CreditLiabilityTrendRowDTO: Identifiable, Decodable, Equatable, Hashable {

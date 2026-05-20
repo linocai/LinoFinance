@@ -52,6 +52,38 @@ final class AppEnvironment {
             UserDefaults.standard.set(privacyMaskEnabled, forKey: "linofinance.privacyMaskEnabled")
         }
     }
+    var widgetAutoUpdateEnabled: Bool = AppEnvironment.defaultBool(
+        key: "linofinance.widgetAutoUpdateEnabled",
+        defaultValue: true
+    ) {
+        didSet {
+            UserDefaults.standard.set(widgetAutoUpdateEnabled, forKey: "linofinance.widgetAutoUpdateEnabled")
+        }
+    }
+    var widgetRefreshMinutes: Int = AppEnvironment.defaultInt(
+        key: "linofinance.widgetRefreshMinutes",
+        defaultValue: 30
+    ) {
+        didSet {
+            UserDefaults.standard.set(widgetRefreshMinutes, forKey: "linofinance.widgetRefreshMinutes")
+        }
+    }
+    var liveActivityReminderDays: Int = AppEnvironment.defaultInt(
+        key: "linofinance.liveActivityReminderDays",
+        defaultValue: 5
+    ) {
+        didSet {
+            UserDefaults.standard.set(liveActivityReminderDays, forKey: "linofinance.liveActivityReminderDays")
+        }
+    }
+    var dynamicIslandAIEnabled: Bool = AppEnvironment.defaultBool(
+        key: "linofinance.dynamicIslandAIEnabled",
+        defaultValue: true
+    ) {
+        didSet {
+            UserDefaults.standard.set(dynamicIslandAIEnabled, forKey: "linofinance.dynamicIslandAIEnabled")
+        }
+    }
     var isAPITokenConfigured: Bool { apiClient.authToken != nil }
 
     init(
@@ -119,6 +151,7 @@ final class AppEnvironment {
             try await aiViewModel.refresh()
             try await notificationsViewModel.refresh()
             try await settingsViewModel.refresh()
+            WidgetSnapshotStore.shared.writeSnapshot(from: self)
             lastErrorMessage = nil
         } catch {
             lastErrorMessage = error.localizedDescription
@@ -229,6 +262,13 @@ final class AppEnvironment {
             return defaultValue
         }
         return UserDefaults.standard.bool(forKey: key)
+    }
+
+    nonisolated static func defaultInt(key: String, defaultValue: Int) -> Int {
+        guard UserDefaults.standard.object(forKey: key) != nil else {
+            return defaultValue
+        }
+        return UserDefaults.standard.integer(forKey: key)
     }
 }
 

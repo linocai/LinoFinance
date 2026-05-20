@@ -6,6 +6,10 @@ struct SelectionDetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            if let hero = selection?.inspectorHero {
+                InspectorHeroCard(hero: hero)
+            }
+
             switch selection {
             case .account(let account):
                 AccountDetail(account: account)
@@ -30,8 +34,155 @@ struct SelectionDetailView: View {
             case .none:
                 EmptyState(title: "详情", message: "选择账户、记录或计划后，这里显示详情。", systemImage: "sidebar.right")
             }
+
+            if let target = selection?.relatedTarget {
+                InspectorInsightCards(environment: environment, target: target)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+}
+
+private struct InspectorHero {
+    let title: String
+    let subtitle: String
+    let amount: String?
+    let status: String?
+    let systemImage: String
+    let tint: Color
+}
+
+private struct InspectorTarget: Equatable {
+    let type: String
+    let id: String
+}
+
+private struct InspectorHeroCard: View {
+    let hero: InspectorHero
+
+    var body: some View {
+        FinancePanel {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top) {
+                    Image(systemName: hero.systemImage)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(hero.tint)
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(hero.tint.opacity(0.14)))
+                    Spacer()
+                    if let status = hero.status {
+                        StatusTag(status: status)
+                    }
+                }
+                Text(hero.title)
+                    .font(FinanceTypography.headline)
+                    .foregroundStyle(FinanceTokens.Text.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let amount = hero.amount {
+                    HeroNumber(value: amount, tint: hero.tint)
+                }
+                Text(hero.subtitle)
+                    .font(FinanceTypography.caption)
+                    .foregroundStyle(FinanceTokens.Text.secondary)
+            }
+        }
+    }
+}
+
+private struct InspectorInsightCards: View {
+    let environment: AppEnvironment
+    let target: InspectorTarget
+    @State private var auditLogs: [AuditLogDTO] = []
+    @State private var relatedPlans: [AIPlanDTO] = []
+    @State private var errorMessage: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            FinancePanel {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("审计 · 最近 3 条")
+                        .font(FinanceTypography.headline)
+                    if auditLogs.isEmpty {
+                        Text("暂无审计记录")
+                            .font(.caption)
+                            .foregroundStyle(FinanceTokens.Text.secondary)
+                    } else {
+                        ForEach(auditLogs) { log in
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(log.actionType.financeStatusTitle)
+                                    .font(.caption.weight(.semibold))
+                                if let note = log.note {
+                                    Text(note)
+                                        .font(.caption2)
+                                        .foregroundStyle(FinanceTokens.Text.secondary)
+                                        .lineLimit(2)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            Divider()
+                        }
+                    }
+                }
+            }
+
+            FinancePanel {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("AI 建议")
+                        .font(FinanceTypography.headline)
+                    if relatedPlans.isEmpty {
+                        Text("暂无关联 AI 计划")
+                            .font(.caption)
+                            .foregroundStyle(FinanceTokens.Text.secondary)
+                    } else {
+                        ForEach(relatedPlans.prefix(3)) { plan in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text(plan.sourceText)
+                                        .font(.caption.weight(.semibold))
+                                        .lineLimit(2)
+                                    Spacer()
+                                    StatusTag(status: plan.status)
+                                }
+                                Text("\(plan.actions.count) 个动作 · \(plan.riskLevel.financeStatusTitle)")
+                                    .font(.caption2)
+                                    .foregroundStyle(FinanceTokens.Text.secondary)
+                            }
+                            Divider()
+                        }
+                    }
+                }
+            }
+
+            if let errorMessage {
+                ErrorBanner(message: errorMessage)
+            }
+        }
+        .task(id: "\(target.type)-\(target.id)") {
+            await refresh()
+        }
+    }
+
+    @MainActor
+    private func refresh() async {
+        do {
+            let repository = FinanceRepository(apiClient: environment.apiClient)
+            async let logs = repository.auditLogs(
+                targetType: target.type,
+                targetID: target.id,
+                limit: 3
+            )
+            async let plans = repository.aiPlans(
+                relatedType: target.type,
+                relatedTo: target.id
+            )
+            auditLogs = try await logs
+            relatedPlans = try await plans
+            errorMessage = nil
+        } catch {
+            auditLogs = []
+            relatedPlans = []
+            errorMessage = error.localizedDescription
+        }
     }
 }
 
@@ -362,6 +513,129 @@ private struct DetailNote: View {
                 .font(.callout)
                 .foregroundStyle(FinanceTokens.Text.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private extension InspectorSelection {
+    var inspectorHero: InspectorHero {
+        switch self {
+        case .account(let account):
+            return InspectorHero(
+                title: account.name,
+                subtitle: account.type.title,
+                amount: FinanceFormatter.money(account.currentBalance, currency: account.currency),
+                status: account.status,
+                systemImage: account.type == .credit ? "creditcard.fill" : "wallet.pass.fill",
+                tint: account.type == .credit ? FinanceTokens.State.credit : FinanceTokens.Brand.primary
+            )
+        case .entry(let entry):
+            let amount = entry.categoryLines.reduce(Decimal(0)) { $0 + $1.amount.value }
+            return InspectorHero(
+                title: entry.title,
+                subtitle: FinanceFormatter.mediumDate(entry.date),
+                amount: amount > 0 ? FinanceFormatter.money(DecimalValue(amount), currency: .cny) : nil,
+                status: entry.status.rawValue,
+                systemImage: "square.and.pencil",
+                tint: FinanceTokens.Brand.primary
+            )
+        case .cashFlow(let item):
+            return InspectorHero(
+                title: item.title,
+                subtitle: FinanceFormatter.mediumDate(item.expectedDate),
+                amount: FinanceFormatter.money(item.amount, currency: item.currency),
+                status: item.status,
+                systemImage: "arrow.left.arrow.right.circle.fill",
+                tint: item.direction == "outflow" ? FinanceTokens.State.expense : FinanceTokens.State.income
+            )
+        case .reimbursement(let claim):
+            return InspectorHero(
+                title: claim.payer,
+                subtitle: FinanceFormatter.mediumDate(claim.expectedDate),
+                amount: FinanceFormatter.money(claim.amount, currency: claim.currency),
+                status: claim.status,
+                systemImage: "arrow.uturn.left.circle.fill",
+                tint: FinanceTokens.State.ai
+            )
+        case .creditCycle(let cycle):
+            return InspectorHero(
+                title: "账单周期",
+                subtitle: FinanceFormatter.mediumDate(cycle.dueDate),
+                amount: FinanceFormatter.money(cycle.remainingAmount, currency: cycle.currency),
+                status: cycle.status,
+                systemImage: "calendar.badge.clock",
+                tint: FinanceTokens.State.credit
+            )
+        case .installment(let plan):
+            return InspectorHero(
+                title: "分期计划",
+                subtitle: "\(plan.numberOfPayments) 期",
+                amount: FinanceFormatter.money(plan.totalAmount, currency: plan.currency),
+                status: plan.status,
+                systemImage: "rectangle.stack.badge.plus",
+                tint: FinanceTokens.State.credit
+            )
+        case .subscription(let rule):
+            return InspectorHero(
+                title: rule.title,
+                subtitle: rule.nextChargeDate.map(FinanceFormatter.mediumDate) ?? "未排期",
+                amount: FinanceFormatter.money(rule.amount, currency: rule.currency),
+                status: rule.status,
+                systemImage: "repeat.circle.fill",
+                tint: FinanceTokens.State.warning
+            )
+        case .aiPlan(let plan):
+            return InspectorHero(
+                title: plan.sourceText,
+                subtitle: "\(plan.actions.count) 个动作",
+                amount: nil,
+                status: plan.status,
+                systemImage: "sparkles",
+                tint: FinanceTokens.State.ai
+            )
+        case .notification(let rule):
+            return InspectorHero(
+                title: rule.title,
+                subtitle: rule.ruleType.financeStatusTitle,
+                amount: nil,
+                status: rule.status,
+                systemImage: "bell.badge.fill",
+                tint: FinanceTokens.Brand.primary
+            )
+        case .module(let module):
+            return InspectorHero(
+                title: module.title,
+                subtitle: "模块",
+                amount: nil,
+                status: nil,
+                systemImage: module.symbolName,
+                tint: FinanceTokens.Brand.primary
+            )
+        }
+    }
+
+    var relatedTarget: InspectorTarget? {
+        switch self {
+        case .account(let account):
+            InspectorTarget(type: "account", id: account.id)
+        case .entry(let entry):
+            InspectorTarget(type: "financial_entry", id: entry.id)
+        case .cashFlow(let item):
+            InspectorTarget(type: "cash_flow_item", id: item.id)
+        case .reimbursement(let claim):
+            InspectorTarget(type: "reimbursement_claim", id: claim.id)
+        case .creditCycle(let cycle):
+            InspectorTarget(type: "credit_statement_cycle", id: cycle.id)
+        case .installment(let plan):
+            InspectorTarget(type: "installment_plan", id: plan.id)
+        case .subscription(let rule):
+            InspectorTarget(type: "subscription_rule", id: rule.id)
+        case .aiPlan(let plan):
+            InspectorTarget(type: "ai_plan", id: plan.id)
+        case .notification(let rule):
+            InspectorTarget(type: "notification_rule", id: rule.id)
+        case .module:
+            nil
         }
     }
 }

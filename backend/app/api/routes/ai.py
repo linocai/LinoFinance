@@ -27,9 +27,11 @@ def get_ai_config() -> AIConfigRead:
 @router.get("/plans", response_model=List[AIPlanRead])
 def list_ai_plans(
     status_filter: Optional[str] = Query(default=None, alias="status"),
+    related_type: Optional[str] = Query(default=None),
+    related_to: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
 ) -> List[AIPlanRead]:
-    return ai.list_ai_plans(db, status_filter)
+    return ai.list_ai_plans(db, status_filter, related_type, related_to)
 
 
 @router.post("/plans", response_model=AIPlanRead, status_code=status.HTTP_201_CREATED)

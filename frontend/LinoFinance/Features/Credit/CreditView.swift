@@ -55,6 +55,11 @@ struct CreditView: View {
                                 CreditCycleRow(cycle: cycle, accountName: accountName(cycle.creditAccountId))
                                     .contentShape(Rectangle())
                                     .onTapGesture { environment.inspectorSelection = .creditCycle(cycle) }
+                                    .contextMenu {
+                                        Button("设置提醒 Live Activity") {
+                                            startCreditLiveActivity(cycle)
+                                        }
+                                    }
                             }
                         }
                     }
@@ -215,6 +220,16 @@ struct CreditView: View {
         confirmation = ConfirmAction(title: title, message: "操作会同步到 API。", confirmTitle: title.replacingOccurrences(of: "？", with: ""), role: operation == "cancel" ? .destructive : nil) {
             Task { await performSubscription(rule, operation: operation) }
         }
+    }
+
+    private func startCreditLiveActivity(_ cycle: CreditStatementCycleDTO) {
+#if os(iOS)
+        LiveActivityManager.shared.startCreditDue(
+            cycle: cycle,
+            accountName: accountName(cycle.creditAccountId),
+            reminderDays: environment.liveActivityReminderDays
+        )
+#endif
     }
 
     private func performInstallmentPaidOff(_ plan: InstallmentPlanDTO, early: Bool) async {

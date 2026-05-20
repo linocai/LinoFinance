@@ -187,3 +187,113 @@ def test_push_devices_register_idempotently_and_disable(client) -> None:
 
     delete_response = client.delete(f"/api/v1/push/devices/{second_body['id']}")
     assert delete_response.status_code == 204
+
+
+def test_cash_flow_pressure_includes_daily_net_window(client) -> None:
+    client.post(
+        "/api/v1/cash-flow-items",
+        json={
+            "title": "Client invoice",
+            "direction": "inflow",
+            "cash_flow_type": "one_time",
+            "amount": "100",
+            "currency": "CNY",
+            "expected_date": "2026-05-20",
+        },
+    )
+    client.post(
+        "/api/v1/cash-flow-items",
+        json={
+            "title": "Rent",
+            "direction": "outflow",
+            "cash_flow_type": "one_time",
+            "amount": "40",
+            "currency": "CNY",
+            "expected_date": "2026-05-20",
+        },
+    )
+
+    response = client.get(
+        "/api/v1/reports/cash-flow-pressure",
+        params={"anchor_date": "2026-05-20"},
+    )
+
+    assert response.status_code == 200
+    daily = response.json()["daily_net_cny"]
+    assert len(daily) == 30
+    assert daily[0] == {
+        "date": "2026-05-20",
+        "inflow_cny": "100",
+        "outflow_cny": "40",
+        "net_cny": "60",
+    }
+
+
+def test_audit_limit_and_ai_related_filter(client) -> None:
+    account = client.post(
+        "/api/v1/accounts",
+        json={
+            "name": "Checking",
+            "type": "balance",
+            "currency": "CNY",
+            "current_balance": "500",
+        },
+    ).json()
+    category = client.post(
+        "/api/v1/categories",
+        json={"name": "Meals", "type": "expense"},
+    ).json()
+    plan_response = client.post(
+        "/api/v1/ai/plans",
+        json={
+            "source_text": "午餐 88",
+            "actions": [
+                {
+                    "action_type": "CreateEntry",
+                    "payload": {
+                        "title": "AI lunch",
+                        "date": "2026-05-20",
+                        "status": "confirmed",
+                        "category_lines": [
+                            {
+                                "category_id": category["id"],
+                                "direction": "expense",
+                                "amount": "88",
+                                "currency": "CNY",
+                            }
+                        ],
+                        "account_movements": [
+                            {
+                                "account_id": account["id"],
+                                "movement_type": "balance_out",
+                                "amount": "88",
+                                "currency": "CNY",
+                            }
+                        ],
+                    },
+                }
+            ],
+        },
+    )
+    assert plan_response.status_code == 201
+    plan = plan_response.json()
+
+    execute_response = client.post(f"/api/v1/ai/plans/{plan['id']}/execute", json={})
+    assert execute_response.status_code == 200
+    executed = execute_response.json()
+    target_id = executed["actions"][0]["target_id"]
+
+    related = client.get(
+        "/api/v1/ai/plans",
+        params={"related_type": "financial_entry", "related_to": target_id},
+    )
+    audit = client.get(
+        "/api/v1/audit-logs",
+        params={"target_type": "financial_entry", "target_id": target_id, "limit": 1},
+    )
+
+    assert related.status_code == 200
+    assert [item["id"] for item in related.json()] == [plan["id"]]
+    assert audit.status_code == 200
+    assert len(audit.json()) == 1
+    assert audit.json()[0]["action_type"] == "AIActionExecution"

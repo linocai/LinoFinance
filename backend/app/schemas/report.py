@@ -2,7 +2,7 @@ from datetime import date as DateType
 from decimal import Decimal
 from typing import List
 
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, Field, field_serializer
 
 from app.schemas.entry import format_decimal
 
@@ -87,10 +87,22 @@ class CashFlowPressureWindow(BaseModel):
         return format_decimal(value)
 
 
+class CashFlowDailyNetRow(BaseModel):
+    date: DateType
+    inflow_cny: Decimal
+    outflow_cny: Decimal
+    net_cny: Decimal
+
+    @field_serializer("inflow_cny", "outflow_cny", "net_cny")
+    def serialize_decimal(self, value: Decimal) -> str:
+        return format_decimal(value)
+
+
 class CashFlowPressureReport(BaseModel):
     anchor_date: DateType
     base_currency: str
     windows: List[CashFlowPressureWindow]
+    daily_net_cny: List[CashFlowDailyNetRow] = Field(default_factory=list)
 
 
 class CreditLiabilityTrendRow(BaseModel):

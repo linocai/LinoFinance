@@ -104,10 +104,20 @@ def create_ai_plan(db: Session, payload: AIPlanCreate) -> AIPlanRead:
     return get_ai_plan(db, plan.id)
 
 
-def list_ai_plans(db: Session, status: Optional[str] = None) -> List[AIPlanRead]:
+def list_ai_plans(
+    db: Session,
+    status: Optional[str] = None,
+    related_type: Optional[str] = None,
+    related_to: Optional[str] = None,
+) -> List[AIPlanRead]:
     statement = select(AIPlan)
     if status is not None:
         statement = statement.where(AIPlan.status == status)
+    if related_to is not None:
+        action_statement = select(AIAction.plan_id).where(AIAction.target_id == related_to)
+        if related_type is not None:
+            action_statement = action_statement.where(AIAction.target_type == related_type)
+        statement = statement.where(AIPlan.id.in_(action_statement))
     plans = db.execute(
         statement.order_by(AIPlan.created_at.desc(), AIPlan.updated_at.desc())
     ).scalars()

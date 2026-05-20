@@ -15,6 +15,7 @@ from app.models.entry import EntryCategoryLine, FinancialEntry
 from app.models.reimbursement import ReimbursementClaim
 from app.models.subscription import SubscriptionRule
 from app.schemas.report import (
+    CashFlowDailyNetRow,
     CashFlowPressureReport,
     CashFlowPressureWindow,
     CategoryExpenseReport,
@@ -154,7 +155,46 @@ def cash_flow_pressure(
                 item_count=count,
             )
         )
-    return CashFlowPressureReport(anchor_date=anchor, base_currency=BASE_CURRENCY, windows=windows)
+    return CashFlowPressureReport(
+        anchor_date=anchor,
+        base_currency=BASE_CURRENCY,
+        windows=windows,
+        daily_net_cny=daily_net_window(db, anchor, 30),
+    )
+
+
+def daily_net_window(
+    db: Session,
+    anchor_date: Optional[DateType],
+    days: int = 30,
+) -> List[CashFlowDailyNetRow]:
+    anchor = anchor_date or DateType.today()
+    rows = [
+        CashFlowDailyNetRow(
+            date=anchor + timedelta(days=offset),
+            inflow_cny=Decimal("0"),
+            outflow_cny=Decimal("0"),
+            net_cny=Decimal("0"),
+        )
+        for offset in range(days)
+    ]
+    rows_by_date = {row.date: row for row in rows}
+    statement = select(CashFlowItem).where(
+        CashFlowItem.status.in_(ACTIVE_CASH_FLOW_STATUSES),
+        CashFlowItem.expected_date >= anchor,
+        CashFlowItem.expected_date < anchor + timedelta(days=days),
+    )
+    for item in db.execute(statement).scalars():
+        row = rows_by_date.get(item.expected_date)
+        if row is None:
+            continue
+        amount = quantize_money(item.converted_cny_amount or Decimal("0"))
+        if item.direction == "inflow":
+            row.inflow_cny = quantize_money(row.inflow_cny + amount)
+        elif item.direction in {"outflow", "transfer"}:
+            row.outflow_cny = quantize_money(row.outflow_cny + amount)
+        row.net_cny = quantize_money(row.inflow_cny - row.outflow_cny)
+    return rows
 
 
 def credit_liability_trend(

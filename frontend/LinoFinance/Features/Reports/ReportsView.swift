@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import Charts
 #endif
 import SwiftUI
 
@@ -79,6 +80,10 @@ private func reportGridColumns(minimum: CGFloat = 150) -> [GridItem] {
 #endif
 }
 
+private func decimalDouble(_ value: DecimalValue) -> Double {
+    NSDecimalNumber(decimal: value.value).doubleValue
+}
+
 private struct MonthlyReportPanel: View {
     let report: MonthlyOverviewReportDTO
 
@@ -104,6 +109,9 @@ private struct CategoryReportPanel: View {
     }
 
     var body: some View {
+#if os(macOS)
+        MacCategoryChartPanel(report: report)
+#else
         FinancePanel {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
@@ -137,6 +145,7 @@ private struct CategoryReportPanel: View {
                 }
             }
         }
+#endif
     }
 }
 
@@ -144,6 +153,9 @@ private struct CashFlowPressurePanel: View {
     let report: CashFlowPressureReportDTO
 
     var body: some View {
+#if os(macOS)
+        MacCashFlowPressureChartPanel(report: report)
+#else
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 12)], spacing: 12) {
             ForEach(report.windows) { window in
                 FinancePanel {
@@ -158,6 +170,7 @@ private struct CashFlowPressurePanel: View {
                 }
             }
         }
+#endif
     }
 }
 
@@ -165,6 +178,9 @@ private struct CreditReportPanel: View {
     let report: CreditLiabilityTrendReportDTO
 
     var body: some View {
+#if os(macOS)
+        MacCreditChartPanel(report: report)
+#else
         FinancePanel {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
@@ -198,6 +214,7 @@ private struct CreditReportPanel: View {
                 }
             }
         }
+#endif
     }
 
     private func creditTrendSummary(_ row: CreditLiabilityTrendRowDTO) -> some View {
@@ -217,6 +234,9 @@ private struct ReimbursementReportPanel: View {
     let report: ReimbursementReportDTO
 
     var body: some View {
+#if os(macOS)
+        MacReimbursementChartPanel(report: report)
+#else
         VStack(alignment: .leading, spacing: 16) {
             LazyVGrid(columns: reportGridColumns(), spacing: 12) {
                 ToolbarPill(title: "报销前支出", value: FinanceFormatter.money(report.preReimbursementExpenseCny), tint: FinanceTokens.State.expense)
@@ -252,8 +272,183 @@ private struct ReimbursementReportPanel: View {
                 }
             }
         }
+#endif
     }
 }
+
+#if os(macOS)
+private struct MacCategoryChartPanel: View {
+    let report: CategoryExpenseReportDTO
+
+    var body: some View {
+        FinancePanel {
+            VStack(alignment: .leading, spacing: 16) {
+                ReportPanelTitle(title: "分类支出", value: FinanceFormatter.money(report.totalExpenseCny))
+                if report.rows.isEmpty {
+                    EmptyState(title: "暂无分类支出", message: "创建支出记录后会显示分类分布。", systemImage: "chart.pie")
+                } else {
+                    Chart(report.rows) { row in
+                        SectorMark(
+                            angle: .value("支出", decimalDouble(row.expenseCny)),
+                            innerRadius: .ratio(0.58),
+                            angularInset: 1.4
+                        )
+                        .cornerRadius(4)
+                        .foregroundStyle(by: .value("分类", row.categoryName))
+                    }
+                    .chartLegend(position: .trailing, alignment: .center)
+                    .frame(height: 320)
+                }
+            }
+        }
+    }
+}
+
+private struct MacCashFlowPressureChartPanel: View {
+    let report: CashFlowPressureReportDTO
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            FinancePanel {
+                VStack(alignment: .leading, spacing: 16) {
+                    ReportPanelTitle(title: "现金流压力", value: "未来窗口")
+                    Chart {
+                        ForEach(report.windows) { window in
+                            BarMark(
+                                x: .value("窗口", "\(window.days) 天"),
+                                y: .value("预计进账", decimalDouble(window.expectedInflowCny))
+                            )
+                            .foregroundStyle(FinanceTokens.State.income)
+                            BarMark(
+                                x: .value("窗口", "\(window.days) 天"),
+                                y: .value("预计出账", decimalDouble(window.expectedOutflowCny))
+                            )
+                            .foregroundStyle(FinanceTokens.State.expense)
+                            LineMark(
+                                x: .value("窗口", "\(window.days) 天"),
+                                y: .value("净额", decimalDouble(window.netCny))
+                            )
+                            .interpolationMethod(.catmullRom)
+                            .foregroundStyle(FinanceTokens.Brand.primary)
+                        }
+                    }
+                    .frame(height: 280)
+                }
+            }
+
+            FinancePanel {
+                VStack(alignment: .leading, spacing: 12) {
+                    ReportPanelTitle(title: "30 天日级净额", value: "")
+                    let dailyRows = report.dailyNetCny ?? []
+                    if dailyRows.isEmpty {
+                        EmptyState(title: "暂无日级窗口", message: "后端缺少 daily_net_cny 时会自动降级为空图。", systemImage: "waveform.path.ecg")
+                    } else {
+                        Chart(dailyRows) { row in
+                            BarMark(
+                                x: .value("日期", row.date),
+                                y: .value("净额", decimalDouble(row.netCny))
+                            )
+                            .foregroundStyle(decimalDouble(row.netCny) < 0 ? FinanceTokens.State.expense : FinanceTokens.State.income)
+                        }
+                        .chartXAxis {
+                            AxisMarks(values: .automatic(desiredCount: 6))
+                        }
+                        .frame(height: 180)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct MacCreditChartPanel: View {
+    let report: CreditLiabilityTrendReportDTO
+
+    var body: some View {
+        FinancePanel {
+            VStack(alignment: .leading, spacing: 16) {
+                ReportPanelTitle(title: "信用负债趋势", value: FinanceFormatter.money(report.totalRemainingCny))
+                if report.rows.isEmpty {
+                    EmptyState(title: "暂无信用账单", message: "创建账单周期后会显示负债趋势。", systemImage: "creditcard")
+                } else {
+                    Chart {
+                        RuleMark(y: .value("零线", 0))
+                            .foregroundStyle(FinanceTokens.Stroke.hairline)
+                        ForEach(report.rows) { row in
+                            BarMark(
+                                x: .value("账户", row.accountName),
+                                y: .value("剩余负债", decimalDouble(row.remainingCny))
+                            )
+                            .foregroundStyle(by: .value("状态", row.status.financeStatusTitle))
+                            .annotation(position: .top) {
+                                Text(FinanceFormatter.money(row.remainingCny))
+                                    .font(.caption2.monospacedDigit())
+                                    .foregroundStyle(FinanceTokens.Text.secondary)
+                            }
+                        }
+                    }
+                    .frame(height: 300)
+                }
+            }
+        }
+    }
+}
+
+private struct MacReimbursementChartPanel: View {
+    let report: ReimbursementReportDTO
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            LazyVGrid(columns: reportGridColumns(), spacing: 12) {
+                ToolbarPill(title: "报销前支出", value: FinanceFormatter.money(report.preReimbursementExpenseCny), tint: FinanceTokens.State.expense)
+                ToolbarPill(title: "预计抵扣", value: FinanceFormatter.money(report.expectedOffsetCny), tint: FinanceTokens.State.ai)
+                ToolbarPill(title: "个人净支出", value: FinanceFormatter.money(report.personalNetExpenseCny), tint: FinanceTokens.Brand.primary)
+            }
+            FinancePanel {
+                VStack(alignment: .leading, spacing: 16) {
+                    ReportPanelTitle(title: "报销状态", value: FinanceFormatter.money(report.selectedNetExpenseCny))
+                    if report.statusBreakdown.isEmpty {
+                        EmptyState(title: "暂无报销数据", message: "标记报销后会显示状态拆分。", systemImage: "arrow.uturn.left.circle")
+                    } else {
+                        Chart(report.statusBreakdown) { row in
+                            BarMark(
+                                x: .value("状态", row.status.financeStatusTitle),
+                                y: .value("金额", decimalDouble(row.amountCny))
+                            )
+                            .foregroundStyle(FinanceTokens.State.ai)
+                            .annotation(position: .top) {
+                                Text("\(row.claimCount) 笔")
+                                    .font(.caption2.monospacedDigit())
+                                    .foregroundStyle(FinanceTokens.Text.secondary)
+                            }
+                        }
+                        .frame(height: 260)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct ReportPanelTitle: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(FinanceTypography.headline)
+                .foregroundStyle(FinanceTokens.Text.primary)
+            Spacer()
+            if !value.isEmpty {
+                Text(value)
+                    .font(FinanceTypography.bodyMono)
+                    .foregroundStyle(FinanceTokens.Text.secondary)
+            }
+        }
+    }
+}
+#endif
 
 private struct SubscriptionReportPanel: View {
     let report: SubscriptionReportDTO

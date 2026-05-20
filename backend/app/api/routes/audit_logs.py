@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ router = APIRouter()
 def list_audit_logs(
     target_type: Optional[str] = None,
     target_id: Optional[str] = None,
+    limit: Optional[int] = Query(default=None, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> List[AuditLogRead]:
     statement = select(AuditLog)
@@ -22,5 +23,8 @@ def list_audit_logs(
         statement = statement.where(AuditLog.target_type == target_type)
     if target_id is not None:
         statement = statement.where(AuditLog.target_id == target_id)
-    logs = db.execute(statement.order_by(AuditLog.created_at.desc())).scalars()
+    statement = statement.order_by(AuditLog.created_at.desc())
+    if limit is not None:
+        statement = statement.limit(limit)
+    logs = db.execute(statement).scalars()
     return [AuditLogRead.model_validate(log) for log in logs]

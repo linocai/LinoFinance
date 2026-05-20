@@ -258,9 +258,10 @@ final class AIWorkspaceViewModel {
         }
     }
 
-    func createPlan(sourceText: String) async throws {
-        _ = try await repository.createAIPlan(AIPlanCreateRequest(sourceText: sourceText))
+    func createPlan(sourceText: String) async throws -> AIPlanDTO {
+        let plan = try await repository.createAIPlan(AIPlanCreateRequest(sourceText: sourceText))
         try await refresh()
+        return plan
     }
 
     func approve(_ id: String) async throws {

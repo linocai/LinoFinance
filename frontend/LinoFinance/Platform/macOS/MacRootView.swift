@@ -109,6 +109,7 @@ struct MacRootView: View {
 
 private struct SidebarView: View {
     @Bindable var environment: AppEnvironment
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         List(selection: $environment.selectedModule) {
@@ -116,14 +117,29 @@ private struct SidebarView: View {
                 ForEach([FinanceModule.dashboard, .accounts, .entries, .cashFlow, .reimbursements, .credit, .reports, .ai]) { module in
                     Label(module.title, systemImage: module.symbolName)
                         .tag(module)
+                        .contextMenu {
+                            Button("在新窗口中打开") {
+                                openWindow(id: "module", value: module)
+                            }
+                        }
                 }
             }
 
             Section {
                 Label(FinanceModule.notifications.title, systemImage: FinanceModule.notifications.symbolName)
                     .tag(FinanceModule.notifications)
+                    .contextMenu {
+                        Button("在新窗口中打开") {
+                            openWindow(id: "module", value: FinanceModule.notifications)
+                        }
+                    }
                 Label(FinanceModule.settings.title, systemImage: FinanceModule.settings.symbolName)
                     .tag(FinanceModule.settings)
+                    .contextMenu {
+                        Button("在新窗口中打开") {
+                            openWindow(id: "module", value: FinanceModule.settings)
+                        }
+                    }
             }
         }
         .navigationTitle("LinoF")

@@ -111,7 +111,7 @@ struct AIWorkspaceView: View {
 
     private func createPlan() async {
         do {
-            try await environment.aiViewModel.createPlan(sourceText: prompt.trimmingCharacters(in: .whitespacesAndNewlines))
+            _ = try await environment.aiViewModel.createPlan(sourceText: prompt.trimmingCharacters(in: .whitespacesAndNewlines))
             prompt = ""
         } catch {
             environment.aiViewModel.errorMessage = error.localizedDescription

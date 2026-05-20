@@ -16,10 +16,24 @@ struct DashboardView: View {
                 PageHeader(title: "总览", subtitle: "API 驱动的财务控制台")
 
                 if let summary = environment.dashboardViewModel.summary {
+                    let future30Net = environment.reportsViewModel.bundle?.cashFlow.windows.first { $0.days == 30 }?.netCny
+#if os(iOS)
+                    HeroDashboardHeader(
+                        summary: summary,
+                        future30Net: future30Net,
+                        dailyNet: environment.reportsViewModel.bundle?.cashFlow.dailyNetCny ?? []
+                    )
+                    DashboardFocusStrip(
+                        todayCount: todayEntryCount,
+                        todoCount: pendingAIPlans.count + summary.draftEntryCount,
+                        anomalyCount: anomalyCount
+                    )
+#else
                     SummaryGrid(
                         summary: summary,
-                        future30Net: environment.reportsViewModel.bundle?.cashFlow.windows.first { $0.days == 30 }?.netCny
+                        future30Net: future30Net
                     )
+#endif
 
                     if let bundle = environment.reportsViewModel.bundle {
                         LazyVGrid(columns: dashboardCardColumns, spacing: 16) {
@@ -71,7 +85,123 @@ struct DashboardView: View {
         [GridItem(.adaptive(minimum: 300), spacing: 16)]
 #endif
     }
+
+    private var todayEntryCount: Int {
+        environment.entriesViewModel.entries.filter { Calendar.current.isDateInToday($0.date) }.count
+    }
+
+    private var anomalyCount: Int {
+        let failedPlans = environment.aiViewModel.plans.filter { $0.status == "failed" }.count
+        let overdueCredit = environment.creditViewModel.cycles.filter {
+            $0.dueDate < Date() && $0.status != "paid" && $0.status != "closed"
+        }.count
+        return failedPlans + overdueCredit
+    }
 }
+
+#if os(iOS)
+private struct HeroDashboardHeader: View {
+    let summary: DashboardSummaryDTO
+    let future30Net: DecimalValue?
+    let dailyNet: [CashFlowDailyNetRowDTO]
+
+    private var trendValues: [Double] {
+        dailyNet.map { NSDecimalNumber(decimal: $0.netCny.value).doubleValue }
+    }
+
+    var body: some View {
+        FinancePanel {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("净资产")
+                            .font(FinanceTypography.caption)
+                            .foregroundStyle(FinanceTokens.Text.secondary)
+                        HeroNumber(
+                            value: FinanceFormatter.money(summary.netWorthCny),
+                            tint: FinanceTokens.Brand.primary
+                        )
+                    }
+                    Spacer()
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(FinanceTokens.Brand.primary)
+                }
+
+                Sparkline(values: trendValues, tint: FinanceTokens.Brand.primary)
+                    .frame(height: 54)
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 10)], spacing: 10) {
+                    MiniMetric(title: "余额", value: FinanceFormatter.money(summary.balanceTotalCny), tint: FinanceTokens.State.income)
+                    MiniMetric(title: "信用负债", value: FinanceFormatter.money(summary.creditLiabilityTotalCny), tint: FinanceTokens.State.credit)
+                    MiniMetric(title: "30 天净额", value: future30Net.map { FinanceFormatter.money($0) } ?? "暂无", tint: (future30Net?.value ?? 0) < 0 ? FinanceTokens.State.expense : FinanceTokens.State.income)
+                }
+            }
+        }
+    }
+}
+
+private struct MiniMetric: View {
+    let title: String
+    let value: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(FinanceTokens.Text.secondary)
+            PrivacyAmount(
+                value: value,
+                font: .caption.weight(.semibold).monospacedDigit(),
+                tint: tint
+            )
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(FinanceTokens.Surface.glassStrong)
+        .clipShape(RoundedRectangle(cornerRadius: FinanceTokens.Radius.sm))
+    }
+}
+
+private struct DashboardFocusStrip: View {
+    let todayCount: Int
+    let todoCount: Int
+    let anomalyCount: Int
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 10)], spacing: 10) {
+            FocusTile(title: "今日", value: "\(todayCount)", systemImage: "calendar")
+            FocusTile(title: "待办", value: "\(todoCount)", systemImage: "checklist")
+            FocusTile(title: "异常", value: "\(anomalyCount)", systemImage: "exclamationmark.triangle")
+        }
+    }
+}
+
+private struct FocusTile: View {
+    let title: String
+    let value: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .foregroundStyle(FinanceTokens.Brand.primary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption2)
+                    .foregroundStyle(FinanceTokens.Text.secondary)
+                Text(value)
+                    .font(.headline.monospacedDigit())
+                    .foregroundStyle(FinanceTokens.Text.primary)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassBackground(radius: FinanceTokens.Radius.md)
+    }
+}
+#endif
 
 private struct SummaryGrid: View {
     let summary: DashboardSummaryDTO

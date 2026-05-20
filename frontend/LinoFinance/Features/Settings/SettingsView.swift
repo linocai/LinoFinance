@@ -7,6 +7,9 @@ struct SettingsView: View {
     @State private var usdRate = "6.8"
     @State private var errorMessage: String?
     @State private var configMessage: String?
+#if os(macOS)
+    @AppStorage("linofinance.showMenuBarExtra") private var showMenuBarExtra = true
+#endif
 
     var body: some View {
         #if os(iOS)
@@ -87,6 +90,17 @@ struct SettingsView: View {
                 }
                 Toggle("使用大数字样式", isOn: $environment.useHeroNumbers)
                 Toggle("隐藏金额", isOn: $environment.privacyMaskEnabled)
+            }
+
+            Section("Widget & 通知") {
+                Toggle("Widget 自动更新", isOn: $environment.widgetAutoUpdateEnabled)
+                Stepper(value: $environment.widgetRefreshMinutes, in: 5...120, step: 5) {
+                    DetailLine(title: "刷新间隔", value: "\(environment.widgetRefreshMinutes) 分钟")
+                }
+                Stepper(value: $environment.liveActivityReminderDays, in: 1...30) {
+                    DetailLine(title: "Live Activity 提前", value: "\(environment.liveActivityReminderDays) 天")
+                }
+                Toggle("Dynamic Island AI 计划提示", isOn: $environment.dynamicIslandAIEnabled)
             }
 
             Section("AI 配置") {
@@ -223,6 +237,24 @@ struct SettingsView: View {
                         .pickerStyle(.segmented)
                         Toggle("使用大数字样式", isOn: $environment.useHeroNumbers)
                         Toggle("隐藏金额", isOn: $environment.privacyMaskEnabled)
+                    }
+                }
+
+                FinancePanel {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Widget & 通知")
+                            .font(FinanceTypography.headline)
+                        Toggle("Widget 自动更新", isOn: $environment.widgetAutoUpdateEnabled)
+                        Stepper(value: $environment.widgetRefreshMinutes, in: 5...120, step: 5) {
+                            DetailLine(title: "刷新间隔", value: "\(environment.widgetRefreshMinutes) 分钟")
+                        }
+                        Stepper(value: $environment.liveActivityReminderDays, in: 1...30) {
+                            DetailLine(title: "Live Activity 提前", value: "\(environment.liveActivityReminderDays) 天")
+                        }
+                        Toggle("Dynamic Island AI 计划提示", isOn: $environment.dynamicIslandAIEnabled)
+#if os(macOS)
+                        Toggle("显示菜单栏入口", isOn: $showMenuBarExtra)
+#endif
                     }
                 }
 

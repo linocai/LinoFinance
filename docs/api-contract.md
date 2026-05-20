@@ -165,6 +165,7 @@ Response:
 - AI provider settings are read from `.env` via `LINOFINANCE_AI_*` variables.
 - Secrets are not returned by `GET /ai/config`; it only reports whether a key/base URL exists.
 - AI plans are stored as structured actions before execution.
+- `GET /ai/plans` accepts additive filters `related_type` and `related_to`, matching executed action targets without changing the existing `status` filter.
 - Supported action protocol values include `CreateEntry`, `CreateCashFlowItem`, `MarkReimbursable`, `CreateInstallmentPlan`, `RecordCreditRepayment`, `GenerateNotificationRule`, and `VoidEntry`.
 - Low-risk `CreateEntry` actions are complete CNY actions with amount less than or equal to `1000 CNY`; they become `auto_confirm_candidate`.
 - Medium-risk actions require approval before execution.
@@ -182,6 +183,7 @@ Response:
 - Monthly overview includes income, expense, reimbursement offsets, future cash-flow pressure, and active credit liability in CNY.
 - Category expense reports group confirmed expense category lines and include original-currency totals plus CNY totals.
 - Cash-flow pressure reports summarize active `expected`, `confirmed`, and `partial` cash flows for 7/30/90 day windows.
+- Cash-flow pressure responses include additive `daily_net_cny` rows for the next 30 days: `{date, inflow_cny, outflow_cny, net_cny}`.
 - Transfer-direction future cash flows, such as credit repayment and installments, count as outflow pressure.
 - Credit liability trend reports summarize statement cycles by statement date and include remaining original-currency and CNY amounts.
 - Reimbursement reports support `pre_reimbursement`, `expected_net`, `approved_net`, `received_net`, and `personal_net` views.
@@ -189,6 +191,7 @@ Response:
 - CSV export is V1-only CSV; each dataset endpoint returns `text/csv`.
 - Export datasets include core ledger tables, cash-flow/reimbursement/credit/installment/subscription tables, AI/action/audit tables, and notification rules.
 - CSV amount rows preserve original amount/currency fields and CNY conversion columns where the underlying table has them.
+- `GET /audit-logs` accepts optional `limit` in addition to `target_type` and `target_id`; this is used by inspector surfaces for small recent-audit cards.
 
 ## Domain Rules For API Design
 

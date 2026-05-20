@@ -5,6 +5,8 @@ struct iOSRootView: View {
     @Bindable var environment: AppEnvironment
     @State private var selectedTab: iOSTab = .dashboard
     @State private var morePath: [FinanceModule] = []
+    @State private var isShowingQuickEntry = false
+    @State private var quickEntryIntent: QuickEntryIntent = .expense
 
     var body: some View {
         Group {
@@ -36,29 +38,39 @@ struct iOSRootView: View {
     }
 
     private var mainTabs: some View {
-        TabView(selection: $selectedTab) {
-            moduleStack(.dashboard)
-                .tabItem { Label("总览", systemImage: FinanceModule.dashboard.symbolName) }
-                .tag(iOSTab.dashboard)
+        ZStack {
+            TabView(selection: $selectedTab) {
+                moduleStack(.dashboard)
+                    .tabItem { Label("总览", systemImage: FinanceModule.dashboard.symbolName) }
+                    .tag(iOSTab.dashboard)
 
-            moduleStack(.entries)
-                .tabItem { Label("记账", systemImage: FinanceModule.entries.symbolName) }
-                .tag(iOSTab.entries)
+                moduleStack(.entries)
+                    .tabItem { Label("记账", systemImage: FinanceModule.entries.symbolName) }
+                    .tag(iOSTab.entries)
 
-            moduleStack(.cashFlow)
-                .tabItem { Label("现金流", systemImage: FinanceModule.cashFlow.symbolName) }
-                .tag(iOSTab.cashFlow)
+                moduleStack(.cashFlow)
+                    .tabItem { Label("现金流", systemImage: FinanceModule.cashFlow.symbolName) }
+                    .tag(iOSTab.cashFlow)
 
-            moduleStack(.credit)
-                .tabItem { Label("信用", systemImage: FinanceModule.credit.symbolName) }
-                .tag(iOSTab.credit)
+                moduleStack(.credit)
+                    .tabItem { Label("信用", systemImage: FinanceModule.credit.symbolName) }
+                    .tag(iOSTab.credit)
 
-            moreStack
-                .tabItem { Label("更多", systemImage: "ellipsis.circle.fill") }
-                .tag(iOSTab.more)
+                moreStack
+                    .tabItem { Label("更多", systemImage: "ellipsis.circle.fill") }
+                    .tag(iOSTab.more)
+            }
+            .toolbar(.hidden, for: .tabBar)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(FinanceTokens.Surface.base.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom) {
+            FloatingTabBar(
+                selection: $selectedTab,
+                quickEntry: openQuickEntry,
+                reimbursement: environment.beginNewReimbursement
+            )
+        }
         .sheet(item: detailSelection) { selection in
             NavigationStack {
                 ScrollView {
@@ -77,8 +89,10 @@ struct iOSRootView: View {
             }
             .presentationDetents([.medium, .large])
         }
-        .toolbarBackground(FinanceTokens.Surface.raised, for: .tabBar)
-        .toolbarBackground(.visible, for: .tabBar)
+        .sheet(isPresented: $isShowingQuickEntry) {
+            QuickEntrySheet(environment: environment, initialIntent: quickEntryIntent)
+                .presentationDetents([.large])
+        }
         .modifier(NewObjectSheets(environment: environment))
     }
 
@@ -104,6 +118,11 @@ struct iOSRootView: View {
     private func isAuthError(_ message: String?) -> Bool {
         guard let message else { return false }
         return message.contains("API 401") || message.localizedCaseInsensitiveContains("invalid API token")
+    }
+
+    private func openQuickEntry(_ intent: QuickEntryIntent) {
+        quickEntryIntent = intent
+        isShowingQuickEntry = true
     }
 
     private var detailSelection: Binding<InspectorSelection?> {
@@ -225,7 +244,7 @@ struct iOSRootView: View {
     }
 }
 
-private enum iOSTab: Hashable {
+enum iOSTab: Hashable {
     case dashboard
     case entries
     case cashFlow

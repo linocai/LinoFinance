@@ -237,12 +237,36 @@ struct LinoAPIClient {
         return try await sendData(request)
     }
 
+    func search(query: String, limit: Int = 20, types: [String] = []) async throws -> SearchResponseDTO {
+        var queryItems = [
+            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "limit", value: "\(limit)")
+        ]
+        if !types.isEmpty {
+            queryItems.append(URLQueryItem(name: "types", value: types.joined(separator: ",")))
+        }
+        return try await get("search", queryItems: queryItems)
+    }
+
     func aiConfig() async throws -> AIConfigDTO {
         try await get("ai/config")
     }
 
-    func listAIPlans(status: String? = nil) async throws -> [AIPlanDTO] {
-        let query = status.map { [URLQueryItem(name: "status", value: $0)] } ?? []
+    func listAIPlans(
+        status: String? = nil,
+        relatedType: String? = nil,
+        relatedTo: String? = nil
+    ) async throws -> [AIPlanDTO] {
+        var query: [URLQueryItem] = []
+        if let status {
+            query.append(URLQueryItem(name: "status", value: status))
+        }
+        if let relatedType {
+            query.append(URLQueryItem(name: "related_type", value: relatedType))
+        }
+        if let relatedTo {
+            query.append(URLQueryItem(name: "related_to", value: relatedTo))
+        }
         return try await get("ai/plans", queryItems: query)
     }
 
@@ -293,13 +317,20 @@ struct LinoAPIClient {
         try await post("notification-rules/\(id)/cancel")
     }
 
-    func listAuditLogs(targetType: String? = nil, targetID: String? = nil) async throws -> [AuditLogDTO] {
+    func listAuditLogs(
+        targetType: String? = nil,
+        targetID: String? = nil,
+        limit: Int? = nil
+    ) async throws -> [AuditLogDTO] {
         var query: [URLQueryItem] = []
         if let targetType {
             query.append(URLQueryItem(name: "target_type", value: targetType))
         }
         if let targetID {
             query.append(URLQueryItem(name: "target_id", value: targetID))
+        }
+        if let limit {
+            query.append(URLQueryItem(name: "limit", value: "\(limit)"))
         }
         return try await get("audit-logs", queryItems: query)
     }

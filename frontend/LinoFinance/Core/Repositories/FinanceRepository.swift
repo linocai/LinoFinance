@@ -170,12 +170,24 @@ struct FinanceRepository {
         try await apiClient.downloadCSV(dataset: dataset)
     }
 
+    func search(query: String, limit: Int = 20, types: [String] = []) async throws -> SearchResponseDTO {
+        try await apiClient.search(query: query, limit: limit, types: types)
+    }
+
     func aiConfig() async throws -> AIConfigDTO {
         try await apiClient.aiConfig()
     }
 
-    func aiPlans() async throws -> [AIPlanDTO] {
-        try await apiClient.listAIPlans()
+    func aiPlans(
+        status: String? = nil,
+        relatedType: String? = nil,
+        relatedTo: String? = nil
+    ) async throws -> [AIPlanDTO] {
+        try await apiClient.listAIPlans(
+            status: status,
+            relatedType: relatedType,
+            relatedTo: relatedTo
+        )
     }
 
     func createAIPlan(_ request: AIPlanCreateRequest) async throws -> AIPlanDTO {
@@ -218,8 +230,12 @@ struct FinanceRepository {
         try await apiClient.cancelNotificationRule(id)
     }
 
-    func auditLogs(targetType: String? = nil, targetID: String? = nil) async throws -> [AuditLogDTO] {
-        try await apiClient.listAuditLogs(targetType: targetType, targetID: targetID)
+    func auditLogs(
+        targetType: String? = nil,
+        targetID: String? = nil,
+        limit: Int? = nil
+    ) async throws -> [AuditLogDTO] {
+        try await apiClient.listAuditLogs(targetType: targetType, targetID: targetID, limit: limit)
     }
 }
 
