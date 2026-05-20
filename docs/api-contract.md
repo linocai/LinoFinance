@@ -198,3 +198,13 @@ Response:
 - Draft records can be incomplete and must not affect balances or official reports.
 - Credit card repayment is a transfer, not spending.
 - AI-generated mutations must be represented as structured actions before execution.
+
+## V1.1 Foundation Endpoints
+
+- `GET /search?q=&limit=&types=` returns `{query, limit, items}` with cross-module hits for accounts, entries, cash-flow items, reimbursement claims, AI plans, and notification rules. `types` is a comma-separated filter.
+- `POST /attachments` accepts multipart fields `owner_type`, `owner_id`, optional `uploaded_by`/`note`, and `file`. Supported owners are `entry_category_line`, `reimbursement_claim`, and `ai_action`. Files are stored under `LINOFINANCE_STORAGE_ROOT` with a relative `storage_key`, sha256 checksum, 10 MB per file, and 25 MB total for reimbursement owners.
+- `GET /attachments/{id}` streams the stored file; `DELETE /attachments/{id}` soft-deletes metadata and removes the local file.
+- `GET /reconciliation/accounts` returns expected amount, current amount, delta, and `needs_adjustment` per account using movements, credit cycles, and reconciliation adjustments.
+- `POST /reconciliation/adjustments` creates an account adjustment against an observed `actual_amount`, updates the account's current balance/liability, and returns the adjustment row.
+- `GET /ai/memos?period=YYYY-MM` lists non-archived AI memo records. `POST /ai/memos/generate` creates a memo from report aggregates and the configured AI provider. `PATCH /ai/memos/{id}` updates summary/status. `DELETE /ai/memos/{id}` archives the memo.
+- `POST /push/devices` idempotently registers an iOS/macOS APNs device by `(platform, apns_token)`. `DELETE /push/devices/{id}` disables the device. Actual APNs delivery is reserved for a later phase.

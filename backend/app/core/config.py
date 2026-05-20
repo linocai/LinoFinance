@@ -24,12 +24,21 @@ class Settings(BaseSettings):
     public_docs_enabled: bool = True
     log_level: str = "INFO"
     backup_dir: str = ".backups"
+    storage_root: str = ".local/storage"
+    attachment_file_max_bytes: int = 10 * 1024 * 1024
+    attachment_max_bytes: int = 25 * 1024 * 1024
+    search_result_limit: int = Field(default=50, ge=1, le=200)
+    ai_memo_max_tokens: int = Field(default=2000, ge=256)
     ai_provider: str = "openai_compatible"
     ai_api_base_url: Optional[str] = None
     ai_api_key: Optional[str] = None
     ai_model: Optional[str] = None
     ai_request_timeout_seconds: int = 30
     ai_auto_confirm_limit_cny: Decimal = Decimal("1000")
+    apns_topic: Optional[str] = None
+    apns_key_id: Optional[str] = None
+    apns_team_id: Optional[str] = None
+    apns_key_path: Optional[str] = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

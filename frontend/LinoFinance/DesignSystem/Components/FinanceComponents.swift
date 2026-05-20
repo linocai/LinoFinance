@@ -32,20 +32,21 @@ struct MoneyText: View {
 #endif
 
     private var primaryAmount: some View {
-        Text(FinanceFormatter.money(amount, currency: currency))
-            .font(prominence.monospacedDigit())
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
+        PrivacyAmount(
+            value: FinanceFormatter.money(amount, currency: currency),
+            font: prominence.monospacedDigit()
+        )
     }
 
     @ViewBuilder
     private func convertedAmount(prefix: String) -> some View {
         if let convertedCNY, currency != .cny {
-            Text("\(prefix)\(FinanceFormatter.money(convertedCNY, currency: .cny, approximate: true))")
-                .font(.subheadline.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+            PrivacyAmount(
+                value: "\(prefix)\(FinanceFormatter.money(convertedCNY, currency: .cny, approximate: true))",
+                font: .subheadline.monospacedDigit(),
+                tint: FinanceTokens.Text.secondary,
+                alignment: .trailing
+            )
         }
     }
 }
@@ -68,29 +69,32 @@ struct StatusTag: View {
 
     var body: some View {
         Text(title)
-            .font(.caption.weight(.medium))
+            .font(FinanceTypography.caption)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .foregroundStyle(foreground)
-            .background(Capsule().fill(foreground.opacity(0.12)))
+            .background(Capsule().fill(foreground.opacity(0.14)))
+            .overlay {
+                Capsule().stroke(foreground.opacity(0.18), lineWidth: 1)
+            }
     }
 
     private var foreground: Color {
         switch style {
         case .draft, .expected:
-            return FinanceColor.pending
+            return FinanceTokens.State.pending
         case .confirmed, .settled:
-            return FinanceColor.income
+            return FinanceTokens.State.income
         case .cancelled:
-            return .secondary
+            return FinanceTokens.Text.tertiary
         case .expense:
-            return FinanceColor.expense
+            return FinanceTokens.State.expense
         case .income:
-            return FinanceColor.income
+            return FinanceTokens.State.income
         case .warning:
-            return .orange
+            return FinanceTokens.State.warning
         case .ai:
-            return FinanceColor.ai
+            return FinanceTokens.State.ai
         }
     }
 }
@@ -127,31 +131,33 @@ struct KPIStat: View {
     let title: String
     let value: String
     var systemImage: String
-    var tint: Color = FinanceColor.brand
+    var tint: Color = FinanceTokens.Brand.primary
+    @AppStorage("linofinance.useHeroNumbers") private var useHeroNumbers = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: systemImage)
+                    .font(.headline)
                     .foregroundStyle(tint)
                 Spacer()
             }
-            Text(value)
-                .font(.title2.weight(.semibold).monospacedDigit())
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+            if useHeroNumbers {
+                HeroNumber(value: value, tint: FinanceTokens.Text.primary)
+            } else {
+                PrivacyAmount(
+                    value: value,
+                    font: .title2.weight(.semibold).monospacedDigit(),
+                    tint: FinanceTokens.Text.primary
+                )
+            }
             Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(FinanceTypography.caption)
+                .foregroundStyle(FinanceTokens.Text.secondary)
         }
-        .padding(14)
+        .padding(FinanceTokens.Spacing.panel)
         .frame(maxWidth: .infinity, alignment: .leading)
-#if os(iOS)
-        .background(Color(.secondarySystemGroupedBackground))
-#else
-        .background(.regularMaterial)
-#endif
-        .clipShape(RoundedRectangle(cornerRadius: FinanceSpacing.cornerRadius))
+        .glassBackground(radius: FinanceTokens.Radius.lg)
     }
 }
 
@@ -166,12 +172,13 @@ struct EmptyState: View {
         VStack(spacing: 12) {
             Image(systemName: systemImage)
                 .font(.system(size: 32, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(FinanceTokens.Text.tertiary)
             Text(title)
-                .font(.headline)
+                .font(FinanceTypography.headline)
+                .foregroundStyle(FinanceTokens.Text.primary)
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(FinanceTokens.Text.secondary)
                 .multilineTextAlignment(.center)
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
@@ -190,13 +197,10 @@ struct FinancePanel<Content: View>: View {
 
     var body: some View {
         content
-            .padding(FinanceSpacing.panel)
+            .padding(FinanceTokens.Spacing.panel)
 #if os(iOS)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemGroupedBackground))
-#else
-            .background(.regularMaterial)
 #endif
-            .clipShape(RoundedRectangle(cornerRadius: FinanceSpacing.cornerRadius))
+            .glassBackground(radius: FinanceTokens.Radius.lg)
     }
 }

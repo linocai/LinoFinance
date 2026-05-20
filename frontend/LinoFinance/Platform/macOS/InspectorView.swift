@@ -11,7 +11,7 @@ struct InspectorView: View {
                 .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(.regularMaterial)
+        .background(FinanceTokens.Surface.glass)
     }
 }
 #endif

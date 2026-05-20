@@ -1,5 +1,5 @@
-import Foundation
 import Observation
+import SwiftUI
 
 @MainActor
 @Observable
@@ -31,6 +31,27 @@ final class AppEnvironment {
     var displayCurrency: CurrencyCode = .cny
     var dateRange: DateRangeChoice = .month
     var lastErrorMessage: String?
+    var appearance: FinanceAppearance = AppEnvironment.defaultAppearance() {
+        didSet {
+            UserDefaults.standard.set(appearance.rawValue, forKey: "linofinance.appearance")
+        }
+    }
+    var useHeroNumbers: Bool = AppEnvironment.defaultBool(
+        key: "linofinance.useHeroNumbers",
+        defaultValue: true
+    ) {
+        didSet {
+            UserDefaults.standard.set(useHeroNumbers, forKey: "linofinance.useHeroNumbers")
+        }
+    }
+    var privacyMaskEnabled: Bool = AppEnvironment.defaultBool(
+        key: "linofinance.privacyMaskEnabled",
+        defaultValue: false
+    ) {
+        didSet {
+            UserDefaults.standard.set(privacyMaskEnabled, forKey: "linofinance.privacyMaskEnabled")
+        }
+    }
     var isAPITokenConfigured: Bool { apiClient.authToken != nil }
 
     init(
@@ -194,6 +215,21 @@ final class AppEnvironment {
         }
         return nil
     }
+
+    nonisolated static func defaultAppearance() -> FinanceAppearance {
+        guard let value = UserDefaults.standard.string(forKey: "linofinance.appearance"),
+              let appearance = FinanceAppearance(rawValue: value) else {
+            return .system
+        }
+        return appearance
+    }
+
+    nonisolated static func defaultBool(key: String, defaultValue: Bool) -> Bool {
+        guard UserDefaults.standard.object(forKey: key) != nil else {
+            return defaultValue
+        }
+        return UserDefaults.standard.bool(forKey: key)
+    }
 }
 
 enum DateRangeChoice: String, CaseIterable, Identifiable {
@@ -208,6 +244,30 @@ enum DateRangeChoice: String, CaseIterable, Identifiable {
         case .week: "7 天"
         case .month: "本月"
         case .quarter: "90 天"
+        }
+    }
+}
+
+enum FinanceAppearance: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .system: "跟随系统"
+        case .light: "浅色"
+        case .dark: "深色"
+        }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
         }
     }
 }

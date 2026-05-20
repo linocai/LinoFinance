@@ -1,0 +1,1765 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LinoFinance v1.1 · 前端升级预览</title>
+<style>
+  :root {
+    /* === Liquid Glass / Apple 2026 语义令牌 === */
+    --bg-base: #f5f5f7;
+    --bg-deep: #ebebef;
+    --bg-canvas: linear-gradient(180deg, #f8f8fc 0%, #eef0f6 100%);
+    --surface-raised: rgba(255, 255, 255, 0.72);
+    --surface-glass: rgba(255, 255, 255, 0.55);
+    --surface-glass-strong: rgba(255, 255, 255, 0.82);
+    --surface-deep: rgba(245, 246, 250, 0.85);
+    --stroke-hairline: rgba(60, 60, 67, 0.10);
+    --stroke-soft: rgba(60, 60, 67, 0.06);
+    --shadow-soft: 0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(15,23,42,0.06);
+    --shadow-elevated: 0 1px 2px rgba(0,0,0,0.06), 0 18px 40px -8px rgba(15,23,42,0.18);
+    --shadow-floating: 0 2px 4px rgba(0,0,0,0.06), 0 30px 60px -16px rgba(15,23,42,0.28);
+
+    --text-primary: #0b0b0f;
+    --text-secondary: #6b6b73;
+    --text-tertiary: #98989f;
+
+    --brand: #0a84ff;
+    --brand-deep: #0066cc;
+    --brand-soft: rgba(10,132,255,0.12);
+
+    --cny: #d8324d;
+    --cny-soft: rgba(216,50,77,0.10);
+    --usd: #34a05a;
+    --usd-soft: rgba(52,160,90,0.10);
+
+    --income: #30b955;
+    --expense: #e0334a;
+    --credit: #ff8a1f;
+    --warning: #f5c518;
+    --ai: #a557f5;
+    --ai-soft: rgba(165,87,245,0.10);
+
+    --r-sm: 10px;
+    --r-md: 14px;
+    --r-lg: 22px;
+    --r-xl: 30px;
+    --r-pill: 999px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg-base: #0a0a0c;
+      --bg-deep: #050507;
+      --bg-canvas: radial-gradient(120% 100% at 20% 0%, #1b1d26 0%, #08080c 70%);
+      --surface-raised: rgba(28, 28, 34, 0.72);
+      --surface-glass: rgba(40, 40, 46, 0.55);
+      --surface-glass-strong: rgba(50, 50, 56, 0.82);
+      --surface-deep: rgba(20, 20, 24, 0.92);
+      --stroke-hairline: rgba(255,255,255,0.08);
+      --stroke-soft: rgba(255,255,255,0.04);
+      --shadow-soft: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+      --shadow-elevated: 0 1px 2px rgba(0,0,0,0.4), 0 18px 40px -8px rgba(0,0,0,0.55);
+      --shadow-floating: 0 2px 4px rgba(0,0,0,0.45), 0 30px 60px -16px rgba(0,0,0,0.7);
+      --text-primary: #f5f5f7;
+      --text-secondary: #a1a1a9;
+      --text-tertiary: #6d6d76;
+      --brand: #5dbbff;
+      --brand-deep: #0a84ff;
+      --brand-soft: rgba(93,187,255,0.18);
+      --cny: #ff6b7e;
+      --cny-soft: rgba(255,107,126,0.16);
+      --usd: #4ade80;
+      --usd-soft: rgba(74,222,128,0.14);
+    }
+  }
+
+  * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+  html, body { margin: 0; padding: 0; background: var(--bg-deep); color: var(--text-primary); }
+  body {
+    font-family: -apple-system, "SF Pro Text", "SF Pro Display", "PingFang SC", "Helvetica Neue", system-ui, sans-serif;
+    background: var(--bg-canvas);
+    min-height: 100vh;
+    font-feature-settings: "ss01" on, "cv11" on, "tnum" on;
+  }
+
+  /* ===== Page Layout ===== */
+  .page {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 56px 32px 96px;
+  }
+  .row { display: flex; gap: 24px; flex-wrap: wrap; }
+  .grow { flex: 1; min-width: 0; }
+  .mono { font-feature-settings: "tnum" on; font-variant-numeric: tabular-nums; }
+
+  /* ===== Hero ===== */
+  .hero {
+    position: relative;
+    padding: 64px 56px;
+    border-radius: var(--r-xl);
+    background:
+      radial-gradient(120% 140% at 0% 0%, rgba(10,132,255,0.20) 0%, rgba(10,132,255,0) 60%),
+      radial-gradient(80% 100% at 100% 0%, rgba(165,87,245,0.18) 0%, rgba(165,87,245,0) 55%),
+      radial-gradient(70% 80% at 80% 100%, rgba(255,138,31,0.15) 0%, rgba(255,138,31,0) 60%),
+      var(--surface-raised);
+    box-shadow: var(--shadow-elevated);
+    border: 0.5px solid var(--stroke-hairline);
+    overflow: hidden;
+    backdrop-filter: blur(40px) saturate(150%);
+    -webkit-backdrop-filter: blur(40px) saturate(150%);
+  }
+  .hero::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 24px 24px;
+    pointer-events: none;
+    mask-image: radial-gradient(80% 70% at 50% 30%, black 0%, transparent 80%);
+  }
+  .hero-eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px;
+    border-radius: var(--r-pill);
+    background: var(--surface-glass-strong);
+    border: 0.5px solid var(--stroke-hairline);
+    font-size: 12px; font-weight: 600;
+    color: var(--brand);
+    letter-spacing: 0.5px;
+    box-shadow: var(--shadow-soft);
+  }
+  .hero-eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 12px var(--brand); }
+  .hero h1 {
+    font-size: clamp(40px, 5vw, 64px);
+    line-height: 1.05;
+    letter-spacing: -0.025em;
+    margin: 16px 0 12px;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--text-primary) 0%, var(--brand-deep) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .hero p.lead {
+    font-size: 18px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    max-width: 640px;
+    margin: 0 0 28px;
+  }
+  .hero-meta {
+    display: flex; flex-wrap: wrap; gap: 16px;
+    margin-top: 32px;
+  }
+  .hero-pill {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 10px 16px;
+    background: var(--surface-glass);
+    border: 0.5px solid var(--stroke-hairline);
+    border-radius: var(--r-pill);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    backdrop-filter: blur(20px);
+  }
+  .hero-pill svg { width: 14px; height: 14px; }
+
+  /* ===== Section ===== */
+  section.block {
+    margin-top: 72px;
+  }
+  .section-head {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 24px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+  }
+  .section-head h2 {
+    font-size: 30px;
+    letter-spacing: -0.02em;
+    font-weight: 700;
+    margin: 4px 0;
+  }
+  .section-head .kicker {
+    color: var(--brand);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+  }
+  .section-head p.desc {
+    color: var(--text-secondary);
+    font-size: 15px;
+    max-width: 520px;
+    line-height: 1.5;
+  }
+
+  /* ===== Card ===== */
+  .card {
+    background: var(--surface-raised);
+    border-radius: var(--r-lg);
+    border: 0.5px solid var(--stroke-hairline);
+    box-shadow: var(--shadow-soft);
+    padding: 24px;
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+  }
+  .card h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+  .card p.muted {
+    color: var(--text-secondary);
+    font-size: 13.5px;
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  /* ===== Token palette ===== */
+  .token-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 16px;
+  }
+  .token {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px;
+    border-radius: var(--r-md);
+    border: 0.5px solid var(--stroke-hairline);
+    background: var(--surface-glass);
+  }
+  .token .swatch {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06);
+  }
+  .token .name { font-size: 13px; font-weight: 600; }
+  .token .hex { font-size: 11.5px; color: var(--text-tertiary); font-family: ui-monospace, "SF Mono", monospace; }
+
+  /* ===== Typography demo ===== */
+  .type-row {
+    display: grid;
+    grid-template-columns: 220px 1fr 90px;
+    align-items: baseline;
+    padding: 14px 0;
+    border-bottom: 0.5px solid var(--stroke-hairline);
+    gap: 16px;
+  }
+  .type-row:last-child { border: none; }
+  .type-row .label { color: var(--text-secondary); font-size: 12.5px; }
+  .type-row .demo { letter-spacing: -0.01em; }
+  .type-row .spec { color: var(--text-tertiary); font-size: 11.5px; text-align: right; font-family: ui-monospace, "SF Mono", monospace; }
+
+  /* ===== iPhone Frame ===== */
+  .device-stage {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 32px;
+    align-items: flex-start;
+  }
+  @media (max-width: 1100px) {
+    .device-stage { grid-template-columns: 1fr; }
+  }
+  .iphone {
+    width: 380px;
+    aspect-ratio: 9 / 19.5;
+    border-radius: 56px;
+    padding: 14px;
+    background: linear-gradient(160deg, #1c1c1f 0%, #2a2a2e 50%, #1c1c1f 100%);
+    box-shadow:
+      inset 0 0 0 1.5px rgba(255,255,255,0.08),
+      var(--shadow-floating);
+    position: relative;
+    margin: 0 auto;
+  }
+  .iphone::before {
+    content: "";
+    position: absolute;
+    top: 8px; left: 50%;
+    transform: translateX(-50%);
+    width: 110px; height: 34px;
+    background: #000;
+    border-radius: 999px;
+    z-index: 4;
+  }
+  .iphone-screen {
+    width: 100%; height: 100%;
+    border-radius: 44px;
+    background: var(--bg-base);
+    overflow: hidden;
+    position: relative;
+    color: var(--text-primary);
+  }
+  .ios-status {
+    height: 50px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 30px 0;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .ios-status .right { display: flex; gap: 6px; align-items: center; }
+  .ios-status .signal-dot { width: 14px; height: 9px; background: currentColor; border-radius: 2px; opacity: 0.85; }
+
+  /* Dynamic Island content (mocked - the actual notch is .iphone::before) */
+  .di-pill {
+    position: absolute;
+    top: 16px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    background: #000;
+    border-radius: 999px;
+    padding: 6px 14px 6px 12px;
+    color: #fff;
+    font-size: 11px;
+    display: flex; align-items: center; gap: 8px;
+    min-width: 220px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.4);
+    border: 0.5px solid rgba(255,255,255,0.06);
+  }
+  .di-pill svg { width: 12px; height: 12px; }
+  .di-pill .di-label { font-weight: 600; }
+  .di-pill .di-amount { color: var(--credit); font-feature-settings: "tnum" on; margin-left: auto; font-weight: 600; }
+
+  .ios-scroll {
+    padding: 56px 16px 100px;
+    height: calc(100% - 50px);
+    overflow: hidden;
+    background: var(--bg-canvas);
+  }
+  .ios-h1 {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin: 4px 4px 16px;
+  }
+  .ios-h1 small { color: var(--text-secondary); font-weight: 500; font-size: 13px; display: block; margin-top: 4px; }
+
+  /* ===== Glass Card (iOS) ===== */
+  .glass-card {
+    background: var(--surface-glass-strong);
+    border-radius: 20px;
+    border: 0.5px solid var(--stroke-hairline);
+    box-shadow: var(--shadow-soft);
+    padding: 18px;
+    backdrop-filter: blur(30px) saturate(180%);
+  }
+  .glass-card + .glass-card { margin-top: 12px; }
+
+  .hero-number {
+    font-size: 38px;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+    line-height: 1.05;
+    margin-top: 4px;
+  }
+  .hero-number small {
+    font-size: 13px; font-weight: 500;
+    color: var(--text-secondary);
+    margin-left: 6px;
+  }
+  .row-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .row-stats .stat {
+    background: var(--surface-glass);
+    border: 0.5px solid var(--stroke-hairline);
+    border-radius: 14px;
+    padding: 10px 12px;
+  }
+  .row-stats .stat .key { font-size: 11px; color: var(--text-secondary); }
+  .row-stats .stat .val { font-size: 15px; font-weight: 700; margin-top: 2px; }
+  .row-stats .stat.income .val { color: var(--income); }
+  .row-stats .stat.expense .val { color: var(--expense); }
+  .row-stats .stat.credit .val { color: var(--credit); }
+
+  /* Sparkline */
+  .sparkline { height: 56px; width: 100%; display: block; margin-top: 12px; }
+  .spark-area { fill: url(#sparkGradient); opacity: 0.6; }
+  .spark-line { fill: none; stroke: var(--brand); stroke-width: 1.6; }
+
+  /* Inline status tag */
+  .tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600;
+    padding: 3px 8px;
+    border-radius: var(--r-pill);
+  }
+  .tag.income { color: var(--income); background: rgba(48,185,85,0.12); }
+  .tag.expense { color: var(--expense); background: rgba(224,51,74,0.12); }
+  .tag.credit { color: var(--credit); background: rgba(255,138,31,0.14); }
+  .tag.draft { color: var(--text-secondary); background: rgba(120,120,128,0.16); }
+  .tag.ai { color: var(--ai); background: var(--ai-soft); }
+  .tag.warning { color: var(--warning); background: rgba(245,197,24,0.18); }
+
+  /* List items */
+  .list-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 4px;
+    border-top: 0.5px solid var(--stroke-soft);
+  }
+  .list-row:first-child { border-top: none; }
+  .list-row .icon {
+    width: 36px; height: 36px;
+    border-radius: 11px;
+    background: var(--brand-soft);
+    color: var(--brand);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .list-row .icon svg { width: 18px; height: 18px; }
+  .list-row .body { flex: 1; min-width: 0; }
+  .list-row .body .t { font-size: 14px; font-weight: 600; }
+  .list-row .body .s { font-size: 11.5px; color: var(--text-secondary); margin-top: 1px; }
+  .list-row .amount { font-size: 14px; font-weight: 700; text-align: right; font-feature-settings: "tnum" on; }
+  .list-row .amount small { display: block; font-size: 11px; color: var(--text-secondary); font-weight: 500; }
+  .list-row.expense .amount { color: var(--expense); }
+  .list-row.income .amount { color: var(--income); }
+  .list-row.credit .icon { background: rgba(255,138,31,0.16); color: var(--credit); }
+  .list-row.income .icon { background: rgba(48,185,85,0.16); color: var(--income); }
+  .list-row.ai .icon { background: var(--ai-soft); color: var(--ai); }
+
+  /* iOS Tab Bar (floating) */
+  .ios-tabbar {
+    position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+    width: calc(100% - 32px);
+    height: 72px;
+    background: var(--surface-glass-strong);
+    border: 0.5px solid var(--stroke-hairline);
+    border-radius: 36px;
+    backdrop-filter: blur(40px) saturate(200%);
+    -webkit-backdrop-filter: blur(40px) saturate(200%);
+    display: flex; align-items: center; justify-content: space-around;
+    box-shadow: var(--shadow-floating);
+    z-index: 3;
+  }
+  .ios-tabbar .tab {
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: var(--text-secondary);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 8px 10px;
+    border-radius: 24px;
+    flex: 1;
+  }
+  .ios-tabbar .tab svg { width: 22px; height: 22px; }
+  .ios-tabbar .tab.active { color: var(--brand); }
+  .ios-tabbar .tab.active::before {
+    /* glass highlight */
+  }
+  .ios-tabbar .fab {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--brand) 0%, var(--brand-deep) 100%);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 6px 22px rgba(10,132,255,0.5), inset 0 -1px 2px rgba(0,0,0,0.2);
+    margin: -4px 0;
+  }
+  .ios-tabbar .fab svg { width: 24px; height: 24px; }
+
+  /* ===== macOS Window ===== */
+  .mac-window {
+    background: var(--bg-base);
+    border-radius: 14px;
+    box-shadow: var(--shadow-floating);
+    overflow: hidden;
+    border: 0.5px solid var(--stroke-hairline);
+    color: var(--text-primary);
+    height: 700px;
+    display: flex;
+    position: relative;
+  }
+  .mac-titlebar {
+    position: absolute; top: 0; left: 0; right: 0; height: 44px;
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 16px;
+    background: var(--surface-glass);
+    backdrop-filter: blur(30px) saturate(180%);
+    border-bottom: 0.5px solid var(--stroke-hairline);
+    z-index: 10;
+  }
+  .mac-titlebar .dots { display: flex; gap: 8px; }
+  .mac-titlebar .dots span { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.1); }
+  .mac-titlebar .dots .r { background: #ff5f57; }
+  .mac-titlebar .dots .y { background: #febc2e; }
+  .mac-titlebar .dots .g { background: #28c840; }
+  .mac-titlebar .title { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin: 0 auto; }
+  .mac-titlebar .actions { display: flex; gap: 8px; align-items: center; }
+  .mac-titlebar .action-btn {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    background: var(--surface-glass);
+    border: 0.5px solid var(--stroke-hairline);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-secondary);
+  }
+  .mac-titlebar .action-btn svg { width: 14px; height: 14px; }
+
+  .mac-sidebar {
+    width: 230px;
+    background: var(--surface-deep);
+    border-right: 0.5px solid var(--stroke-hairline);
+    padding: 52px 10px 12px;
+    overflow-y: auto;
+    display: flex; flex-direction: column;
+  }
+  .sidebar-section { padding: 14px 4px 6px; font-size: 11px; font-weight: 700; color: var(--text-tertiary); letter-spacing: 0.6px; text-transform: uppercase; }
+  .sidebar-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px;
+    border-radius: 9px;
+    font-size: 13.5px;
+    color: var(--text-primary);
+    margin-bottom: 1px;
+  }
+  .sidebar-item svg { width: 16px; height: 16px; color: var(--text-secondary); }
+  .sidebar-item .badge { margin-left: auto; font-size: 11px; padding: 1px 7px; background: var(--surface-glass); border-radius: 999px; color: var(--text-secondary); }
+  .sidebar-item.active {
+    background: linear-gradient(135deg, var(--brand) 0%, var(--brand-deep) 100%);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(10,132,255,0.3);
+  }
+  .sidebar-item.active svg { color: #fff; }
+  .sidebar-item.active .badge { background: rgba(255,255,255,0.22); color: #fff; }
+
+  .sidebar-footer {
+    margin-top: auto;
+    background: var(--surface-glass);
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    border: 0.5px solid var(--stroke-hairline);
+  }
+  .sidebar-footer .row-dot { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-weight: 600; color: var(--text-primary); font-size: 12px; }
+  .sidebar-footer .row-dot .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--income); box-shadow: 0 0 10px var(--income); }
+
+  .mac-content {
+    flex: 1; min-width: 0;
+    padding: 60px 28px 24px;
+    overflow-y: auto;
+    background: var(--bg-canvas);
+  }
+  .mac-inspector {
+    width: 320px;
+    background: var(--surface-deep);
+    border-left: 0.5px solid var(--stroke-hairline);
+    padding: 60px 20px 20px;
+    overflow-y: auto;
+  }
+
+  .content-head {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 16px;
+    margin-bottom: 20px; flex-wrap: wrap;
+  }
+  .content-head h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+  .content-head .subtitle { color: var(--text-secondary); font-size: 13px; margin-top: 4px; }
+  .seg {
+    display: inline-flex;
+    padding: 3px;
+    background: var(--surface-glass);
+    border-radius: 10px;
+    border: 0.5px solid var(--stroke-hairline);
+  }
+  .seg button {
+    appearance: none; border: 0; background: transparent;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .seg button.active {
+    background: var(--surface-glass-strong);
+    color: var(--text-primary);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+
+  /* KPI grid */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+  .kpi {
+    background: var(--surface-raised);
+    border: 0.5px solid var(--stroke-hairline);
+    border-radius: 16px;
+    padding: 14px 16px;
+    box-shadow: var(--shadow-soft);
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi::after {
+    content: ""; position: absolute; inset: 0;
+    background: radial-gradient(80% 50% at 100% 0%, rgba(10,132,255,0.10) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .kpi .icon-pill {
+    width: 32px; height: 32px;
+    border-radius: 10px;
+    background: var(--brand-soft);
+    color: var(--brand);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .kpi .icon-pill svg { width: 18px; height: 18px; }
+  .kpi.income .icon-pill { background: rgba(48,185,85,0.14); color: var(--income); }
+  .kpi.expense .icon-pill { background: rgba(224,51,74,0.14); color: var(--expense); }
+  .kpi.credit .icon-pill { background: rgba(255,138,31,0.14); color: var(--credit); }
+  .kpi .value { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; margin-top: 16px; line-height: 1; }
+  .kpi .value small { font-size: 12px; color: var(--text-secondary); font-weight: 500; margin-left: 4px; }
+  .kpi .label { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+  .kpi .trend {
+    margin-top: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--income);
+    display: inline-flex; align-items: center; gap: 3px;
+  }
+  .kpi.credit .trend { color: var(--credit); }
+  .kpi.expense .trend { color: var(--expense); }
+
+  /* Wide chart */
+  .chart-card {
+    background: var(--surface-raised);
+    border: 0.5px solid var(--stroke-hairline);
+    border-radius: 18px;
+    padding: 18px 18px 8px;
+    box-shadow: var(--shadow-soft);
+    margin-bottom: 16px;
+  }
+  .chart-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .chart-head .ttl { font-size: 15px; font-weight: 700; }
+  .chart-head .sub { font-size: 11.5px; color: var(--text-secondary); }
+  .chart-svg { width: 100%; height: 200px; display: block; }
+
+  /* Inspector cards */
+  .inspector h4 { font-size: 11px; font-weight: 700; color: var(--text-tertiary); letter-spacing: 0.6px; text-transform: uppercase; margin: 0 0 8px; }
+  .insp-card {
+    background: var(--surface-raised);
+    border: 0.5px solid var(--stroke-hairline);
+    border-radius: 14px;
+    padding: 14px;
+    box-shadow: var(--shadow-soft);
+    margin-bottom: 12px;
+  }
+  .insp-card .title { font-weight: 700; font-size: 15px; }
+  .insp-card .meta { color: var(--text-secondary); font-size: 11.5px; margin-top: 2px; }
+  .insp-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 12.5px; border-top: 0.5px solid var(--stroke-soft); }
+  .insp-row:first-child { border-top: none; }
+  .insp-row .k { color: var(--text-secondary); }
+  .insp-row .v { font-weight: 600; font-feature-settings: "tnum" on; }
+
+  /* Command Palette */
+  .cmdk-overlay {
+    position: absolute; inset: 0;
+    background: rgba(20, 20, 30, 0.4);
+    backdrop-filter: blur(8px);
+    display: flex; align-items: flex-start; justify-content: center;
+    padding-top: 110px;
+    z-index: 20;
+    border-radius: 14px;
+  }
+  .cmdk {
+    width: 560px;
+    background: var(--surface-glass-strong);
+    border-radius: 18px;
+    box-shadow: var(--shadow-floating);
+    border: 0.5px solid var(--stroke-hairline);
+    backdrop-filter: blur(40px) saturate(180%);
+    overflow: hidden;
+  }
+  .cmdk-input {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 18px;
+    border-bottom: 0.5px solid var(--stroke-hairline);
+  }
+  .cmdk-input svg { width: 18px; height: 18px; color: var(--text-secondary); }
+  .cmdk-input input {
+    appearance: none; border: none; background: transparent; outline: none;
+    width: 100%;
+    font-size: 16px;
+    color: var(--text-primary);
+    font-family: inherit;
+  }
+  .cmdk-kbd {
+    font-size: 11px;
+    padding: 3px 7px;
+    border-radius: 5px;
+    background: var(--surface-glass);
+    border: 0.5px solid var(--stroke-hairline);
+    color: var(--text-secondary);
+    font-family: ui-monospace, monospace;
+  }
+  .cmdk-section { padding: 6px 0; }
+  .cmdk-section-label { font-size: 10.5px; font-weight: 700; color: var(--text-tertiary); padding: 8px 18px; letter-spacing: 0.6px; text-transform: uppercase; }
+  .cmdk-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 18px;
+    font-size: 13.5px;
+  }
+  .cmdk-item svg { width: 16px; height: 16px; color: var(--text-secondary); }
+  .cmdk-item.active { background: var(--brand-soft); color: var(--brand); }
+  .cmdk-item.active svg { color: var(--brand); }
+  .cmdk-item .right { margin-left: auto; color: var(--text-tertiary); font-size: 11px; }
+
+  /* Widgets showcase */
+  .widget-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 22px;
+  }
+  .widget {
+    width: 100%;
+    aspect-ratio: 2 / 2;
+    border-radius: 26px;
+    padding: 18px;
+    background: var(--surface-raised);
+    border: 0.5px solid var(--stroke-hairline);
+    box-shadow: var(--shadow-elevated);
+    display: flex; flex-direction: column;
+    backdrop-filter: blur(30px) saturate(180%);
+    position: relative;
+    overflow: hidden;
+  }
+  .widget.tinted { background: linear-gradient(160deg, #0a84ff 0%, #5a4cff 100%); color: #fff; }
+  .widget.tinted .muted { color: rgba(255,255,255,0.7); }
+  .widget.tinted .value { color: #fff; }
+  .widget.tinted .icon-pill { background: rgba(255,255,255,0.18); color: #fff; }
+  .widget .icon-pill {
+    width: 32px; height: 32px; border-radius: 10px;
+    background: var(--brand-soft); color: var(--brand);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .widget .label { font-size: 12px; opacity: 0.8; margin-top: auto; }
+  .widget .value { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; }
+  .widget .sub { font-size: 12px; opacity: 0.7; margin-top: 4px; }
+  .widget.lock {
+    aspect-ratio: 4 / 1.4;
+    border-radius: 18px;
+    background: rgba(20,20,30,0.55);
+    color: #fff;
+    backdrop-filter: blur(30px);
+    border: 0.5px solid rgba(255,255,255,0.12);
+  }
+  .widget.lock .label { color: rgba(255,255,255,0.55); }
+
+  /* Menu bar extra */
+  .menubar-host {
+    background: linear-gradient(120deg, #4a3c7a 0%, #5a4cff 50%, #ff8a1f 100%);
+    padding: 30px 30px 60px;
+    border-radius: 18px;
+    position: relative;
+    min-height: 360px;
+  }
+  .menubar-host::before {
+    content: "";
+    position: absolute; top: 0; left: 0; right: 0; height: 26px;
+    background: rgba(20,20,20,0.55);
+    backdrop-filter: blur(20px);
+    border-radius: 18px 18px 0 0;
+  }
+  .menubar-host::after {
+    content: "Finder  File  Edit  View  Window  Help                                    🧠 ⏰  📡  🔋 100%  Mon 2026-05-20  10:42";
+    position: absolute; top: 0; left: 16px; right: 16px; height: 26px;
+    line-height: 26px;
+    font-size: 11px;
+    color: rgba(255,255,255,0.85);
+    font-family: -apple-system, sans-serif;
+    z-index: 2;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .menubar-extra {
+    width: 320px;
+    margin: 38px 0 0 auto;
+    background: var(--surface-glass-strong);
+    backdrop-filter: blur(40px) saturate(180%);
+    border-radius: 14px;
+    border: 0.5px solid var(--stroke-hairline);
+    padding: 14px;
+    box-shadow: var(--shadow-floating);
+    position: relative;
+    z-index: 3;
+  }
+  .menubar-extra::before {
+    content: "";
+    position: absolute; top: -7px; right: 28px;
+    width: 14px; height: 14px;
+    background: var(--surface-glass-strong);
+    transform: rotate(45deg);
+    border-top: 0.5px solid var(--stroke-hairline);
+    border-left: 0.5px solid var(--stroke-hairline);
+  }
+  .menubar-extra h4 { margin: 0 0 8px; font-size: 13px; font-weight: 700; }
+  .menubar-extra .row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 12.5px; border-bottom: 0.5px solid var(--stroke-soft); }
+  .menubar-extra .row:last-child { border: none; }
+  .menubar-extra .row .v { font-weight: 700; font-feature-settings: "tnum" on; }
+  .menubar-extra .quick {
+    margin-top: 10px;
+    display: flex; gap: 6px;
+  }
+  .menubar-extra .quick button {
+    flex: 1;
+    background: var(--brand-soft);
+    color: var(--brand);
+    border: 0; padding: 8px;
+    border-radius: 8px;
+    font-size: 11.5px; font-weight: 700;
+  }
+
+  /* Privacy mode comparison */
+  .blur-amt { filter: blur(8px); transition: filter 0.3s; }
+  .blur-amt:hover { filter: blur(0); }
+
+  /* AI memo */
+  .ai-memo {
+    background:
+      radial-gradient(60% 50% at 0% 0%, rgba(165,87,245,0.20) 0%, transparent 60%),
+      radial-gradient(60% 60% at 100% 100%, rgba(10,132,255,0.15) 0%, transparent 60%),
+      var(--surface-raised);
+    border: 0.5px solid var(--stroke-hairline);
+    border-radius: 22px;
+    padding: 26px;
+    box-shadow: var(--shadow-elevated);
+  }
+  .ai-memo .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--surface-glass-strong);
+    border: 0.5px solid var(--stroke-hairline);
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ai);
+    margin-bottom: 14px;
+  }
+  .ai-memo h4 { font-size: 19px; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .ai-memo p { font-size: 14px; line-height: 1.65; color: var(--text-primary); margin: 0 0 12px; }
+  .ai-memo .actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .ai-memo .actions button {
+    padding: 7px 14px;
+    background: var(--surface-glass-strong);
+    border: 0.5px solid var(--stroke-hairline);
+    border-radius: 999px;
+    font-size: 12px; font-weight: 600;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+
+  /* Comparison */
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 900px) { .compare { grid-template-columns: 1fr; } }
+  .compare .col h4 { margin: 0 0 8px; font-size: 13px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-tertiary); }
+  .compare ul { margin: 0; padding: 0; list-style: none; }
+  .compare li { padding: 10px 0; border-bottom: 0.5px solid var(--stroke-hairline); font-size: 14px; color: var(--text-secondary); display: flex; gap: 10px; align-items: flex-start; }
+  .compare li::before {
+    content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--text-tertiary);
+    margin-top: 8px; flex-shrink: 0;
+  }
+  .compare .new li::before { background: var(--brand); box-shadow: 0 0 10px var(--brand); }
+  .compare .new li { color: var(--text-primary); font-weight: 500; }
+
+  /* Footer */
+  .footer {
+    margin-top: 80px;
+    padding: 28px 0;
+    border-top: 0.5px solid var(--stroke-hairline);
+    color: var(--text-tertiary);
+    font-size: 12.5px;
+    text-align: center;
+  }
+
+  /* Helpers */
+  .stack-md > * + * { margin-top: 14px; }
+
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ====== Hero ====== -->
+  <header class="hero">
+    <span class="hero-eyebrow"><span class="dot"></span>LinoFinance · 设计预览 · 2026-05-20</span>
+    <h1>v1.1 财务控制台<br/>Liquid Glass × 自研 LLM</h1>
+    <p class="lead">把 v1 的功能闭环包进 macOS 26 / iOS 26 的 Liquid Glass 视觉系统，补上 Widget、Live Activity、⌘K 命令面板、Menu Bar Extra、AI 月报、隐私模糊、深色模式与离线草稿。一份 SwiftUI 组件，两套布局策略：iOS 一秒记一笔，macOS 一屏看全部。</p>
+    <div class="hero-meta">
+      <span class="hero-pill">⚙︎ SwiftUI · iOS 18+ / macOS 15+（兼容 26 Liquid Glass）</span>
+      <span class="hero-pill">🪙 CNY / USD 双币种永不丢失</span>
+      <span class="hero-pill">🧠 自研 LLM 网关 + 结构化 Plan</span>
+      <span class="hero-pill">🔒 隐私模糊 · Face ID 解锁</span>
+      <span class="hero-pill">📡 离线草稿 · 失败重试 · 冲突提示</span>
+    </div>
+  </header>
+
+  <!-- ====== Design Language Refresh ====== -->
+  <section class="block">
+    <div class="section-head">
+      <div>
+        <div class="kicker">A · 设计语言刷新</div>
+        <h2>Liquid Glass 与语义令牌</h2>
+        <p class="desc">所有界面统一走语义令牌；Light / Dark / High Contrast 与 macOS Vibrancy 同源。原 <code>FinanceColor</code> 升级为 <code>FinanceTokens.Surface / Text / State / Brand</code>，新增 <code>.glass</code> / <code>.material</code> 修饰符。</p>
+      </div>
+    </div>
+    <div class="row">
+      <div class="card grow" style="min-width:300px">
+        <h3>颜色 · State 与 Surface</h3>
+        <p class="muted" style="margin-bottom:18px">所有颜色都在 Light / Dark 自动适配；金额永远配语义而非品牌色。</p>
+        <div class="token-grid">
+          <div class="token"><div class="swatch" style="background:#0a84ff"></div><div><div class="name">brand</div><div class="hex">#0A84FF</div></div></div>
+          <div class="token"><div class="swatch" style="background:#d8324d"></div><div><div class="name">currency/CNY</div><div class="hex">#D8324D</div></div></div>
+          <div class="token"><div class="swatch" style="background:#34a05a"></div><div><div class="name">currency/USD</div><div class="hex">#34A05A</div></div></div>
+          <div class="token"><div class="swatch" style="background:#30b955"></div><div><div class="name">state/income</div><div class="hex">#30B955</div></div></div>
+          <div class="token"><div class="swatch" style="background:#e0334a"></div><div><div class="name">state/expense</div><div class="hex">#E0334A</div></div></div>
+          <div class="token"><div class="swatch" style="background:#ff8a1f"></div><div><div class="name">state/credit</div><div class="hex">#FF8A1F</div></div></div>
+          <div class="token"><div class="swatch" style="background:#f5c518"></div><div><div class="name">state/warning</div><div class="hex">#F5C518</div></div></div>
+          <div class="token"><div class="swatch" style="background:#a557f5"></div><div><div class="name">state/ai</div><div class="hex">#A557F5</div></div></div>
+        </div>
+      </div>
+
+      <div class="card" style="flex:1; min-width:300px">
+        <h3>字体阶梯 · SF Pro</h3>
+        <p class="muted" style="margin-bottom:14px">金额用 monospaced + tnum；标题用 -0.02 em 紧字距；数字阶梯比 v1 更高对比。</p>
+        <div>
+          <div class="type-row">
+            <div class="label">heroNumber</div>
+            <div class="demo mono" style="font-size:38px; font-weight:800;">¥34,712.50</div>
+            <div class="spec">38 / -0.025em</div>
+          </div>
+          <div class="type-row">
+            <div class="label">title.xl</div>
+            <div class="demo" style="font-size:30px; font-weight:700;">总览</div>
+            <div class="spec">30 / -0.02em</div>
+          </div>
+          <div class="type-row">
+            <div class="label">headline</div>
+            <div class="demo" style="font-size:17px; font-weight:600;">未来 30 天现金流压力</div>
+            <div class="spec">17 / 600</div>
+          </div>
+          <div class="type-row">
+            <div class="label">body.mono</div>
+            <div class="demo mono" style="font-size:14px;">USD 88.00 · 约 ¥598.40</div>
+            <div class="spec">14 / mono</div>
+          </div>
+          <div class="type-row">
+            <div class="label">caption</div>
+            <div class="demo" style="font-size:11.5px; color:var(--text-secondary);">招商银行 · 餐饮 · 2026-05-20</div>
+            <div class="spec">11.5</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== iOS Preview ====== -->
+  <section class="block">
+    <div class="section-head">
+      <div>
+        <div class="kicker">B · iOS · iPhone 26</div>
+        <h2>一秒记一笔 + Dynamic Island + 浮动 Tab Bar</h2>
+        <p class="desc">总览页升级为 Hero 数字 + Sparkline，新增 AI 月报卡。底部用 iOS 18+ 浮动 Liquid Glass Tab Bar，中央 FAB 唤起一句话记账。Dynamic Island 实时显示「下一笔到期 / AI 待确认」。</p>
+      </div>
+    </div>
+
+    <div class="device-stage">
+      <!-- iPhone -->
+      <div class="iphone">
+        <div class="iphone-screen">
+          <div class="ios-status">
+            <span>10:42</span>
+            <div class="right">
+              <span style="font-size:11px; opacity:0.7;">5G</span>
+              <span class="signal-dot"></span>
+            </div>
+          </div>
+          <div class="di-pill" title="Dynamic Island · Live Activity">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#ff8a1f" stroke-width="2"><path d="M3 10h18M5 6h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/></svg>
+            <span class="di-label">工商 3375 · 还款 3 天</span>
+            <span class="di-amount">¥4,337.27</span>
+          </div>
+
+          <div class="ios-scroll">
+            <div class="ios-h1">早上好，Lino<small>5 月 20 日 · 周二</small></div>
+
+            <div class="glass-card">
+              <div style="display:flex; align-items:flex-start; justify-content:space-between;">
+                <div>
+                  <div style="font-size:11px; color:var(--text-secondary); font-weight:600; letter-spacing:0.4px; text-transform:uppercase;">净资产</div>
+                  <div class="hero-number mono">¥87,612<small>.50</small></div>
+                  <div class="tag income" style="margin-top:6px;">▲ ¥1,284 · 本月</div>
+                </div>
+                <button style="padding:7px 11px; background: var(--surface-glass); border: 0.5px solid var(--stroke-hairline); border-radius: 999px; font-size: 11.5px; font-weight: 600; color: var(--text-secondary);">🔒 隐藏金额</button>
+              </div>
+              <svg class="sparkline" viewBox="0 0 320 56" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="sparkGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#0a84ff" stop-opacity="0.45"/>
+                    <stop offset="100%" stop-color="#0a84ff" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <path class="spark-area" d="M0,42 L20,38 L40,40 L60,30 L80,32 L100,24 L120,28 L140,18 L160,22 L180,16 L200,14 L220,18 L240,12 L260,16 L280,10 L300,14 L320,8 L320,56 L0,56 Z"/>
+                <path class="spark-line" d="M0,42 L20,38 L40,40 L60,30 L80,32 L100,24 L120,28 L140,18 L160,22 L180,16 L200,14 L220,18 L240,12 L260,16 L280,10 L300,14 L320,8"/>
+              </svg>
+              <div class="row-stats">
+                <div class="stat income"><div class="key">余额合计</div><div class="val mono">¥21,945</div></div>
+                <div class="stat credit"><div class="key">信用负债</div><div class="val mono">¥4,358</div></div>
+                <div class="stat expense"><div class="key">30 天净额</div><div class="val mono">-¥3,210</div></div>
+              </div>
+            </div>
+
+            <div class="glass-card">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div style="font-size:14px; font-weight:700;">今日 · 3 条</div>
+                <div class="tag ai">AI 已自动分类</div>
+              </div>
+              <div style="margin-top:10px;">
+                <div class="list-row expense">
+                  <div class="icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l18-5v12L3 13z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+                  </div>
+                  <div class="body">
+                    <div class="t">京A 7 号 · 午餐</div>
+                    <div class="s">招商 · 餐饮 · 12:34</div>
+                  </div>
+                  <div class="amount">-¥48.00<small>已确认</small></div>
+                </div>
+                <div class="list-row credit">
+                  <div class="icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/></svg>
+                  </div>
+                  <div class="body">
+                    <div class="t">Logitech MX Master 4</div>
+                    <div class="s">工商 3375 · 数码 · 待报销</div>
+                  </div>
+                  <div class="amount">-¥698.00<small>USD 95 折</small></div>
+                </div>
+                <div class="list-row income">
+                  <div class="icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20"/></svg>
+                  </div>
+                  <div class="body">
+                    <div class="t">5 月工资 · 自动入账</div>
+                    <div class="s">建行储蓄 · 现金流确认</div>
+                  </div>
+                  <div class="amount">+¥18,500<small>已结清</small></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="glass-card" style="background: linear-gradient(135deg, rgba(165,87,245,0.18) 0%, rgba(10,132,255,0.10) 100%);">
+              <div style="display:flex; gap:10px; align-items:center; margin-bottom:8px;">
+                <div style="width:28px; height:28px; border-radius:8px; background: var(--ai-soft); color: var(--ai); display:flex; align-items:center; justify-content:center;">✦</div>
+                <div style="font-size:14px; font-weight:700;">AI 月报 · 5 月（节选）</div>
+              </div>
+              <div style="font-size:13px; line-height:1.6; color: var(--text-primary);">
+                本月支出 <b class="mono">¥6,124</b>，比 4 月降低 <span style="color:var(--income); font-weight:700;">11%</span>。订阅压力主要来自 <b>iCloud+ / Apple One</b>。可报销支出 <b class="mono">¥1,396</b> 中已有 <b class="mono">¥820</b> 进入「已批准」，预计 6 月 5 日到账。
+              </div>
+              <div style="display:flex; gap:6px; margin-top:10px;">
+                <button style="padding:6px 11px; background: var(--surface-glass-strong); border: 0.5px solid var(--stroke-hairline); border-radius: 999px; font-size: 11.5px; font-weight: 600;">展开全文</button>
+                <button style="padding:6px 11px; background: var(--surface-glass-strong); border: 0.5px solid var(--stroke-hairline); border-radius: 999px; font-size: 11.5px; font-weight: 600;">导出 PDF</button>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Floating Tab Bar -->
+          <div class="ios-tabbar">
+            <div class="tab active">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 12 12 3l9 9v9a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>
+              总览
+            </div>
+            <div class="tab">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7L9 18l-5-5"/></svg>
+              记账
+            </div>
+            <div class="fab" aria-label="新建">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+            </div>
+            <div class="tab">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/></svg>
+              信用
+            </div>
+            <div class="tab">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+              更多
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- iOS callouts -->
+      <div class="stack-md">
+        <div class="card">
+          <h3>① Dynamic Island · Live Activity</h3>
+          <p class="muted">把「下次信用卡还款 / AI 待确认计划 / 报销到账」推到灵动岛。点开展开为大尺寸 Live Activity，可一键「记入还款」。</p>
+        </div>
+        <div class="card">
+          <h3>② Hero 数字 + Sparkline</h3>
+          <p class="muted">原小卡 KPI 升级为净资产 Hero + 30 天趋势 Sparkline + 三栏副指标。隐藏金额按钮用 Privacy Mode 全局模糊。</p>
+        </div>
+        <div class="card">
+          <h3>③ 一句话记账 FAB</h3>
+          <p class="muted">中央 FAB 弹出 Sheet：AI 自然语言 / 表单 / 粘贴 三入口。AI 入口走结构化 Plan 协议，<code>≤¥1000</code> 自动确认候选直接一键确认。</p>
+        </div>
+        <div class="card">
+          <h3>④ 浮动 Liquid Glass Tab Bar</h3>
+          <p class="muted">iOS 18+ 浮动 Tab Bar，背景 <code>regularMaterial</code> 双层 blur；FAB 嵌入 Tab Bar 中央，Tap → Sheet，长按 → 切换默认动作。</p>
+        </div>
+        <div class="card">
+          <h3>⑤ App Intents + Siri / Shortcuts</h3>
+          <p class="muted">支持「记一笔」「查询本月支出」「下笔信用卡还款」等 Siri 短语；Spotlight 也可直接搜出账户与最近记录。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== macOS Preview ====== -->
+  <section class="block">
+    <div class="section-head">
+      <div>
+        <div class="kicker">C · macOS · Sequoia + 26</div>
+        <h2>三栏控制台 + ⌘K 命令面板 + Menu Bar Extra</h2>
+        <p class="desc">保留 Sidebar / Content / Inspector 三栏结构，刷新为 Liquid Glass；标题栏内嵌「币种 / 时间范围 / 搜索 / ⌘K」；Inspector 升级为活动详情 + 审计 + AI 建议。</p>
+      </div>
+    </div>
+
+    <div class="mac-window">
+      <!-- Title bar -->
+      <div class="mac-titlebar">
+        <div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+        <div class="title">LinoFinance · 总览</div>
+        <div class="actions">
+          <div class="action-btn" title="币种">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+          </div>
+          <div class="action-btn" title="时间">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
+          </div>
+          <div class="action-btn" title="搜索 ⌘K">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          </div>
+          <div class="action-btn" title="新建 ⌘N">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+          </div>
+          <div class="action-btn" title="AI ✦">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#a557f5" stroke-width="2"><path d="M12 2l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar -->
+      <aside class="mac-sidebar">
+        <div class="sidebar-section">主控台</div>
+        <div class="sidebar-item active">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 12 12 3l9 9v9a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>
+          总览
+        </div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M7 6V4M17 6V4"/></svg>
+          账户
+          <span class="badge">9</span>
+        </div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+          记账
+          <span class="badge">2 草稿</span>
+        </div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M12 3v18M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg>
+          现金流
+        </div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/></svg>
+          信用 · 账单
+        </div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 17l-5-5 5-5M4 12h16"/></svg>
+          报销中心
+          <span class="badge">3</span>
+        </div>
+
+        <div class="sidebar-section">分析 · AI</div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5M4 19h16M8 16V9M12 16v-5M16 16V7"/></svg>
+          报表
+        </div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#a557f5" stroke-width="2"><path d="M12 2l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg>
+          AI 工作台
+          <span class="badge">2 待</span>
+        </div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13 21a2 2 0 0 1-2 0"/></svg>
+          通知规则
+        </div>
+        <div class="sidebar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a8 8 0 0 0 0-6L21 8l-2-3.5-2 1A8 8 0 0 0 12 3l-1-2H9l-1 2a8 8 0 0 0-5 1.5L1 4.5 3 8l1.6 1a8 8 0 0 0 0 6L3 16l2 3.5 2-1a8 8 0 0 0 5 1.5l1 2h2l1-2a8 8 0 0 0 5-1.5l2 1L21 16z"/></svg>
+          设置
+        </div>
+
+        <div class="sidebar-footer">
+          <div class="row-dot"><span class="dot"></span>API 已连接 · lf.linotsai.top</div>
+          <div>v1.1.0 · 同步于 1 分钟前 · Token ✓</div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <main class="mac-content">
+        <div class="content-head">
+          <div>
+            <h2>总览</h2>
+            <div class="subtitle">API 驱动的财务控制台 · 5 月 20 日 周二</div>
+          </div>
+          <div class="seg">
+            <button class="active">本月</button>
+            <button>季度</button>
+            <button>年度</button>
+            <button>自定义</button>
+          </div>
+        </div>
+
+        <!-- KPI grid -->
+        <div class="kpi-grid">
+          <div class="kpi">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div class="icon-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-5"/></svg></div>
+              <span class="tag draft">CNY 计</span>
+            </div>
+            <div class="value mono">87,612<small>.50</small></div>
+            <div class="label">净资产</div>
+            <div class="trend">▲ 1.48% · 较月初</div>
+          </div>
+          <div class="kpi income">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div class="icon-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/></svg></div>
+              <span class="tag income">3 账户</span>
+            </div>
+            <div class="value mono">21,945<small>.32</small></div>
+            <div class="label">余额合计</div>
+            <div class="trend">▲ ¥18,500 · 工资入账</div>
+          </div>
+          <div class="kpi credit">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div class="icon-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h12"/></svg></div>
+              <span class="tag credit">5 张</span>
+            </div>
+            <div class="value mono">4,358<small>.27</small></div>
+            <div class="label">信用负债</div>
+            <div class="trend">下次 · 工商 3375 · 3 天</div>
+          </div>
+          <div class="kpi expense">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div class="icon-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M5 12l7 7 7-7"/></svg></div>
+              <span class="tag expense">30 天</span>
+            </div>
+            <div class="value mono">-3,210<small>.84</small></div>
+            <div class="label">未来净额</div>
+            <div class="trend">含订阅 ¥412 · 分期 ¥1,400</div>
+          </div>
+        </div>
+
+        <!-- Chart card -->
+        <div class="chart-card">
+          <div class="chart-head">
+            <div>
+              <div class="ttl">现金流 · 未来 90 天</div>
+              <div class="sub">含工资 · 订阅 · 信用卡还款 · 报销到账</div>
+            </div>
+            <div class="seg">
+              <button class="active">堆叠</button>
+              <button>净额</button>
+              <button>累计</button>
+            </div>
+          </div>
+          <svg class="chart-svg" viewBox="0 0 700 200" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="inflowG" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#30b955" stop-opacity="0.85"/>
+                <stop offset="100%" stop-color="#30b955" stop-opacity="0.15"/>
+              </linearGradient>
+              <linearGradient id="outflowG" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#e0334a" stop-opacity="0.85"/>
+                <stop offset="100%" stop-color="#e0334a" stop-opacity="0.15"/>
+              </linearGradient>
+              <linearGradient id="netG" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#0a84ff" stop-opacity="0.7"/>
+                <stop offset="100%" stop-color="#0a84ff" stop-opacity="0.05"/>
+              </linearGradient>
+            </defs>
+            <!-- axis -->
+            <line x1="40" y1="170" x2="690" y2="170" stroke="rgba(0,0,0,0.1)" stroke-width="0.5"/>
+            <line x1="40" y1="120" x2="690" y2="120" stroke="rgba(0,0,0,0.05)" stroke-width="0.5" stroke-dasharray="2 4"/>
+            <line x1="40" y1="70" x2="690" y2="70" stroke="rgba(0,0,0,0.05)" stroke-width="0.5" stroke-dasharray="2 4"/>
+            <!-- bars (12 buckets) -->
+            <g>
+              <rect x="50"  y="110" width="22" height="60" rx="3" fill="url(#inflowG)"/>
+              <rect x="50"  y="170" width="22" height="0"  rx="0" fill="url(#outflowG)"/>
+              <rect x="105" y="80"  width="22" height="90" rx="3" fill="url(#inflowG)"/>
+              <rect x="105" y="170" width="22" height="20" rx="3" fill="url(#outflowG)" transform="translate(0,-20)"/>
+              <rect x="160" y="125" width="22" height="45" rx="3" fill="url(#inflowG)"/>
+              <rect x="160" y="170" width="22" height="35" rx="3" fill="url(#outflowG)" transform="translate(0,-35)"/>
+              <rect x="215" y="60"  width="22" height="110" rx="3" fill="url(#inflowG)"/>
+              <rect x="215" y="170" width="22" height="50" rx="3" fill="url(#outflowG)" transform="translate(0,-50)"/>
+              <rect x="270" y="118" width="22" height="52" rx="3" fill="url(#inflowG)"/>
+              <rect x="270" y="170" width="22" height="28" rx="3" fill="url(#outflowG)" transform="translate(0,-28)"/>
+              <rect x="325" y="85"  width="22" height="85" rx="3" fill="url(#inflowG)"/>
+              <rect x="325" y="170" width="22" height="40" rx="3" fill="url(#outflowG)" transform="translate(0,-40)"/>
+              <rect x="380" y="50"  width="22" height="120" rx="3" fill="url(#inflowG)"/>
+              <rect x="380" y="170" width="22" height="55" rx="3" fill="url(#outflowG)" transform="translate(0,-55)"/>
+              <rect x="435" y="120" width="22" height="50" rx="3" fill="url(#inflowG)"/>
+              <rect x="435" y="170" width="22" height="22" rx="3" fill="url(#outflowG)" transform="translate(0,-22)"/>
+              <rect x="490" y="100" width="22" height="70" rx="3" fill="url(#inflowG)"/>
+              <rect x="490" y="170" width="22" height="32" rx="3" fill="url(#outflowG)" transform="translate(0,-32)"/>
+              <rect x="545" y="70"  width="22" height="100" rx="3" fill="url(#inflowG)"/>
+              <rect x="545" y="170" width="22" height="45" rx="3" fill="url(#outflowG)" transform="translate(0,-45)"/>
+              <rect x="600" y="130" width="22" height="40" rx="3" fill="url(#inflowG)"/>
+              <rect x="600" y="170" width="22" height="20" rx="3" fill="url(#outflowG)" transform="translate(0,-20)"/>
+              <rect x="655" y="55"  width="22" height="115" rx="3" fill="url(#inflowG)"/>
+              <rect x="655" y="170" width="22" height="50" rx="3" fill="url(#outflowG)" transform="translate(0,-50)"/>
+            </g>
+            <!-- net line -->
+            <path d="M61,140 L116,90 L171,150 L226,75 L281,130 L336,100 L391,60 L446,135 L501,115 L556,85 L611,150 L666,65"
+                  fill="none" stroke="#0a84ff" stroke-width="2"/>
+            <g fill="#0a84ff">
+              <circle cx="61"  cy="140" r="3"/>
+              <circle cx="116" cy="90"  r="3"/>
+              <circle cx="171" cy="150" r="3"/>
+              <circle cx="226" cy="75"  r="3"/>
+              <circle cx="281" cy="130" r="3"/>
+              <circle cx="336" cy="100" r="3"/>
+              <circle cx="391" cy="60"  r="3"/>
+              <circle cx="446" cy="135" r="3"/>
+              <circle cx="501" cy="115" r="3"/>
+              <circle cx="556" cy="85"  r="3"/>
+              <circle cx="611" cy="150" r="3"/>
+              <circle cx="666" cy="65"  r="3"/>
+            </g>
+            <!-- legend -->
+            <g font-family="-apple-system, sans-serif" font-size="10" fill="#6b6b73">
+              <rect x="40" y="184" width="10" height="6" rx="1.5" fill="url(#inflowG)"/><text x="55" y="190">进账</text>
+              <rect x="95" y="184" width="10" height="6" rx="1.5" fill="url(#outflowG)"/><text x="110" y="190">出账</text>
+              <circle cx="148" cy="187" r="3" fill="#0a84ff"/><text x="158" y="190">净额</text>
+              <text x="650" y="190">下周 → 8 月</text>
+            </g>
+          </svg>
+        </div>
+
+        <!-- Account list -->
+        <div class="chart-card" style="padding:18px;">
+          <div class="chart-head" style="margin-bottom:10px;">
+            <div>
+              <div class="ttl">账户全景</div>
+              <div class="sub">余额账户 + 信用账户 · 含原币 + CNY 折算</div>
+            </div>
+            <div class="seg">
+              <button class="active">全部</button>
+              <button>余额</button>
+              <button>信用</button>
+            </div>
+          </div>
+          <div class="list-row income">
+            <div class="icon" style="background: rgba(48,185,85,0.16); color: var(--income);">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 6h18v2H3zM3 11h18v9H3z" opacity=".7"/></svg>
+            </div>
+            <div class="body">
+              <div class="t">建行储蓄 · CNY</div>
+              <div class="s">主余额账户 · 工资入账</div>
+            </div>
+            <div class="amount">¥18,500.00</div>
+          </div>
+          <div class="list-row income">
+            <div class="icon" style="background: rgba(52,160,90,0.16); color: var(--usd);">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 6h18v2H3zM3 11h18v9H3z" opacity=".7"/></svg>
+            </div>
+            <div class="body">
+              <div class="t">Apple Card · USD</div>
+              <div class="s">余额账户 · 6.8 汇率</div>
+            </div>
+            <div class="amount mono">USD 510.00 <small>· 约 ¥3,468.00</small></div>
+          </div>
+          <div class="list-row credit">
+            <div class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/></svg>
+            </div>
+            <div class="body">
+              <div class="t">工商 3375 · 信用</div>
+              <div class="s">账单日 5 · 还款日 23 · 待还 ¥4,337.27</div>
+            </div>
+            <div class="amount" style="color: var(--credit);">-¥4,337.27<small>3 天到期</small></div>
+          </div>
+          <div class="list-row credit">
+            <div class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/></svg>
+            </div>
+            <div class="body">
+              <div class="t">花呗</div>
+              <div class="s">下月 1 日 · ¥823.80</div>
+            </div>
+            <div class="amount" style="color: var(--credit);">-¥823.80</div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Inspector -->
+      <aside class="mac-inspector inspector">
+        <h4>当前选中</h4>
+        <div class="insp-card">
+          <div class="title">工商 3375 · 5 月账单</div>
+          <div class="meta">出账 2026-05-05 · 到期 2026-05-23</div>
+          <div style="margin-top:10px;">
+            <div class="insp-row"><span class="k">本期消费</span><span class="v mono">¥4,337.27</span></div>
+            <div class="insp-row"><span class="k">最低还款</span><span class="v mono">¥260.00</span></div>
+            <div class="insp-row"><span class="k">已还</span><span class="v mono">¥0.00</span></div>
+            <div class="insp-row"><span class="k">状态</span><span class="v"><span class="tag warning">待还款</span></span></div>
+          </div>
+        </div>
+
+        <h4>AI 建议</h4>
+        <div class="insp-card" style="background: linear-gradient(135deg, rgba(165,87,245,0.12) 0%, rgba(10,132,255,0.08) 100%);">
+          <div class="title" style="display:flex; align-items:center; gap:6px;"><span style="color:var(--ai)">✦</span>提前 5 天扣款建议</div>
+          <div class="meta" style="margin-bottom:8px;">基于过往现金流压力测试</div>
+          <p style="font-size:12.5px; line-height:1.55; color:var(--text-primary); margin:0;">5 月 18 日把还款分两笔（¥2,000 + ¥2,337.27）从建行储蓄出账，可避免单日余额跌破最低储备线 ¥3,000。</p>
+          <div style="display:flex; gap:6px; margin-top:10px;">
+            <button style="padding:5px 10px; background: var(--brand); color:#fff; border:0; border-radius:7px; font-size:11px; font-weight:600;">采纳生成现金流</button>
+            <button style="padding:5px 10px; background: var(--surface-glass-strong); border:0.5px solid var(--stroke-hairline); border-radius:7px; font-size:11px; font-weight:600;">忽略</button>
+          </div>
+        </div>
+
+        <h4>审计 · 最近 3 条</h4>
+        <div class="insp-card">
+          <div class="insp-row" style="border-top:none;"><span class="k">05-15 · AI 自动确认</span><span class="v tag ai">≤¥1000</span></div>
+          <div class="insp-row"><span class="k">05-10 · 创建账单周期</span><span class="v" style="color:var(--text-secondary)">user</span></div>
+          <div class="insp-row"><span class="k">05-05 · 信用消费 +¥698</span><span class="v" style="color:var(--text-secondary)">user</span></div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- ⌘K command palette -->
+    <div class="card" style="margin-top:24px;">
+      <h3>⌘K · Command Palette</h3>
+      <p class="muted">macOS 与 iPad 全局 <code>⌘K</code> 唤起。可搜账户、记录、报销单、AI 计划、模板和动作；也可直接命令式输入「新建一笔餐饮 88」「确认草稿 5 条」「导出 5 月 CSV」。</p>
+      <div style="position:relative; height:340px; margin-top:18px; background: var(--bg-canvas); border-radius:14px; overflow:hidden; border:0.5px solid var(--stroke-hairline);">
+        <div class="cmdk-overlay">
+          <div class="cmdk">
+            <div class="cmdk-input">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+              <input value="新建 餐饮 88 招商" />
+              <span class="cmdk-kbd">esc</span>
+            </div>
+            <div class="cmdk-section">
+              <div class="cmdk-section-label">AI 动作</div>
+              <div class="cmdk-item active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#a557f5" stroke-width="2"><path d="M12 2l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg>
+                <span><b>新建</b> 餐饮 88 · 招商银行 · 今日</span>
+                <span class="right">↩ 创建并确认</span>
+              </div>
+              <div class="cmdk-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+                <span>仅保存为<b>草稿</b></span>
+                <span class="right">⇧↩</span>
+              </div>
+              <div class="cmdk-section-label">页面跳转</div>
+              <div class="cmdk-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12 12 3l9 9v9H3z"/></svg>
+                <span>总览 · 报销视角</span>
+                <span class="right">⌘1</span>
+              </div>
+              <div class="cmdk-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
+                <span>信用 · 工商 3375 账单</span>
+                <span class="right">⌘5</span>
+              </div>
+              <div class="cmdk-section-label">最近</div>
+              <div class="cmdk-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>
+                <span>Logitech MX Master 4 · USD 95</span>
+                <span class="right">2 分钟前</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Menu Bar Extra -->
+    <div class="card" style="margin-top:24px;">
+      <h3>Menu Bar Extra · 顶部状态栏一眼控</h3>
+      <p class="muted">macOS 状态栏长驻；显示净资产 + 今日新增 + 下次还款 + AI 待确认；展开后可一键「快速记账」和「同步」。点击图标自动隐藏金额（隐私模式）。</p>
+      <div class="menubar-host" style="margin-top:14px;">
+        <div class="menubar-extra">
+          <h4>LinoFinance</h4>
+          <div class="row"><span>净资产</span><span class="v mono">¥87,612.50</span></div>
+          <div class="row"><span>今日新增</span><span class="v mono" style="color: var(--income);">+¥18,452.00</span></div>
+          <div class="row"><span>下次还款</span><span class="v mono" style="color: var(--credit);">3 天 · ¥4,337.27</span></div>
+          <div class="row"><span>AI 待确认</span><span class="v" style="color: var(--ai);">2 个计划</span></div>
+          <div class="quick">
+            <button>＋ 快速记账</button>
+            <button>↻ 同步</button>
+            <button>⌘K</button>
+          </div>
+          <div style="margin-top:8px; font-size:11px; color:var(--text-tertiary); display:flex; justify-content:space-between;">
+            <span>lf.linotsai.top · 已连接</span>
+            <span>v1.1.0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== New Features (Widgets / Live Activity / Privacy / AI memo) ====== -->
+  <section class="block">
+    <div class="section-head">
+      <div>
+        <div class="kicker">D · 新能力 · 系统级</div>
+        <h2>Widget × Live Activity × Lock Screen × 隐私模糊</h2>
+        <p class="desc">复用同一份 <code>WidgetExtension</code> 渲染锁屏小组件、主屏小 / 中 / 大尺寸、StandBy 模式、watchOS 复杂功能。所有金额都支持 Privacy Blur，Face ID / Touch ID 解锁。</p>
+      </div>
+    </div>
+
+    <div class="widget-grid">
+      <div class="widget tinted">
+        <div class="icon-pill">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12 12 3l9 9v9a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>
+        </div>
+        <div style="margin-top:auto;">
+          <div class="label">净资产 · 总览</div>
+          <div class="value mono">¥87,612.50</div>
+          <div class="sub">▲ 1.48% · 较月初</div>
+        </div>
+      </div>
+
+      <div class="widget">
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+          <div class="icon-pill" style="background: rgba(255,138,31,0.16); color:var(--credit);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/></svg>
+          </div>
+          <span class="tag credit">3 天到期</span>
+        </div>
+        <div style="margin-top:auto;">
+          <div class="label">工商 3375 · 信用</div>
+          <div class="value mono" style="color:var(--credit);">¥4,337.27</div>
+          <div class="sub">点击 → 标记还款</div>
+        </div>
+      </div>
+
+      <div class="widget">
+        <div class="icon-pill" style="background: var(--ai-soft); color: var(--ai);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg>
+        </div>
+        <div style="margin-top:auto;">
+          <div class="label">AI 待确认</div>
+          <div class="value mono">2 个计划</div>
+          <div class="sub">1 个中风险 · 1 个 ≤¥1000 候选</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:24px;">
+      <div class="card grow">
+        <h3>锁屏 · 内联组件</h3>
+        <p class="muted">用一颗 Tinted Glyph 表达「下次还款 + 剩余天数」，可在锁屏长按编辑。</p>
+        <div style="margin-top:14px; background: linear-gradient(135deg, #0d1f3a 0%, #2a1c4d 100%); padding: 28px 18px; border-radius: 22px; color: #fff;">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:42px;height:42px;background:rgba(255,255,255,0.12);border:0.5px solid rgba(255,255,255,0.2); border-radius:12px; display:flex; align-items:center; justify-content:center; backdrop-filter: blur(10px);">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ff8a1f" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/></svg>
+            </div>
+            <div>
+              <div style="font-size:11px; opacity:0.6;">工商 3375 · 还款</div>
+              <div style="font-size:22px; font-weight:800;">¥4,337.27</div>
+              <div style="font-size:11px; opacity:0.7; margin-top:2px;">3 天 · 2026-05-23</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card grow">
+        <h3>隐私模糊 · Privacy Blur</h3>
+        <p class="muted">App 切到后台或长时间无操作时，所有金额自动 8 px 高斯模糊；点击 Face ID 恢复。鼠标悬浮可临时显示（仅 macOS）。</p>
+        <div style="margin-top:14px; background: var(--surface-glass-strong); border:0.5px solid var(--stroke-hairline); border-radius:16px; padding:16px;">
+          <div style="display:flex; justify-content:space-between; align-items:baseline;">
+            <span style="font-size:11px; color:var(--text-secondary); font-weight:600; letter-spacing:0.4px; text-transform:uppercase;">净资产</span>
+            <span class="tag warning">隐私模式</span>
+          </div>
+          <div class="hero-number mono blur-amt" style="margin-top:4px;">¥87,612.50</div>
+          <div style="font-size:12px; color:var(--text-secondary); margin-top:6px;">悬浮显示 · 移开恢复模糊</div>
+        </div>
+      </div>
+
+      <div class="card grow">
+        <h3>StandBy / Apple Watch</h3>
+        <p class="muted">StandBy 模式横屏大字钟表配「下次还款」；Watch 复杂功能（complication）：净资产 / 今日支出 / 信用余额。</p>
+        <div style="margin-top:14px; background:#000; border-radius:16px; padding:24px; color:#fff; text-align:center;">
+          <div style="font-size:11px; opacity:0.5; letter-spacing:0.5px;">下次还款</div>
+          <div style="font-size:34px; font-weight:800; color:var(--credit); font-feature-settings:'tnum' on;">¥4,337</div>
+          <div style="font-size:11px; opacity:0.6;">3 天 · 工商 3375</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== AI memo / Reconciliation ====== -->
+  <section class="block">
+    <div class="section-head">
+      <div>
+        <div class="kicker">E · AI · 月报 · 账户对账</div>
+        <h2>从「记账 App」升级为「AI 财务管家」</h2>
+        <p class="desc">月底自动生成可编辑的财务月报；macOS 新增账户对账面板，余额漂移可一键回补 <code>AccountAdjustment</code>；AI 计划全部可视化、可回滚、可审计。</p>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="ai-memo grow" style="min-width:320px;">
+        <span class="badge">✦ 自研 LLM · 结构化 Plan</span>
+        <h4>5 月 · 财务故事</h4>
+        <p>本月你花了 <b class="mono">¥6,124</b>，比 4 月低 11%。其中可报销 <b class="mono">¥1,396</b> 主要来自 <b>Logitech MX Master 4</b> 和两次出差打车，预计 6 月 5 日全部到账。订阅压力仍然是大头：<b>iCloud+ ¥68</b>、<b>Apple One ¥158</b>，建议把家庭组共享给妈妈以减少重复订阅。</p>
+        <p>下个月需要重点关注 <b>工商 3375 还款日 5/23</b>，建议提前 5 天分两笔扣款。AI 已经替你起草了一笔现金流安排，可直接采纳。</p>
+        <div class="actions">
+          <button>编辑文字 · 让 AI 改语气</button>
+          <button>导出 PDF</button>
+          <button>分享到家庭群</button>
+          <button>固定到总览</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:24px;">
+      <div class="card grow" style="min-width:340px;">
+        <h3>账户对账 · Reconciliation</h3>
+        <p class="muted">从动账明细计算的「应有余额」对账目前的「账户余额」。偏差超过 ¥1 的账户进入待对账队列，可一键补一笔 <code>AccountAdjustment</code> 并写审计日志。</p>
+        <div style="margin-top:14px;">
+          <div class="list-row">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12l5 5L20 6"/></svg></div>
+            <div class="body">
+              <div class="t">建行储蓄 · CNY</div>
+              <div class="s">应有 ¥18,500.00 · 实有 ¥18,500.00</div>
+            </div>
+            <div class="amount" style="color: var(--income);">¥0.00<small>对账通过</small></div>
+          </div>
+          <div class="list-row">
+            <div class="icon" style="background: rgba(245,197,24,0.16); color: var(--warning);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.86l-8.5 14.74A2 2 0 0 0 3.54 22h16.92a2 2 0 0 0 1.74-3.4L13.7 3.86a2 2 0 0 0-3.4 0z"/></svg>
+            </div>
+            <div class="body">
+              <div class="t">Apple Card · USD</div>
+              <div class="s">应有 USD 510.00 · 实有 USD 508.30</div>
+            </div>
+            <div class="amount" style="color: var(--warning);">USD -1.70<small>建议补差</small></div>
+          </div>
+          <div class="list-row">
+            <div class="icon" style="background: rgba(48,185,85,0.16); color: var(--income);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12l5 5L20 6"/></svg>
+            </div>
+            <div class="body">
+              <div class="t">工商 3375 · 信用</div>
+              <div class="s">本期消费一致 · 已还 ¥0.00</div>
+            </div>
+            <div class="amount" style="color: var(--income);">¥0.00<small>对账通过</small></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card grow" style="min-width:340px;">
+        <h3>离线草稿队列 · Sync</h3>
+        <p class="muted">无网时 SwiftData 本地存草稿；恢复网络后按顺序回放到 API。冲突（同 id 远端更新）会弹「保留本地 / 接受远端 / 合并」。</p>
+        <div style="margin-top:14px;">
+          <div class="list-row">
+            <div class="icon" style="background: rgba(120,120,128,0.16); color: var(--text-secondary);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v6h-6"/></svg>
+            </div>
+            <div class="body">
+              <div class="t">京A 7 号 · 午餐 · ¥48</div>
+              <div class="s">草稿 · 等待回放</div>
+            </div>
+            <div class="amount" style="color: var(--text-secondary);">⏳<small>10:34</small></div>
+          </div>
+          <div class="list-row">
+            <div class="icon" style="background: rgba(48,185,85,0.16); color: var(--income);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12l5 5L20 6"/></svg>
+            </div>
+            <div class="body">
+              <div class="t">咖啡 ¥36 · 招商</div>
+              <div class="s">已同步 · 服务端 id 已回写</div>
+            </div>
+            <div class="amount" style="color: var(--income);">✓<small>10:35</small></div>
+          </div>
+          <div class="list-row">
+            <div class="icon" style="background: rgba(245,197,24,0.16); color: var(--warning);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.86l-8.5 14.74A2 2 0 0 0 3.54 22h16.92a2 2 0 0 0 1.74-3.4L13.7 3.86a2 2 0 0 0-3.4 0z"/></svg>
+            </div>
+            <div class="body">
+              <div class="t">「停车 ¥15」冲突</div>
+              <div class="s">远端已确认 · 本地仍为草稿</div>
+            </div>
+            <div class="amount" style="color: var(--warning); font-size:11.5px;">解决<small>需要选择</small></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== v1 → v1.1 ====== -->
+  <section class="block">
+    <div class="section-head">
+      <div>
+        <div class="kicker">F · 升级对照</div>
+        <h2>v1 vs v1.1 · 一眼看完差距</h2>
+      </div>
+    </div>
+    <div class="compare card" style="padding:30px;">
+      <div class="col">
+        <h4>v1 · 当前稳定版</h4>
+        <ul>
+          <li>iOS 强制 Light Mode，Tab Bar 系统默认样式</li>
+          <li>总览 KPI 用普通卡片，无 Sparkline / 图表</li>
+          <li>报表用静态 ThinBar，没有 Apple Charts 体验</li>
+          <li>macOS 三栏 OK，但无 ⌘K、无 Menu Bar Extra</li>
+          <li>没有 Widget / Live Activity / Lock Screen</li>
+          <li>没有 App Intents / Siri / Spotlight</li>
+          <li>没有隐私模糊 / Face ID 解锁</li>
+          <li>没有月度 AI 财务故事</li>
+          <li>没有账户对账面板（应有 vs 实有）</li>
+          <li>没有离线草稿队列与冲突解决</li>
+          <li>金额没有 Tabular Numbers，对齐不稳</li>
+        </ul>
+      </div>
+      <div class="col new">
+        <h4>v1.1 · 设计目标</h4>
+        <ul>
+          <li>Liquid Glass 全端 + Light / Dark / High Contrast 自适应</li>
+          <li>Hero 净资产 + Sparkline + Apple Charts 报表</li>
+          <li>iOS 浮动 Tab Bar + 中央 FAB 一句话记账</li>
+          <li>Dynamic Island + Live Activity 实时还款 / AI 计划</li>
+          <li>macOS ⌘K 命令面板 + Menu Bar Extra + 多窗口</li>
+          <li>Widget 锁屏 / 主屏 / StandBy / Watch 复杂功能</li>
+          <li>App Intents + Siri + Spotlight + Shortcuts</li>
+          <li>Privacy Blur + Face / Touch ID + 后台模糊</li>
+          <li>AI 月报（可编辑 / 导出 PDF / 改语气）</li>
+          <li>Account Reconciliation + 一键 AccountAdjustment</li>
+          <li>SwiftData 草稿队列 + 冲突解决 + 失败重试</li>
+          <li>金额全 mono + tnum + 永远「原币 + CNY」</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <div class="footer">
+    LinoFinance v1.1 · 2026-05-20 · 设计预览（HTML 静态模拟，最终以 SwiftUI 实装为准） · 字体走系统 SF · 配色与材质走 Liquid Glass 语义令牌 ·
+    施工细节见 <code>plan_v1.1.md</code>
+  </div>
+
+</div>
+</body>
+</html>

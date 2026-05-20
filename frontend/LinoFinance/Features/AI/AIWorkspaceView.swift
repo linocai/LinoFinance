@@ -12,10 +12,10 @@ struct AIWorkspaceView: View {
 
             if let config = environment.aiViewModel.config {
                 LazyVGrid(columns: aiConfigColumns, spacing: 12) {
-                    ToolbarPill(title: "Provider", value: config.provider, tint: FinanceColor.ai)
-                    ToolbarPill(title: "模型", value: config.model ?? "未配置", tint: FinanceColor.ai)
-                    ToolbarPill(title: "API Key", value: config.apiKeyConfigured ? "已配置" : "未配置", tint: config.apiKeyConfigured ? FinanceColor.income : FinanceColor.warning)
-                    ToolbarPill(title: "自动确认阈值", value: FinanceFormatter.money(config.autoConfirmLimitCny), tint: FinanceColor.brand)
+                    ToolbarPill(title: "Provider", value: config.provider, tint: FinanceTokens.State.ai)
+                    ToolbarPill(title: "模型", value: config.model ?? "未配置", tint: FinanceTokens.State.ai)
+                    ToolbarPill(title: "API Key", value: config.apiKeyConfigured ? "已配置" : "未配置", tint: config.apiKeyConfigured ? FinanceTokens.State.income : FinanceTokens.State.warning)
+                    ToolbarPill(title: "自动确认阈值", value: FinanceFormatter.money(config.autoConfirmLimitCny), tint: FinanceTokens.Brand.primary)
                 }
             }
 
@@ -66,7 +66,7 @@ struct AIWorkspaceView: View {
                 ErrorBanner(message: message)
             }
         }
-        .padding(FinanceSpacing.page)
+        .padding(FinanceTokens.Spacing.page)
         .moduleFrame()
         .task {
             try? await environment.aiViewModel.refresh()
@@ -204,7 +204,7 @@ private struct AIPlanCard: View {
                             .font(.subheadline.weight(.semibold))
                         Text(item.explanation ?? item.payload.map { "\($0.key)=\($0.value.displayText)" }.joined(separator: " · "))
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(FinanceTokens.Text.secondary)
                             .lineLimit(3)
                     }
                     Spacer()
@@ -215,7 +215,7 @@ private struct AIPlanCard: View {
                     }
                 }
                 .padding(10)
-                .background(.secondary.opacity(0.08))
+                .background(FinanceTokens.Stroke.soft.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
             }
 
@@ -240,7 +240,7 @@ private struct AIPlanCard: View {
                 .lineLimit(2)
             Text(plan.explanation ?? "结构化动作计划")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(FinanceTokens.Text.secondary)
                 .lineLimit(3)
         }
     }

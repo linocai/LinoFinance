@@ -61,7 +61,7 @@ struct NotificationsView: View {
                 ErrorBanner(message: message)
             }
         }
-        .padding(FinanceSpacing.page)
+        .padding(FinanceTokens.Spacing.page)
         .moduleFrame()
         .task {
             try? await environment.notificationsViewModel.refresh()
@@ -117,7 +117,7 @@ private struct NotificationRuleRow: View {
                     .lineLimit(2)
                 Text("\(rule.ruleType.financeStatusTitle) · \(rule.channel.financeStatusTitle) · \(rule.nextTriggerDate.map(FinanceFormatter.mediumDate) ?? "未排期")")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(FinanceTokens.Text.secondary)
                     .lineLimit(2)
                 StatusTag(status: rule.status)
             }
@@ -132,7 +132,7 @@ private struct NotificationRuleRow: View {
                     .font(.headline)
                 Text("\(rule.ruleType.financeStatusTitle) · \(rule.channel.financeStatusTitle) · \(rule.nextTriggerDate.map(FinanceFormatter.mediumDate) ?? "未排期")")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(FinanceTokens.Text.secondary)
             }
             Spacer()
             StatusTag(status: rule.status)
@@ -143,7 +143,7 @@ private struct NotificationRuleRow: View {
 
     private var notificationIcon: some View {
         Image(systemName: "bell.badge.fill")
-            .foregroundStyle(rule.status == "active" ? FinanceColor.brand : FinanceColor.pending)
+            .foregroundStyle(rule.status == "active" ? FinanceTokens.Brand.primary : FinanceTokens.State.pending)
             .frame(width: 28)
     }
 }
@@ -162,7 +162,7 @@ private struct NotificationActionMenu: View {
             Button("取消", role: .destructive) { confirm(rule, "cancel") }
         } label: {
             Image(systemName: "ellipsis.circle")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(FinanceTokens.Text.secondary)
         }
     }
 }

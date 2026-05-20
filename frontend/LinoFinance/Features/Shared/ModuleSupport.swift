@@ -25,10 +25,12 @@ struct DetailLine: View {
     private var horizontalLine: some View {
         HStack(alignment: .firstTextBaseline) {
             Text(title)
-                .foregroundStyle(.secondary)
+                .font(FinanceTypography.caption)
+                .foregroundStyle(FinanceTokens.Text.secondary)
             Spacer()
             Text(value)
-                .font(.body.monospacedDigit())
+                .font(FinanceTypography.bodyMono)
+                .foregroundStyle(FinanceTokens.Text.primary)
                 .multilineTextAlignment(.trailing)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
@@ -39,10 +41,11 @@ struct DetailLine: View {
     private var verticalLine: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(FinanceTypography.caption)
+                .foregroundStyle(FinanceTokens.Text.secondary)
             Text(value)
-                .font(.body.monospacedDigit())
+                .font(FinanceTypography.bodyMono)
+                .foregroundStyle(FinanceTokens.Text.primary)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
@@ -58,45 +61,40 @@ struct ErrorBanner: View {
     var body: some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
             .font(.caption)
-            .foregroundStyle(.orange)
+            .foregroundStyle(FinanceTokens.State.warning)
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.orange.opacity(0.10))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .background(FinanceTokens.State.warning.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: FinanceTokens.Radius.sm))
     }
 }
 
 struct ToolbarPill: View {
     let title: String
     let value: String
-    var tint: Color = FinanceColor.brand
+    var tint: Color = FinanceTokens.Brand.primary
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.headline.monospacedDigit())
-                .foregroundStyle(tint)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .font(FinanceTypography.caption)
+                .foregroundStyle(FinanceTokens.Text.secondary)
+            PrivacyAmount(
+                value: value,
+                font: .headline.monospacedDigit(),
+                tint: tint
+            )
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-#if os(iOS)
-        .background(Color(.secondarySystemGroupedBackground))
-#else
-        .background(.regularMaterial)
-#endif
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .glassBackground(radius: FinanceTokens.Radius.md, strength: .strong)
     }
 }
 
 struct ThinBar: View {
     let value: DecimalValue
     let maxValue: Decimal
-    var tint: Color = FinanceColor.brand
+    var tint: Color = FinanceTokens.Brand.primary
 
     var body: some View {
         GeometryReader { geometry in
@@ -105,7 +103,7 @@ struct ThinBar: View {
             let width = maximum <= 0 ? 0 : min(1, current / maximum)
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(.secondary.opacity(0.12))
+                    .fill(FinanceTokens.Stroke.soft)
                 RoundedRectangle(cornerRadius: 4)
                     .fill(tint.opacity(0.75))
                     .frame(width: geometry.size.width * width)
@@ -120,9 +118,11 @@ extension View {
 #if os(iOS)
         self
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(Color(.systemGroupedBackground))
+            .background(FinanceTokens.Surface.base)
 #else
-        self.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        self
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(FinanceTokens.Surface.base)
 #endif
     }
 }

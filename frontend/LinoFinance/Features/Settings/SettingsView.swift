@@ -75,8 +75,18 @@ struct SettingsView: View {
                 if let configMessage {
                     Text(configMessage)
                         .font(.caption)
-                        .foregroundStyle(FinanceColor.income)
+                        .foregroundStyle(FinanceTokens.State.income)
                 }
+            }
+
+            Section("外观与隐私") {
+                Picker("外观", selection: $environment.appearance) {
+                    ForEach(FinanceAppearance.allCases) { appearance in
+                        Text(appearance.title).tag(appearance)
+                    }
+                }
+                Toggle("使用大数字样式", isOn: $environment.useHeroNumbers)
+                Toggle("隐藏金额", isOn: $environment.privacyMaskEnabled)
             }
 
             Section("AI 配置") {
@@ -88,7 +98,7 @@ struct SettingsView: View {
                     DetailLine(title: "自动确认阈值", value: FinanceFormatter.money(config.autoConfirmLimitCny))
                 } else {
                     Text("尚未读取 AI 配置")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(FinanceTokens.Text.secondary)
                 }
             }
 
@@ -112,7 +122,7 @@ struct SettingsView: View {
                             Spacer()
                             Text(FinanceFormatter.shortDate(rate.date))
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(FinanceTokens.Text.secondary)
                         }
                         Text(NSDecimalNumber(decimal: rate.rate.value).stringValue)
                             .font(.body.monospacedDigit())
@@ -128,7 +138,7 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
-        .background(Color(.systemGroupedBackground))
+        .background(FinanceTokens.Surface.base)
         .moduleFrame()
         .task {
             syncDrafts()
@@ -144,7 +154,7 @@ struct SettingsView: View {
                 .textCase(nil)
             Text(subtitle)
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(FinanceTokens.Text.secondary)
                 .textCase(nil)
         }
         .padding(.top, 8)
@@ -196,15 +206,30 @@ struct SettingsView: View {
                         if let configMessage {
                             Text(configMessage)
                                 .font(.caption)
-                                .foregroundStyle(FinanceColor.income)
+                                .foregroundStyle(FinanceTokens.State.income)
                         }
                     }
                 }
 
                 FinancePanel {
                     VStack(alignment: .leading, spacing: 12) {
+                        Text("外观与隐私")
+                            .font(FinanceTypography.headline)
+                        Picker("外观", selection: $environment.appearance) {
+                            ForEach(FinanceAppearance.allCases) { appearance in
+                                Text(appearance.title).tag(appearance)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        Toggle("使用大数字样式", isOn: $environment.useHeroNumbers)
+                        Toggle("隐藏金额", isOn: $environment.privacyMaskEnabled)
+                    }
+                }
+
+                FinancePanel {
+                    VStack(alignment: .leading, spacing: 12) {
                         Text("AI 配置")
-                            .font(.headline)
+                            .font(FinanceTypography.headline)
                         if let config = environment.settingsViewModel.aiConfig {
                             DetailLine(title: "Provider", value: config.provider)
                             DetailLine(title: "模型", value: config.model ?? "未配置")
@@ -213,7 +238,7 @@ struct SettingsView: View {
                             DetailLine(title: "自动确认阈值", value: FinanceFormatter.money(config.autoConfirmLimitCny))
                         } else {
                             Text("尚未读取 AI 配置")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(FinanceTokens.Text.secondary)
                         }
                     }
                 }
@@ -240,7 +265,7 @@ struct SettingsView: View {
                                 Text(NSDecimalNumber(decimal: rate.rate.value).stringValue)
                                     .font(.body.monospacedDigit())
                                 Text(FinanceFormatter.shortDate(rate.date))
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(FinanceTokens.Text.secondary)
                             }
                         }
                     }
@@ -250,7 +275,7 @@ struct SettingsView: View {
                     ErrorBanner(message: message)
                 }
             }
-            .padding(FinanceSpacing.page)
+            .padding(FinanceTokens.Spacing.page)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .moduleFrame()

@@ -15,9 +15,9 @@ struct iOSRootView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .preferredColorScheme(.light)
-        .tint(FinanceColor.brand)
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .preferredColorScheme(environment.appearance.colorScheme)
+        .tint(FinanceTokens.Brand.primary)
+        .background(FinanceTokens.Surface.base.ignoresSafeArea())
         .onChange(of: requiresConnectionSetup) { _, needsSetup in
             if needsSetup {
                 selectedTab = .more
@@ -58,7 +58,7 @@ struct iOSRootView: View {
                 .tag(iOSTab.more)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .background(FinanceTokens.Surface.base.ignoresSafeArea())
         .sheet(item: detailSelection) { selection in
             NavigationStack {
                 ScrollView {
@@ -77,7 +77,7 @@ struct iOSRootView: View {
             }
             .presentationDetents([.medium, .large])
         }
-        .toolbarBackground(Color(.systemBackground), for: .tabBar)
+        .toolbarBackground(FinanceTokens.Surface.raised, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
         .modifier(NewObjectSheets(environment: environment))
     }
@@ -89,7 +89,7 @@ struct iOSRootView: View {
                 .toolbar(.hidden, for: .navigationBar)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .background(FinanceTokens.Surface.base.ignoresSafeArea())
     }
 
     private var requiresConnectionSetup: Bool {
@@ -133,7 +133,7 @@ struct iOSRootView: View {
                 FinanceModuleContentView(environment: environment, module: module)
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar { toolbarItems(for: module) }
-                    .toolbarBackground(Color(.systemBackground), for: .navigationBar)
+                    .toolbarBackground(FinanceTokens.Surface.raised, for: .navigationBar)
                     .toolbarBackground(.visible, for: .navigationBar)
                     .onAppear {
                         environment.selectedModule = module
@@ -150,7 +150,7 @@ struct iOSRootView: View {
             FinanceModuleContentView(environment: environment, module: module)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarItems(for: module) }
-                .toolbarBackground(Color(.systemBackground), for: .navigationBar)
+                .toolbarBackground(FinanceTokens.Surface.raised, for: .navigationBar)
                 .toolbarBackground(.visible, for: .navigationBar)
         }
         .onAppear {
@@ -240,19 +240,19 @@ private struct ConnectionStatusView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Circle()
-                    .fill(environment.lastErrorMessage == nil && environment.isAPITokenConfigured ? .green : .orange)
+                    .fill(environment.lastErrorMessage == nil && environment.isAPITokenConfigured ? FinanceTokens.State.income : FinanceTokens.State.warning)
                     .frame(width: 8, height: 8)
                 Text(environment.isAPITokenConfigured ? "API 已配置" : "需要配置 Token")
                     .font(.subheadline.weight(.semibold))
             }
             Text(environment.apiClient.baseURL.absoluteString)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(FinanceTokens.Text.secondary)
                 .textSelection(.enabled)
             if let message = environment.lastErrorMessage {
                 Text(message)
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(FinanceTokens.State.warning)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

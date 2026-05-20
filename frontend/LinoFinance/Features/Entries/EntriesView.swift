@@ -72,10 +72,10 @@ struct EntriesView: View {
             if let message = environment.entriesViewModel.errorMessage {
                 Text(message)
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(FinanceTokens.State.warning)
             }
         }
-        .padding(FinanceSpacing.page)
+        .padding(FinanceTokens.Spacing.page)
         .moduleFrame()
         .task {
             try? await environment.entriesViewModel.refresh()
@@ -201,7 +201,7 @@ private struct EntryRow: View {
                 }
                 Text("\(FinanceFormatter.shortDate(entry.date)) · \(accountName) · \(categoryName)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(FinanceTokens.Text.secondary)
                     .lineLimit(2)
                 if let primaryLine {
                     MoneyText(amount: primaryLine.amount, currency: primaryLine.currency, convertedCNY: primaryLine.convertedCnyAmount)
@@ -223,7 +223,7 @@ private struct EntryRow: View {
                 }
                 Text("\(FinanceFormatter.shortDate(entry.date)) · \(accountName) · \(categoryName)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(FinanceTokens.Text.secondary)
             }
 
             Spacer()
@@ -238,7 +238,7 @@ private struct EntryRow: View {
 
     private var entryIcon: some View {
         Image(systemName: entry.status == .confirmed ? "checkmark.circle.fill" : "circle.dotted")
-            .foregroundStyle(entry.status == .confirmed ? FinanceColor.income : FinanceColor.pending)
+            .foregroundStyle(entry.status == .confirmed ? FinanceTokens.State.income : FinanceTokens.State.pending)
             .frame(width: 28)
     }
 }
@@ -257,7 +257,7 @@ private struct EntryActionMenu: View {
             }
         } label: {
             Image(systemName: "ellipsis.circle")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(FinanceTokens.Text.secondary)
         }
         .menuStyle(.button)
     }
@@ -442,12 +442,12 @@ struct NewEntrySheet: View {
             if let warningMessage {
                 Text(warningMessage)
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(FinanceTokens.State.warning)
             }
 
             if let errorMessage {
                 Text(errorMessage)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(FinanceTokens.State.warning)
                     .font(.caption)
             }
 

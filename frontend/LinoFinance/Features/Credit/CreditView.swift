@@ -116,7 +116,7 @@ struct CreditView: View {
                     ErrorBanner(message: message)
                 }
             }
-            .padding(FinanceSpacing.page)
+            .padding(FinanceTokens.Spacing.page)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .moduleFrame()
@@ -279,7 +279,7 @@ private struct CreditAccountCard: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "creditcard.fill")
-                    .foregroundStyle(FinanceColor.credit)
+                    .foregroundStyle(FinanceTokens.State.credit)
                 Spacer()
                 StatusTag(title: account.status.financeStatusTitle, style: .confirmed)
             }
@@ -292,20 +292,15 @@ private struct CreditAccountCard: View {
                 Text("还款日 \(account.dueDay.map(String.init) ?? "-")")
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(FinanceTokens.Text.secondary)
             if let nextCycle {
                 Text("下次应还 \(FinanceFormatter.shortDate(nextCycle.dueDate)) · \(FinanceFormatter.money(nextCycle.remainingAmount, currency: nextCycle.currency))")
                     .font(.caption)
-                    .foregroundStyle(FinanceColor.credit)
+                    .foregroundStyle(FinanceTokens.State.credit)
             }
         }
         .padding(14)
-#if os(iOS)
-        .background(Color(.secondarySystemGroupedBackground))
-#else
-        .background(.regularMaterial)
-#endif
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .glassBackground(radius: FinanceTokens.Radius.md)
     }
 }
 
@@ -341,7 +336,7 @@ private struct CreditCycleRow: View {
                 .lineLimit(2)
             Text("\(FinanceFormatter.shortDate(cycle.cycleStartDate)) - \(FinanceFormatter.shortDate(cycle.cycleEndDate)) · 到期 \(FinanceFormatter.shortDate(cycle.dueDate))")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(FinanceTokens.Text.secondary)
                 .lineLimit(2)
         }
     }
@@ -380,7 +375,7 @@ private struct InstallmentRow: View {
                 .lineLimit(2)
             Text("\(plan.numberOfPayments) 期 · \(FinanceFormatter.shortDate(plan.startDate)) - \(FinanceFormatter.shortDate(plan.endDate))")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(FinanceTokens.Text.secondary)
                 .lineLimit(2)
         }
     }
@@ -398,7 +393,7 @@ private struct InstallmentActionMenu: View {
             Button("取消", role: .destructive) { confirmCancel(plan) }
         } label: {
             Image(systemName: "ellipsis.circle")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(FinanceTokens.Text.secondary)
         }
     }
 }
@@ -435,7 +430,7 @@ private struct SubscriptionRow: View {
                 .lineLimit(2)
             Text("\(rule.billingInterval.financeStatusTitle) · 下次 \(rule.nextChargeDate.map(FinanceFormatter.shortDate) ?? "未排期")")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(FinanceTokens.Text.secondary)
                 .lineLimit(2)
         }
     }
@@ -456,7 +451,7 @@ private struct SubscriptionActionMenu: View {
             Button("取消", role: .destructive) { confirm(rule, "cancel") }
         } label: {
             Image(systemName: "ellipsis.circle")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(FinanceTokens.Text.secondary)
         }
     }
 }

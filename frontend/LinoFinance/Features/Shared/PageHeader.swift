@@ -8,13 +8,14 @@ struct PageHeader: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
 #if os(iOS)
-                .font(.title2.weight(.semibold))
+                .font(FinanceTypography.headline)
 #else
-                .font(.largeTitle.weight(.semibold))
+                .font(FinanceTypography.titleXL)
 #endif
+                .foregroundStyle(FinanceTokens.Text.primary)
             Text(subtitle)
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(FinanceTokens.Text.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

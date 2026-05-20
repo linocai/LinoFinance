@@ -26,13 +26,13 @@ struct CashFlowView: View {
                     ToolbarPill(
                         title: "未来 \(window.days) 天净额",
                         value: FinanceFormatter.money(window.netCny),
-                        tint: window.netCny.value < 0 ? FinanceColor.expense : FinanceColor.income
+                        tint: window.netCny.value < 0 ? FinanceTokens.State.expense : FinanceTokens.State.income
                     )
                 }
                 if pressureWindows.isEmpty {
-                    ToolbarPill(title: "未来 30 天", value: "等待报表", tint: FinanceColor.pending)
-                    ToolbarPill(title: "预计进账", value: FinanceFormatter.money(DecimalValue(0)), tint: FinanceColor.income)
-                    ToolbarPill(title: "预计出账", value: FinanceFormatter.money(DecimalValue(0)), tint: FinanceColor.expense)
+                    ToolbarPill(title: "未来 30 天", value: "等待报表", tint: FinanceTokens.State.pending)
+                    ToolbarPill(title: "预计进账", value: FinanceFormatter.money(DecimalValue(0)), tint: FinanceTokens.State.income)
+                    ToolbarPill(title: "预计出账", value: FinanceFormatter.money(DecimalValue(0)), tint: FinanceTokens.State.expense)
                 }
             }
 
@@ -89,7 +89,7 @@ struct CashFlowView: View {
                 ErrorBanner(message: message)
             }
         }
-        .padding(FinanceSpacing.page)
+        .padding(FinanceTokens.Spacing.page)
         .moduleFrame()
         .task {
             try? await environment.cashFlowViewModel.refresh()
@@ -204,7 +204,7 @@ private struct CashFlowRow: View {
     let accounts: [AccountDTO]
 
     private var tint: Color {
-        item.direction == "inflow" ? FinanceColor.income : FinanceColor.expense
+        item.direction == "inflow" ? FinanceTokens.State.income : FinanceTokens.State.expense
     }
 
     var body: some View {
@@ -221,7 +221,7 @@ private struct CashFlowRow: View {
                 }
                 Text("\(FinanceFormatter.mediumDate(item.expectedDate)) · \(accountName)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(FinanceTokens.Text.secondary)
                     .lineLimit(2)
                 MoneyText(amount: item.amount, currency: item.currency, convertedCNY: item.convertedCnyAmount, prominence: .headline)
             }
@@ -240,7 +240,7 @@ private struct CashFlowRow: View {
                 }
                 Text("\(FinanceFormatter.mediumDate(item.expectedDate)) · \(accountName)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(FinanceTokens.Text.secondary)
             }
             Spacer()
             MoneyText(amount: item.amount, currency: item.currency, convertedCNY: item.convertedCnyAmount, prominence: .headline)
@@ -277,7 +277,7 @@ private struct CashFlowActionMenu: View {
             Button("取消", role: .destructive) { confirm(item, "cancel") }
         } label: {
             Image(systemName: "ellipsis.circle")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(FinanceTokens.Text.secondary)
         }
     }
 }
@@ -317,7 +317,7 @@ struct NewCashFlowSheet: View {
                     DatePicker("每月重复到", selection: $recurrenceEndDate, displayedComponents: .date)
                     Text("会从预计日期开始，每月生成一条工资进账，直到截止日期所在日。")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(FinanceTokens.Text.secondary)
                 }
                 Picker("账户", selection: accountSelection) {
                     Text("不关联").tag(Optional<String>.none)

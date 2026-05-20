@@ -266,7 +266,7 @@ private struct AIPlanDetail: View {
                         if let explanation = action.explanation {
                             Text(explanation)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(FinanceTokens.Text.secondary)
                         }
                     }
                 }
@@ -310,7 +310,7 @@ private struct ModuleDetail: View {
         DetailSection(title: module.title, systemImage: module.symbolName, headline: module.title) {
             Text(moduleHint)
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(FinanceTokens.Text.secondary)
         }
     }
 
@@ -360,7 +360,7 @@ private struct DetailNote: View {
             Divider()
             Text(note)
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(FinanceTokens.Text.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

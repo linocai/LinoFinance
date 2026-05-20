@@ -101,6 +101,9 @@ struct MacRootView: View {
             environment.inspectorSelection = .module(module)
             Task { await environment.refreshCurrentModule() }
         }
+        .preferredColorScheme(environment.appearance.colorScheme)
+        .tint(FinanceTokens.Brand.primary)
+        .background(FinanceTokens.Surface.base)
     }
 }
 
@@ -138,19 +141,19 @@ private struct ConnectionFooter: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Circle()
-                    .fill(environment.lastErrorMessage == nil ? .green : .orange)
+                    .fill(environment.lastErrorMessage == nil ? FinanceTokens.State.income : FinanceTokens.State.warning)
                     .frame(width: 8, height: 8)
                 Text(environment.lastErrorMessage == nil ? "API 已连接" : "离线 / 待连接")
                     .font(.caption.weight(.semibold))
             }
             Text(environment.apiClient.baseURL.absoluteString)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(FinanceTokens.Text.secondary)
                 .textSelection(.enabled)
             if let message = environment.lastErrorMessage {
                 Text(message)
                     .font(.caption2)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(FinanceTokens.State.warning)
                     .lineLimit(3)
             }
         }

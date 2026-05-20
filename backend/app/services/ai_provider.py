@@ -87,6 +87,55 @@ def generate_action_proposals(
     return actions, raw_response, parsed.get("explanation"), parsed.get("confidence")
 
 
+def generate_monthly_memo(prompt: str) -> Dict[str, Any]:
+    settings = get_settings()
+    if not settings.ai_api_base_url or not settings.ai_api_key or not settings.ai_model:
+        raise LedgerValidationError(
+            "AI provider is not configured; set LINOFINANCE_AI_API_BASE_URL, "
+            "LINOFINANCE_AI_API_KEY, and LINOFINANCE_AI_MODEL"
+        )
+
+    endpoint = _chat_completions_endpoint(settings.ai_api_base_url)
+    request_body = {
+        "model": settings.ai_model,
+        "temperature": 0.2,
+        "max_tokens": settings.ai_memo_max_tokens,
+        "messages": [
+            {"role": "system", "content": "Write concise Chinese finance memos in Markdown."},
+            {"role": "user", "content": prompt},
+        ],
+    }
+    request = urllib.request.Request(
+        endpoint,
+        data=json.dumps(request_body).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {settings.ai_api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=settings.ai_request_timeout_seconds,
+        ) as response:
+            raw_response = json.loads(response.read().decode("utf-8"))
+    except urllib.error.URLError as exc:
+        raise LedgerValidationError(f"AI provider request failed: {exc}") from exc
+
+    message = raw_response["choices"][0]["message"]["content"]
+    usage = raw_response.get("usage") or {}
+    return {
+        "summary": message,
+        "prompt_token": usage.get("prompt_tokens", 0),
+        "completion_token": usage.get("completion_tokens", 0),
+        "generator": settings.ai_provider,
+        "confidence": "0.8",
+        "raw_response": raw_response,
+    }
+
+
 def _chat_completions_endpoint(base_url: str) -> str:
     normalized = base_url.rstrip("/")
     if normalized.endswith("/chat/completions"):

@@ -57,7 +57,7 @@ struct AccountsView: View {
                 .listStyle(.inset)
             }
         }
-        .padding(FinanceSpacing.page)
+        .padding(FinanceTokens.Spacing.page)
         .moduleFrame()
         .task {
             try? await environment.accountsViewModel.refresh()
@@ -93,7 +93,7 @@ private struct AccountRow: View {
                     StatusTag(title: account.type.title, style: account.type == .credit ? .warning : .confirmed)
                     Text(account.currency.rawValue)
                         .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(FinanceTokens.Text.secondary)
                 }
                 MoneyText(
                     amount: account.type == .credit ? account.currentLiability : account.currentBalance,
@@ -115,7 +115,7 @@ private struct AccountRow: View {
                     StatusTag(title: account.type.title, style: account.type == .credit ? .warning : .confirmed)
                     Text(account.currency.rawValue)
                         .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(FinanceTokens.Text.secondary)
                 }
             }
             Spacer()
@@ -132,7 +132,7 @@ private struct AccountRow: View {
 
     private var accountIcon: some View {
         Image(systemName: account.type == .credit ? "creditcard.fill" : "wallet.pass.fill")
-            .foregroundStyle(account.type == .credit ? FinanceColor.credit : FinanceColor.brand)
+            .foregroundStyle(account.type == .credit ? FinanceTokens.State.credit : FinanceTokens.Brand.primary)
             .frame(width: 28)
     }
 }
@@ -177,7 +177,7 @@ struct NewAccountSheet: View {
             }
             if let errorMessage {
                 Text(errorMessage)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(FinanceTokens.State.warning)
                     .font(.caption)
             }
             HStack {

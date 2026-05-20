@@ -53,7 +53,7 @@ struct DashboardView: View {
                     ErrorBanner(message: message)
                 }
             }
-            .padding(FinanceSpacing.page)
+            .padding(FinanceTokens.Spacing.page)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .moduleFrame()
@@ -79,14 +79,14 @@ private struct SummaryGrid: View {
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 14)], spacing: 14) {
-            KPIStat(title: "净资产", value: FinanceFormatter.money(summary.netWorthCny), systemImage: "chart.pie.fill", tint: FinanceColor.brand)
-            KPIStat(title: "余额合计", value: FinanceFormatter.money(summary.balanceTotalCny), systemImage: "wallet.pass.fill", tint: FinanceColor.income)
-            KPIStat(title: "信用负债", value: FinanceFormatter.money(summary.creditLiabilityTotalCny), systemImage: "creditcard.trianglebadge.exclamationmark", tint: FinanceColor.credit)
+            KPIStat(title: "净资产", value: FinanceFormatter.money(summary.netWorthCny), systemImage: "chart.pie.fill", tint: FinanceTokens.Brand.primary)
+            KPIStat(title: "余额合计", value: FinanceFormatter.money(summary.balanceTotalCny), systemImage: "wallet.pass.fill", tint: FinanceTokens.State.income)
+            KPIStat(title: "信用负债", value: FinanceFormatter.money(summary.creditLiabilityTotalCny), systemImage: "creditcard.trianglebadge.exclamationmark", tint: FinanceTokens.State.credit)
             KPIStat(
                 title: future30Net == nil ? "确认记录" : "30 天净额",
                 value: future30Net.map { FinanceFormatter.money($0) } ?? "\(summary.confirmedEntryCount)",
                 systemImage: future30Net == nil ? "checkmark.seal.fill" : "calendar.badge.clock",
-                tint: (future30Net?.value ?? 0) < 0 ? FinanceColor.expense : FinanceColor.income
+                tint: (future30Net?.value ?? 0) < 0 ? FinanceTokens.State.expense : FinanceTokens.State.income
             )
         }
     }
@@ -104,7 +104,7 @@ private struct DashboardCashFlowCard: View {
                     Spacer()
                     Text(FinanceFormatter.shortDate(report.anchorDate))
                         .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(FinanceTokens.Text.secondary)
                 }
                 ForEach(Array(report.windows.enumerated()), id: \.element.id) { index, window in
                     VStack(alignment: .leading, spacing: 6) {
@@ -149,7 +149,7 @@ private struct DashboardCategoryCard: View {
                             Text(row.categoryName)
                                 .frame(minWidth: 72, idealWidth: 110, maxWidth: 120, alignment: .leading)
                                 .lineLimit(1)
-                            ThinBar(value: row.expenseCny, maxValue: maxValue, tint: FinanceColor.expense)
+                            ThinBar(value: row.expenseCny, maxValue: maxValue, tint: FinanceTokens.State.expense)
                             MoneyText(amount: row.expenseCny, currency: .cny)
                         }
 
@@ -160,7 +160,7 @@ private struct DashboardCategoryCard: View {
                                 Spacer()
                                 MoneyText(amount: row.expenseCny, currency: .cny)
                             }
-                            ThinBar(value: row.expenseCny, maxValue: maxValue, tint: FinanceColor.expense)
+                            ThinBar(value: row.expenseCny, maxValue: maxValue, tint: FinanceTokens.State.expense)
                         }
                     }
                 }
@@ -191,7 +191,7 @@ private struct DashboardReimbursementCard: View {
                             StatusTag(status: row.status)
                             Text("\(row.claimCount) 笔")
                                 .font(.caption.monospacedDigit())
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(FinanceTokens.Text.secondary)
                             Spacer()
                             MoneyText(amount: row.amountCny, currency: .cny)
                         }
@@ -232,7 +232,7 @@ private struct DashboardAICard: View {
                                     .lineLimit(1)
                                 Text("\(plan.actions.count) 个动作")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(FinanceTokens.Text.secondary)
                             }
                             Spacer()
                             StatusTag(status: plan.riskLevel)

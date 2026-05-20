@@ -60,10 +60,10 @@ struct ReportsView: View {
             if let path = environment.reportsViewModel.lastExportPath {
                 Label("已导出：\(path)", systemImage: "checkmark.circle.fill")
                     .font(.caption)
-                    .foregroundStyle(FinanceColor.income)
+                    .foregroundStyle(FinanceTokens.State.income)
             }
         }
-        .padding(FinanceSpacing.page)
+        .padding(FinanceTokens.Spacing.page)
         .moduleFrame()
         .task {
             try? await environment.reportsViewModel.refresh()
@@ -84,14 +84,14 @@ private struct MonthlyReportPanel: View {
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
-            ToolbarPill(title: "收入", value: FinanceFormatter.money(report.incomeCny), tint: FinanceColor.income)
-            ToolbarPill(title: "支出", value: FinanceFormatter.money(report.expenseCny), tint: FinanceColor.expense)
-            ToolbarPill(title: "个人净支出", value: FinanceFormatter.money(report.personalNetExpenseCny), tint: FinanceColor.brand)
-            ToolbarPill(title: "未来净额", value: FinanceFormatter.money(report.futureNetCny), tint: report.futureNetCny.value < 0 ? FinanceColor.expense : FinanceColor.income)
-            ToolbarPill(title: "待报销", value: FinanceFormatter.money(report.expectedReimbursementCny), tint: FinanceColor.ai)
-            ToolbarPill(title: "已批准回款", value: FinanceFormatter.money(report.approvedReimbursementCny), tint: FinanceColor.ai)
-            ToolbarPill(title: "已到账", value: FinanceFormatter.money(report.receivedReimbursementCny), tint: FinanceColor.income)
-            ToolbarPill(title: "信用负债", value: FinanceFormatter.money(report.creditLiabilityCny), tint: FinanceColor.credit)
+            ToolbarPill(title: "收入", value: FinanceFormatter.money(report.incomeCny), tint: FinanceTokens.State.income)
+            ToolbarPill(title: "支出", value: FinanceFormatter.money(report.expenseCny), tint: FinanceTokens.State.expense)
+            ToolbarPill(title: "个人净支出", value: FinanceFormatter.money(report.personalNetExpenseCny), tint: FinanceTokens.Brand.primary)
+            ToolbarPill(title: "未来净额", value: FinanceFormatter.money(report.futureNetCny), tint: report.futureNetCny.value < 0 ? FinanceTokens.State.expense : FinanceTokens.State.income)
+            ToolbarPill(title: "待报销", value: FinanceFormatter.money(report.expectedReimbursementCny), tint: FinanceTokens.State.ai)
+            ToolbarPill(title: "已批准回款", value: FinanceFormatter.money(report.approvedReimbursementCny), tint: FinanceTokens.State.ai)
+            ToolbarPill(title: "已到账", value: FinanceFormatter.money(report.receivedReimbursementCny), tint: FinanceTokens.State.income)
+            ToolbarPill(title: "信用负债", value: FinanceFormatter.money(report.creditLiabilityCny), tint: FinanceTokens.State.credit)
         }
     }
 }
@@ -117,7 +117,7 @@ private struct CategoryReportPanel: View {
                         HStack {
                             Text(row.categoryName)
                                 .frame(minWidth: 72, idealWidth: 140, maxWidth: 160, alignment: .leading)
-                            ThinBar(value: row.expenseCny, maxValue: maxValue, tint: FinanceColor.expense)
+                            ThinBar(value: row.expenseCny, maxValue: maxValue, tint: FinanceTokens.State.expense)
                             MoneyText(amount: row.expenseCny, currency: .cny)
                         }
 
@@ -128,7 +128,7 @@ private struct CategoryReportPanel: View {
                                 Spacer()
                                 MoneyText(amount: row.expenseCny, currency: .cny)
                             }
-                            ThinBar(value: row.expenseCny, maxValue: maxValue, tint: FinanceColor.expense)
+                            ThinBar(value: row.expenseCny, maxValue: maxValue, tint: FinanceTokens.State.expense)
                         }
                     }
                 }
@@ -207,7 +207,7 @@ private struct CreditReportPanel: View {
                 .lineLimit(2)
             Text("出账 \(FinanceFormatter.shortDate(row.statementDate)) · 到期 \(FinanceFormatter.shortDate(row.dueDate))")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(FinanceTokens.Text.secondary)
                 .lineLimit(2)
         }
     }
@@ -219,9 +219,9 @@ private struct ReimbursementReportPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             LazyVGrid(columns: reportGridColumns(), spacing: 12) {
-                ToolbarPill(title: "报销前支出", value: FinanceFormatter.money(report.preReimbursementExpenseCny), tint: FinanceColor.expense)
-                ToolbarPill(title: "预计抵扣", value: FinanceFormatter.money(report.expectedOffsetCny), tint: FinanceColor.ai)
-                ToolbarPill(title: "个人净支出", value: FinanceFormatter.money(report.personalNetExpenseCny), tint: FinanceColor.brand)
+                ToolbarPill(title: "报销前支出", value: FinanceFormatter.money(report.preReimbursementExpenseCny), tint: FinanceTokens.State.expense)
+                ToolbarPill(title: "预计抵扣", value: FinanceFormatter.money(report.expectedOffsetCny), tint: FinanceTokens.State.ai)
+                ToolbarPill(title: "个人净支出", value: FinanceFormatter.money(report.personalNetExpenseCny), tint: FinanceTokens.Brand.primary)
             }
             FinancePanel {
                 VStack(alignment: .leading, spacing: 10) {
@@ -233,7 +233,7 @@ private struct ReimbursementReportPanel: View {
                                 StatusTag(status: row.status)
                                 Text("\(row.claimCount) 笔")
                                     .font(.caption.monospacedDigit())
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(FinanceTokens.Text.secondary)
                                 Spacer()
                                 MoneyText(amount: row.amountCny, currency: .cny)
                             }
@@ -243,7 +243,7 @@ private struct ReimbursementReportPanel: View {
                                     StatusTag(status: row.status)
                                     Text("\(row.claimCount) 笔")
                                         .font(.caption.monospacedDigit())
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(FinanceTokens.Text.secondary)
                                 }
                                 MoneyText(amount: row.amountCny, currency: .cny)
                             }
@@ -260,10 +260,10 @@ private struct SubscriptionReportPanel: View {
 
     var body: some View {
         LazyVGrid(columns: reportGridColumns(), spacing: 12) {
-            ToolbarPill(title: "启用订阅", value: "\(report.activeSubscriptionCount)", tint: FinanceColor.brand)
-            ToolbarPill(title: "月化总额", value: FinanceFormatter.money(report.monthlyTotalCny), tint: FinanceColor.expense)
-            ToolbarPill(title: "未来 30 天", value: FinanceFormatter.money(report.upcoming30DaysCny), tint: FinanceColor.warning)
-            ToolbarPill(title: "年化总额", value: FinanceFormatter.money(report.annualTotalCny), tint: FinanceColor.expense)
+            ToolbarPill(title: "启用订阅", value: "\(report.activeSubscriptionCount)", tint: FinanceTokens.Brand.primary)
+            ToolbarPill(title: "月化总额", value: FinanceFormatter.money(report.monthlyTotalCny), tint: FinanceTokens.State.expense)
+            ToolbarPill(title: "未来 30 天", value: FinanceFormatter.money(report.upcoming30DaysCny), tint: FinanceTokens.State.warning)
+            ToolbarPill(title: "年化总额", value: FinanceFormatter.money(report.annualTotalCny), tint: FinanceTokens.State.expense)
         }
     }
 }
@@ -308,7 +308,7 @@ private struct ExportsPanel: View {
                 .font(.headline)
             Text(dataset.filename)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(FinanceTokens.Text.secondary)
                 .lineLimit(2)
         }
     }

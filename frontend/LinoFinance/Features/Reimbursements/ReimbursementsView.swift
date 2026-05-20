@@ -73,7 +73,7 @@ struct ReimbursementsView: View {
                 ErrorBanner(message: message)
             }
         }
-        .padding(FinanceSpacing.page)
+        .padding(FinanceTokens.Spacing.page)
         .moduleFrame()
         .task {
             try? await environment.reimbursementsViewModel.refresh()
@@ -191,7 +191,7 @@ private struct ReimbursementColumn: View {
                 Spacer()
                 Text("\(claims.count)")
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(FinanceTokens.Text.secondary)
             }
             ForEach(claims) { claim in
                 Button {
@@ -205,7 +205,7 @@ private struct ReimbursementColumn: View {
                         }
                         Text("\(claim.payer) · 预计 \(FinanceFormatter.shortDate(claim.expectedDate))")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(FinanceTokens.Text.secondary)
                         HStack {
                             if claim.status == "reimbursable" || claim.status == "invoice_pending" {
                                 Button("提交") { action(claim, "submit") }
@@ -225,16 +225,15 @@ private struct ReimbursementColumn: View {
                         .font(.caption)
                     }
                     .padding(12)
-                    .background(.regularMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .glassBackground(radius: FinanceTokens.Radius.sm)
                 }
                 .buttonStyle(.plain)
             }
             Spacer(minLength: 0)
         }
         .padding(12)
-        .background(.secondary.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(FinanceTokens.Stroke.soft)
+        .clipShape(RoundedRectangle(cornerRadius: FinanceTokens.Radius.sm))
     }
 }
 
