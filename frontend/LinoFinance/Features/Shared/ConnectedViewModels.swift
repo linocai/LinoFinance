@@ -285,6 +285,190 @@ final class AIWorkspaceViewModel {
     }
 }
 
+enum AIMemoTone: String, CaseIterable, Identifiable {
+    case warm
+    case terse
+    case playful
+    case professional
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .warm: "温暖"
+        case .terse: "简洁"
+        case .playful: "轻松"
+        case .professional: "专业"
+        }
+    }
+}
+
+@MainActor
+@Observable
+final class AIMemoViewModel {
+    private let repository: FinanceRepository
+    var memos: [AIMemoDTO] = []
+    var selectedMemo: AIMemoDTO?
+    var draftSummary = ""
+    var isPreviewing = false
+    var isLoading = false
+    var errorMessage: String?
+    var lastExportURL: URL?
+    var lastExportPath: String?
+
+    init(apiClient: LinoAPIClient) {
+        repository = FinanceRepository(apiClient: apiClient)
+    }
+
+    func refresh(period: String? = nil) async throws {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            memos = try await repository.aiMemos(period: period)
+                .sorted { $0.periodStart > $1.periodStart }
+            if let selectedMemo, let refreshed = memos.first(where: { $0.id == selectedMemo.id }) {
+                select(refreshed)
+            } else if selectedMemo == nil {
+                select(memos.first)
+            }
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+            throw error
+        }
+    }
+
+    func select(_ memo: AIMemoDTO?) {
+        selectedMemo = memo
+        draftSummary = memo?.summary ?? ""
+    }
+
+    func generate(start: Date, end: Date, tone: AIMemoTone? = nil, status: String = "draft") async throws {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let memo = try await repository.generateAIMemo(
+                AIMemoGenerateRequest(periodStart: start, periodEnd: end, status: status),
+                tone: tone?.rawValue
+            )
+            upsert(memo)
+            select(memo)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+            throw error
+        }
+    }
+
+    func saveSelected(status: String? = nil) async throws {
+        guard let selectedMemo else { return }
+        let memo = try await repository.patchAIMemo(
+            selectedMemo.id,
+            request: AIMemoPatchRequest(
+                summary: draftSummary,
+                status: status ?? selectedMemo.status
+            )
+        )
+        upsert(memo)
+        select(memo)
+    }
+
+    func archiveSelected() async throws {
+        guard let selectedMemo else { return }
+        try await repository.archiveAIMemo(selectedMemo.id)
+        memos.removeAll { $0.id == selectedMemo.id }
+        select(memos.first)
+    }
+
+    func markExported(_ url: URL) {
+        lastExportURL = url
+        lastExportPath = url.path
+    }
+
+    private func upsert(_ memo: AIMemoDTO) {
+        if let index = memos.firstIndex(where: { $0.id == memo.id }) {
+            memos[index] = memo
+        } else {
+            memos.insert(memo, at: 0)
+        }
+        memos.sort { $0.periodStart > $1.periodStart }
+    }
+}
+
+enum ReconciliationFilter: String, CaseIterable, Identifiable {
+    case all
+    case driftOnly
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: "全部"
+        case .driftOnly: "仅差异"
+        }
+    }
+}
+
+@MainActor
+@Observable
+final class ReconciliationViewModel {
+    private let repository: FinanceRepository
+    var response: ReconciliationAccountsResponseDTO?
+    var filter: ReconciliationFilter = .all
+    var isLoading = false
+    var errorMessage: String?
+    var successMessage: String?
+
+    var rows: [ReconciliationAccountDTO] {
+        let items = response?.items ?? []
+        switch filter {
+        case .all:
+            return items
+        case .driftOnly:
+            return items.filter(\.needsAdjustment)
+        }
+    }
+
+    init(apiClient: LinoAPIClient) {
+        repository = FinanceRepository(apiClient: apiClient)
+    }
+
+    func refresh() async throws {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            response = try await repository.reconciliationAccounts()
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+            throw error
+        }
+    }
+
+    func submitAdjustment(
+        accountID: String,
+        actualAmount: DecimalValue,
+        reason: String,
+        note: String?
+    ) async throws {
+        do {
+            _ = try await repository.createAccountAdjustment(
+                AccountAdjustmentCreateRequest(
+                    accountId: accountID,
+                    actualAmount: actualAmount,
+                    reason: reason,
+                    note: note?.isEmpty == false ? note : nil
+                )
+            )
+            successMessage = "已提交并写入审计日志"
+            try await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+            throw error
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class NotificationsViewModel {

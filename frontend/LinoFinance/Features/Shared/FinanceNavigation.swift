@@ -9,6 +9,8 @@ enum FinanceModule: String, CaseIterable, Identifiable, Hashable, Codable {
     case credit
     case reports
     case ai
+    case aiMemo
+    case reconciliation
     case notifications
     case settings
 
@@ -24,6 +26,8 @@ enum FinanceModule: String, CaseIterable, Identifiable, Hashable, Codable {
         case .credit: "信用"
         case .reports: "分析"
         case .ai: "AI"
+        case .aiMemo: "AI 月报"
+        case .reconciliation: "对账"
         case .notifications: "通知"
         case .settings: "设置"
         }
@@ -39,6 +43,8 @@ enum FinanceModule: String, CaseIterable, Identifiable, Hashable, Codable {
         case .credit: "creditcard.trianglebadge.exclamationmark"
         case .reports: "chart.line.uptrend.xyaxis"
         case .ai: "sparkles"
+        case .aiMemo: "doc.text.magnifyingglass"
+        case .reconciliation: "checklist.checked"
         case .notifications: "bell.badge.fill"
         case .settings: "gearshape.fill"
         }

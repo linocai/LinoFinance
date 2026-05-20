@@ -12,7 +12,7 @@ struct SelectionDetailView: View {
 
             switch selection {
             case .account(let account):
-                AccountDetail(account: account)
+                AccountDetail(account: account, environment: environment)
             case .entry(let entry):
                 EntryDetail(entry: entry, accounts: environment.accountsViewModel.accounts, categories: environment.entriesViewModel.categories)
             case .cashFlow(let item):
@@ -188,6 +188,7 @@ private struct InspectorInsightCards: View {
 
 private struct AccountDetail: View {
     let account: AccountDTO
+    let environment: AppEnvironment
 
     var body: some View {
         DetailSection(title: "账户详情", systemImage: account.type == .credit ? "creditcard.fill" : "wallet.pass.fill", headline: account.name) {
@@ -211,6 +212,12 @@ private struct AccountDetail: View {
                 DetailLine(title: "最低还款", value: FinanceFormatter.money(minimumPayment, currency: account.currency))
             }
             DetailNote(account.notes)
+            Button {
+                environment.beginReconciliation()
+            } label: {
+                Label("进入账户对账", systemImage: FinanceModule.reconciliation.symbolName)
+            }
+            .buttonStyle(.bordered)
         }
     }
 }
@@ -475,6 +482,8 @@ private struct ModuleDetail: View {
         case .credit: "选择账单、分期或订阅后，这里会显示信用负债细节。"
         case .reports: "分析页提供月度、分类、现金流、信用、报销、订阅和 CSV 导出。"
         case .ai: "AI 计划必须在这里或主面板中完成确认；高风险执行需要强确认。"
+        case .aiMemo: "AI 月报可以生成、编辑、换语气并导出 PDF。"
+        case .reconciliation: "账户对账用于核对预期余额和当前余额，并提交审计化调整。"
         case .notifications: "选择通知规则后，可以查看规则状态、触发条件和下一次触发时间。"
         case .settings: "设置页展示 API 连接、AI 配置状态、默认币种和手动汇率。"
         }

@@ -13,6 +13,11 @@ struct AccountsView: View {
                     Label("新建账户", systemImage: "plus")
                 }
                 .buttonStyle(.borderedProminent)
+                Button {
+                    environment.beginReconciliation()
+                } label: {
+                    Label("对账", systemImage: FinanceModule.reconciliation.symbolName)
+                }
                 Spacer()
             }
 

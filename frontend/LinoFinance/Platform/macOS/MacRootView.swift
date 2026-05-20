@@ -127,7 +127,7 @@ private struct SidebarView: View {
     var body: some View {
         List(selection: $environment.selectedModule) {
             Section {
-                ForEach([FinanceModule.dashboard, .accounts, .entries, .cashFlow, .reimbursements, .credit, .reports, .ai]) { module in
+                ForEach([FinanceModule.dashboard, .accounts, .reconciliation, .entries, .cashFlow, .reimbursements, .credit, .reports, .ai, .aiMemo]) { module in
                     Label(module.title, systemImage: module.symbolName)
                         .tag(module)
                         .contextMenu {

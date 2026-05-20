@@ -26,6 +26,10 @@ struct FinanceModuleContentView: View {
             ReportsView(environment: environment)
         case .ai:
             AIWorkspaceView(environment: environment)
+        case .aiMemo:
+            AIMemoView(environment: environment)
+        case .reconciliation:
+            ReconciliationView(environment: environment)
         case .notifications:
             NotificationsView(environment: environment)
         case .settings:

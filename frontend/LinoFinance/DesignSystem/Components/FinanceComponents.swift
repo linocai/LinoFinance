@@ -109,7 +109,7 @@ extension StatusTag {
 extension StatusTag.Style {
     static func from(_ status: String) -> StatusTag.Style {
         switch status {
-        case "confirmed", "settled", "paid", "received", "executed", "active", "approved":
+        case "confirmed", "settled", "paid", "received", "executed", "active", "approved", "published":
             return .confirmed
         case "expected", "draft", "pending", "open", "requires_confirmation", "auto_confirm_candidate":
             return .draft

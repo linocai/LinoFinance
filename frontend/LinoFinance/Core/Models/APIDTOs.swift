@@ -265,6 +265,55 @@ struct AuditLogDTO: Identifiable, Decodable, Equatable, Hashable {
     let note: String?
 }
 
+struct AIMemoDTO: Identifiable, Decodable, Equatable, Hashable {
+    let id: String
+    let periodStart: Date
+    let periodEnd: Date
+    let summary: String
+    let statsJson: [String: JSONValueDTO]
+    let promptToken: Int
+    let completionToken: Int
+    let generator: String
+    let status: String
+    let confidence: DecimalValue
+    let createdAt: Date
+    let updatedAt: Date
+}
+
+struct AIMemoListResponseDTO: Decodable, Equatable, Hashable {
+    let items: [AIMemoDTO]
+}
+
+struct ReconciliationAccountDTO: Identifiable, Decodable, Equatable, Hashable {
+    var id: String { accountId }
+    let accountId: String
+    let accountName: String
+    let accountType: AccountType
+    let currency: CurrencyCode
+    let expectedAmount: DecimalValue
+    let currentAmount: DecimalValue
+    let deltaAmount: DecimalValue
+    let needsAdjustment: Bool
+}
+
+struct ReconciliationAccountsResponseDTO: Decodable, Equatable, Hashable {
+    let threshold: DecimalValue
+    let items: [ReconciliationAccountDTO]
+}
+
+struct AccountAdjustmentDTO: Identifiable, Decodable, Equatable, Hashable {
+    let id: String
+    let accountId: String
+    let reason: String
+    let deltaAmount: DecimalValue
+    let currency: CurrencyCode
+    let balanceBefore: DecimalValue
+    let balanceAfter: DecimalValue
+    let source: String
+    let note: String?
+    let createdBy: String
+}
+
 struct SearchHitDTO: Identifiable, Decodable, Equatable, Hashable {
     let type: String
     let id: String
@@ -637,6 +686,9 @@ extension String {
         case "failed": "失败"
         case "rolled_back": "已回滚"
         case "pending": "待处理"
+        case "published": "已发布"
+        case "archived": "已归档"
+        case "account_adjustment.create": "账户对账调整"
         case "low": "低风险"
         case "medium": "中风险"
         case "high": "高风险"

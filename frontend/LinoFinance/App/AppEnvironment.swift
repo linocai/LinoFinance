@@ -13,6 +13,8 @@ final class AppEnvironment {
     var creditViewModel: CreditViewModel
     var reportsViewModel: ReportsViewModel
     var aiViewModel: AIWorkspaceViewModel
+    var aiMemoViewModel: AIMemoViewModel
+    var reconciliationViewModel: ReconciliationViewModel
     var notificationsViewModel: NotificationsViewModel
     var settingsViewModel: SettingsViewModel
 
@@ -126,6 +128,8 @@ final class AppEnvironment {
         self.creditViewModel = CreditViewModel(apiClient: client)
         self.reportsViewModel = ReportsViewModel(apiClient: client)
         self.aiViewModel = AIWorkspaceViewModel(apiClient: client)
+        self.aiMemoViewModel = AIMemoViewModel(apiClient: client)
+        self.reconciliationViewModel = ReconciliationViewModel(apiClient: client)
         self.notificationsViewModel = NotificationsViewModel(apiClient: client)
         self.settingsViewModel = SettingsViewModel(apiClient: client)
         self.isPrivacyLocked = privacyMaskEnabled
@@ -156,6 +160,10 @@ final class AppEnvironment {
                 try await reportsViewModel.refresh()
             case .ai:
                 try await aiViewModel.refresh()
+            case .aiMemo:
+                try await aiMemoViewModel.refresh()
+            case .reconciliation:
+                try await reconciliationViewModel.refresh()
             case .notifications:
                 try await notificationsViewModel.refresh()
             case .settings:
@@ -177,6 +185,8 @@ final class AppEnvironment {
             try await creditViewModel.refresh()
             try await reportsViewModel.refresh()
             try await aiViewModel.refresh()
+            try await aiMemoViewModel.refresh()
+            try await reconciliationViewModel.refresh()
             try await notificationsViewModel.refresh()
             try await settingsViewModel.refresh()
             WidgetSnapshotStore.shared.writeSnapshot(from: self)
@@ -217,6 +227,16 @@ final class AppEnvironment {
     func beginAI() {
         selectedModule = .ai
         inspectorSelection = .module(.ai)
+    }
+
+    func beginAIMemo() {
+        selectedModule = .aiMemo
+        inspectorSelection = .module(.aiMemo)
+    }
+
+    func beginReconciliation() {
+        selectedModule = .reconciliation
+        inspectorSelection = .module(.reconciliation)
     }
 
     func recordUserActivity() {
@@ -304,6 +324,8 @@ final class AppEnvironment {
         creditViewModel = CreditViewModel(apiClient: apiClient)
         reportsViewModel = ReportsViewModel(apiClient: apiClient)
         aiViewModel = AIWorkspaceViewModel(apiClient: apiClient)
+        aiMemoViewModel = AIMemoViewModel(apiClient: apiClient)
+        reconciliationViewModel = ReconciliationViewModel(apiClient: apiClient)
         notificationsViewModel = NotificationsViewModel(apiClient: apiClient)
         settingsViewModel = SettingsViewModel(apiClient: apiClient)
     }

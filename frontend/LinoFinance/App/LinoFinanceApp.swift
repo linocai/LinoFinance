@@ -74,6 +74,14 @@ struct LinoFinanceApp: App {
                     environment.beginAI()
                 }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
+
+                Button("AI 月报") {
+                    environment.beginAIMemo()
+                }
+
+                Button("账户对账") {
+                    environment.beginReconciliation()
+                }
             }
             CommandMenu("窗口") {
                 Button("打开 Command Palette") {
@@ -88,6 +96,12 @@ struct LinoFinanceApp: App {
                 }
                 Button("AI 独立窗口") {
                     openWindow(id: "module", value: FinanceModule.ai)
+                }
+                Button("AI 月报独立窗口") {
+                    openWindow(id: "module", value: FinanceModule.aiMemo)
+                }
+                Button("对账独立窗口") {
+                    openWindow(id: "module", value: FinanceModule.reconciliation)
                 }
                 Button("信用独立窗口") {
                     openWindow(id: "module", value: FinanceModule.credit)

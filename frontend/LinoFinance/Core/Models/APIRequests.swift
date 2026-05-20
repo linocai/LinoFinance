@@ -182,6 +182,25 @@ struct AIExecuteRequest: Encodable {
     var strongConfirm: String?
 }
 
+struct AIMemoGenerateRequest: Encodable {
+    var periodStart: Date
+    var periodEnd: Date
+    var status = "draft"
+}
+
+struct AIMemoPatchRequest: Encodable {
+    var summary: String?
+    var status: String?
+}
+
+struct AccountAdjustmentCreateRequest: Encodable {
+    var accountId: String
+    var actualAmount: DecimalValue?
+    var reason: String
+    var note: String?
+    var createdBy = "user"
+}
+
 struct NotificationRuleCreateRequest: Encodable {
     var title: String
     var ruleType: String

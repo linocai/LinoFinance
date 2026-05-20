@@ -297,6 +297,32 @@ struct LinoAPIClient {
         try await post("ai/actions/\(id)/rollback")
     }
 
+    func listAIMemos(period: String? = nil) async throws -> AIMemoListResponseDTO {
+        let query = period.map { [URLQueryItem(name: "period", value: $0)] } ?? []
+        return try await get("ai/memos", queryItems: query)
+    }
+
+    func generateAIMemo(_ request: AIMemoGenerateRequest, tone: String? = nil) async throws -> AIMemoDTO {
+        let query = tone.map { [URLQueryItem(name: "tone", value: $0)] } ?? []
+        return try await post("ai/memos/generate", queryItems: query, body: request)
+    }
+
+    func patchAIMemo(_ id: String, request: AIMemoPatchRequest) async throws -> AIMemoDTO {
+        try await patch("ai/memos/\(id)", body: request)
+    }
+
+    func archiveAIMemo(_ id: String) async throws {
+        try await delete("ai/memos/\(id)")
+    }
+
+    func listReconciliationAccounts() async throws -> ReconciliationAccountsResponseDTO {
+        try await get("reconciliation/accounts")
+    }
+
+    func createAccountAdjustment(_ request: AccountAdjustmentCreateRequest) async throws -> AccountAdjustmentDTO {
+        try await post("reconciliation/adjustments", body: request)
+    }
+
     func listNotificationRules(status: String? = nil, ruleType: String? = nil) async throws -> [NotificationRuleDTO] {
         var query: [URLQueryItem] = []
         if let status {
@@ -355,6 +381,18 @@ struct LinoAPIClient {
 
     private func post<Request: Encodable, Response: Decodable>(
         _ path: String,
+        queryItems: [URLQueryItem],
+        body: Request
+    ) async throws -> Response {
+        var request = request(for: path, queryItems: queryItems)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try encoder.encode(body)
+        return try await send(request)
+    }
+
+    private func post<Request: Encodable, Response: Decodable>(
+        _ path: String,
         body: Request
     ) async throws -> Response {
         var request = request(for: path)
@@ -362,6 +400,23 @@ struct LinoAPIClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try encoder.encode(body)
         return try await send(request)
+    }
+
+    private func patch<Request: Encodable, Response: Decodable>(
+        _ path: String,
+        body: Request
+    ) async throws -> Response {
+        var request = request(for: path)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try encoder.encode(body)
+        return try await send(request)
+    }
+
+    private func delete(_ path: String) async throws {
+        var request = request(for: path)
+        request.httpMethod = "DELETE"
+        _ = try await sendData(request)
     }
 
     private func request(

@@ -122,13 +122,22 @@ def test_reconciliation_adjustment_zeroes_drift(client) -> None:
     after = client.get("/api/v1/reconciliation/accounts").json()["items"][0]
     assert after["delta_amount"] == "0.00"
     assert after["needs_adjustment"] is False
+    audit = client.get(
+        "/api/v1/audit-logs",
+        params={"target_type": "account", "target_id": account["id"]},
+    )
+    assert audit.status_code == 200
+    assert audit.json()[0]["action_type"] == "account_adjustment.create"
+    assert audit.json()[0]["after_snapshot"]["adjustment_id"] == adjustment.json()["id"]
 
 
 def test_ai_memos_generate_patch_and_archive(client, monkeypatch) -> None:
+    prompts = []
+
     def fake_generate(prompt):
-        assert "2026-05-01" in prompt
+        prompts.append(prompt)
         return {
-            "summary": "## 月度备忘\n现金流稳定。",
+            "summary": f"## 月度备忘 {len(prompts)}\n现金流稳定。",
             "prompt_token": 10,
             "completion_token": 20,
             "generator": "test",
@@ -137,13 +146,39 @@ def test_ai_memos_generate_patch_and_archive(client, monkeypatch) -> None:
 
     monkeypatch.setattr(ai_provider, "generate_monthly_memo", fake_generate)
 
-    generated = client.post(
+    previous = client.post(
         "/api/v1/ai/memos/generate",
+        json={"period_start": "2026-04-01", "period_end": "2026-04-30"},
+    ).json()
+    client.patch(
+        f"/api/v1/ai/memos/{previous['id']}",
+        json={"summary": "用户编辑后的四月 memo", "status": "published"},
+    )
+
+    generated = client.post(
+        "/api/v1/ai/memos/generate?tone=warm",
         json={"period_start": "2026-05-01", "period_end": "2026-05-31"},
     )
     assert generated.status_code == 201
     memo = generated.json()
     assert memo["generator"] == "test"
+    assert memo["created_at"]
+    assert memo["updated_at"]
+    assert "温暖" in prompts[-1]
+    assert "用户编辑后的四月 memo" in prompts[-1]
+    assert memo["stats_json"]["top_expense_categories"] == []
+    assert "subscriptions" in memo["stats_json"]
+    assert "reimbursements" in memo["stats_json"]
+    assert "anomalies" in memo["stats_json"]
+
+    regenerated = client.post(
+        "/api/v1/ai/memos/generate?tone=terse",
+        json={"period_start": "2026-05-01", "period_end": "2026-05-31"},
+    )
+    assert regenerated.status_code == 201
+    assert regenerated.json()["id"] == memo["id"]
+    assert "简短" in prompts[-1]
+    assert len(client.get("/api/v1/ai/memos", params={"period": "2026-05"}).json()["items"]) == 1
 
     patched = client.patch(
         f"/api/v1/ai/memos/{memo['id']}",
@@ -151,6 +186,7 @@ def test_ai_memos_generate_patch_and_archive(client, monkeypatch) -> None:
     )
     assert patched.status_code == 200
     assert patched.json()["status"] == "published"
+    assert patched.json()["created_at"] == memo["created_at"]
 
     delete_response = client.delete(f"/api/v1/ai/memos/{memo['id']}")
     assert delete_response.status_code == 204

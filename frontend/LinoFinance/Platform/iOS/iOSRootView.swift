@@ -155,7 +155,7 @@ struct iOSRootView: View {
             selectedTab = .cashFlow
         case .credit:
             selectedTab = .credit
-        case .accounts, .reimbursements, .reports, .ai, .notifications, .settings:
+        case .accounts, .reconciliation, .reimbursements, .reports, .ai, .aiMemo, .notifications, .settings:
             selectedTab = .more
             morePath = [environment.selectedModule]
         }
@@ -172,7 +172,7 @@ struct iOSRootView: View {
         NavigationStack(path: $morePath) {
             List {
                 Section("模块") {
-                    ForEach([FinanceModule.accounts, .reimbursements, .reports, .ai, .notifications, .settings]) { module in
+                    ForEach([FinanceModule.accounts, .reconciliation, .reimbursements, .reports, .ai, .aiMemo, .notifications, .settings]) { module in
                         NavigationLink(value: module) {
                             Label(module.title, systemImage: module.symbolName)
                         }
@@ -274,7 +274,7 @@ struct iOSRootView: View {
                 Image(systemName: "plus")
             }
             .accessibilityLabel("新建通知")
-        case .reports, .ai, .settings:
+        case .reports, .ai, .aiMemo, .reconciliation, .settings:
             EmptyView()
         }
     }

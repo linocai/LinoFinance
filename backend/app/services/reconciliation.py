@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.account import Account
+from app.models.audit_log import AuditLog
 from app.models.credit_statement_cycle import CreditStatementCycle
 from app.models.entry import AccountMovement
 from app.models.reconciliation import AccountAdjustment
@@ -54,6 +55,30 @@ def create_adjustment(db: Session, payload: AccountAdjustmentCreate) -> AccountA
         account.current_liability = observed_amount
     else:
         account.current_balance = observed_amount
+    db.flush()
+    db.add(
+        AuditLog(
+            actor=payload.created_by,
+            action_type="account_adjustment.create",
+            target_type="account",
+            target_id=account.id,
+            before_snapshot={
+                "expected_amount": str(expected_before),
+                "current_amount": str(current_before),
+                "delta_amount": str(current_before - expected_before),
+                "currency": account.currency,
+            },
+            after_snapshot={
+                "expected_amount": str(expected_before + delta),
+                "current_amount": str(observed_amount),
+                "delta_amount": "0.00",
+                "currency": account.currency,
+                "adjustment_id": adjustment.id,
+                "reason": payload.reason,
+            },
+            note=payload.note,
+        )
+    )
     db.commit()
     db.refresh(adjustment)
     return adjustment

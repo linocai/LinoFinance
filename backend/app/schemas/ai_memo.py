@@ -1,4 +1,4 @@
-from datetime import date as DateType
+from datetime import date as DateType, datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
@@ -16,6 +16,8 @@ class AIMemoRead(BaseModel):
     generator: str
     status: str
     confidence: Decimal
+    created_at: datetime
+    updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 

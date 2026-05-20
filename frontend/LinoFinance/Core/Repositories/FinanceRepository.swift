@@ -214,6 +214,30 @@ struct FinanceRepository {
         try await apiClient.rollbackAIAction(id)
     }
 
+    func aiMemos(period: String? = nil) async throws -> [AIMemoDTO] {
+        try await apiClient.listAIMemos(period: period).items
+    }
+
+    func generateAIMemo(_ request: AIMemoGenerateRequest, tone: String? = nil) async throws -> AIMemoDTO {
+        try await apiClient.generateAIMemo(request, tone: tone)
+    }
+
+    func patchAIMemo(_ id: String, request: AIMemoPatchRequest) async throws -> AIMemoDTO {
+        try await apiClient.patchAIMemo(id, request: request)
+    }
+
+    func archiveAIMemo(_ id: String) async throws {
+        try await apiClient.archiveAIMemo(id)
+    }
+
+    func reconciliationAccounts() async throws -> ReconciliationAccountsResponseDTO {
+        try await apiClient.listReconciliationAccounts()
+    }
+
+    func createAccountAdjustment(_ request: AccountAdjustmentCreateRequest) async throws -> AccountAdjustmentDTO {
+        try await apiClient.createAccountAdjustment(request)
+    }
+
     func notificationRules() async throws -> [NotificationRuleDTO] {
         try await apiClient.listNotificationRules()
     }

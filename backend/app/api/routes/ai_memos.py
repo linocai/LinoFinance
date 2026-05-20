@@ -25,10 +25,11 @@ def list_memos(
 @router.post("/generate", response_model=AIMemoRead, status_code=status.HTTP_201_CREATED)
 def generate_memo(
     payload: AIMemoGenerateRequest,
+    tone: Optional[str] = Query(default=None, pattern="^(warm|terse|playful|professional)$"),
     db: Session = Depends(get_db),
 ) -> AIMemoRead:
     try:
-        return ai_memo.generate_memo(db, payload)
+        return ai_memo.generate_memo(db, payload, tone=tone)
     except LedgerValidationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
