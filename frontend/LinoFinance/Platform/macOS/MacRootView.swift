@@ -1,4 +1,6 @@
 #if os(macOS)
+import AppKit
+import CoreSpotlight
 import SwiftUI
 
 struct MacRootView: View {
@@ -90,6 +92,13 @@ struct MacRootView: View {
         }
         .task {
             await environment.refreshPrimaryData()
+            await environment.authenticatePrivacyIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willResignActiveNotification)) { _ in
+            environment.lockPrivacyForBackgroundIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await environment.authenticatePrivacyIfNeeded() }
         }
         .onChange(of: environment.isSearchFocused) { _, focused in
             isSearchFocused = focused
@@ -101,9 +110,13 @@ struct MacRootView: View {
             environment.inspectorSelection = .module(module)
             Task { await environment.refreshCurrentModule() }
         }
+        .onContinueUserActivity(CSSearchableItemActionType) { activity in
+            Task { await environment.handleSpotlightUserActivity(activity) }
+        }
         .preferredColorScheme(environment.appearance.colorScheme)
         .tint(FinanceTokens.Brand.primary)
         .background(FinanceTokens.Surface.base)
+        .privacyActivityMonitor(environment: environment)
     }
 }
 

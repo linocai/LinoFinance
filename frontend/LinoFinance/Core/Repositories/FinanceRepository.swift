@@ -166,6 +166,10 @@ struct FinanceRepository {
         )
     }
 
+    func monthlyOverview(dateFrom: Date? = nil, dateTo: Date? = nil) async throws -> MonthlyOverviewReportDTO {
+        try await apiClient.monthlyOverviewReport(dateFrom: dateFrom, dateTo: dateTo)
+    }
+
     func downloadCSV(dataset: String) async throws -> Data {
         try await apiClient.downloadCSV(dataset: dataset)
     }

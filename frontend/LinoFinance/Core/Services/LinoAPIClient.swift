@@ -204,8 +204,15 @@ struct LinoAPIClient {
         try await post("subscription-rules/\(id)/generate-next")
     }
 
-    func monthlyOverviewReport() async throws -> MonthlyOverviewReportDTO {
-        try await get("reports/monthly-overview")
+    func monthlyOverviewReport(dateFrom: Date? = nil, dateTo: Date? = nil) async throws -> MonthlyOverviewReportDTO {
+        var query: [URLQueryItem] = []
+        if let dateFrom {
+            query.append(URLQueryItem(name: "date_from", value: DateFormatter.linoAPIDate.string(from: dateFrom)))
+        }
+        if let dateTo {
+            query.append(URLQueryItem(name: "date_to", value: DateFormatter.linoAPIDate.string(from: dateTo)))
+        }
+        return try await get("reports/monthly-overview", queryItems: query)
     }
 
     func categoryExpensesReport() async throws -> CategoryExpenseReportDTO {

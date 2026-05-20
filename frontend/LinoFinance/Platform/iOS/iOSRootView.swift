@@ -1,8 +1,10 @@
 #if os(iOS)
+import CoreSpotlight
 import SwiftUI
 
 struct iOSRootView: View {
     @Bindable var environment: AppEnvironment
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: iOSTab = .dashboard
     @State private var morePath: [FinanceModule] = []
     @State private var isShowingQuickEntry = false
@@ -20,10 +22,21 @@ struct iOSRootView: View {
         .preferredColorScheme(environment.appearance.colorScheme)
         .tint(FinanceTokens.Brand.primary)
         .background(FinanceTokens.Surface.base.ignoresSafeArea())
+        .privacyActivityMonitor(environment: environment)
         .onChange(of: requiresConnectionSetup) { _, needsSetup in
             if needsSetup {
                 selectedTab = .more
                 morePath = [.settings]
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active:
+                Task { await environment.authenticatePrivacyIfNeeded() }
+            case .inactive, .background:
+                environment.lockPrivacyForBackgroundIfNeeded()
+            @unknown default:
+                break
             }
         }
         .task {
@@ -33,6 +46,13 @@ struct iOSRootView: View {
                 try? await environment.settingsViewModel.refresh()
             } else {
                 await environment.refreshPrimaryData()
+            }
+            await environment.authenticatePrivacyIfNeeded()
+        }
+        .onContinueUserActivity(CSSearchableItemActionType) { activity in
+            Task {
+                await environment.handleSpotlightUserActivity(activity)
+                syncTabWithEnvironment()
             }
         }
     }
@@ -123,6 +143,22 @@ struct iOSRootView: View {
     private func openQuickEntry(_ intent: QuickEntryIntent) {
         quickEntryIntent = intent
         isShowingQuickEntry = true
+    }
+
+    private func syncTabWithEnvironment() {
+        switch environment.selectedModule {
+        case .dashboard:
+            selectedTab = .dashboard
+        case .entries:
+            selectedTab = .entries
+        case .cashFlow:
+            selectedTab = .cashFlow
+        case .credit:
+            selectedTab = .credit
+        case .accounts, .reimbursements, .reports, .ai, .notifications, .settings:
+            selectedTab = .more
+            morePath = [environment.selectedModule]
+        }
     }
 
     private var detailSelection: Binding<InspectorSelection?> {

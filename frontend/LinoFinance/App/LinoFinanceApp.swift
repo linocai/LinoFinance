@@ -130,6 +130,7 @@ private struct MacModuleWindow: View {
             .task {
                 await environment.refreshPrimaryData()
             }
+            .privacyActivityMonitor(environment: environment)
             .preferredColorScheme(environment.appearance.colorScheme)
             .tint(FinanceTokens.Brand.primary)
     }

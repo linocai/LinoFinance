@@ -89,7 +89,25 @@ struct SettingsView: View {
                     }
                 }
                 Toggle("使用大数字样式", isOn: $environment.useHeroNumbers)
-                Toggle("隐藏金额", isOn: $environment.privacyMaskEnabled)
+                Toggle("启用隐私模糊", isOn: $environment.privacyMaskEnabled)
+                Picker("解锁方式", selection: $environment.privacyUnlockMethod) {
+                    ForEach(PrivacyUnlockMethod.allCases) { method in
+                        Text(method.title).tag(method)
+                    }
+                }
+                Toggle("进入后台自动模糊", isOn: $environment.privacyAutoMaskOnBackground)
+                Picker("长时间无操作自动模糊", selection: $environment.privacyIdleLockInterval) {
+                    ForEach(PrivacyIdleLockInterval.allCases) { interval in
+                        Text(interval.title).tag(interval)
+                    }
+                }
+                Button {
+                    environment.lockPrivacy()
+                } label: {
+                    Label("立即隐藏金额", systemImage: "eye.slash.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(!environment.privacyMaskEnabled)
             }
 
             Section("Widget & 通知") {
@@ -236,7 +254,35 @@ struct SettingsView: View {
                         }
                         .pickerStyle(.segmented)
                         Toggle("使用大数字样式", isOn: $environment.useHeroNumbers)
-                        Toggle("隐藏金额", isOn: $environment.privacyMaskEnabled)
+                        Toggle("启用隐私模糊", isOn: $environment.privacyMaskEnabled)
+                        Picker("解锁方式", selection: $environment.privacyUnlockMethod) {
+                            ForEach(PrivacyUnlockMethod.allCases) { method in
+                                Text(method.title).tag(method)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        Toggle("进入后台自动模糊", isOn: $environment.privacyAutoMaskOnBackground)
+                        Picker("长时间无操作自动模糊", selection: $environment.privacyIdleLockInterval) {
+                            ForEach(PrivacyIdleLockInterval.allCases) { interval in
+                                Text(interval.title).tag(interval)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        HStack {
+                            Button {
+                                environment.lockPrivacy()
+                            } label: {
+                                Label("立即隐藏金额", systemImage: "eye.slash.fill")
+                            }
+                            .disabled(!environment.privacyMaskEnabled)
+
+                            Button {
+                                Task { await environment.authenticatePrivacyIfNeeded() }
+                            } label: {
+                                Label("解锁金额", systemImage: "lock.open.fill")
+                            }
+                            .disabled(!environment.privacyMaskEnabled || !environment.isPrivacyLocked)
+                        }
                     }
                 }
 

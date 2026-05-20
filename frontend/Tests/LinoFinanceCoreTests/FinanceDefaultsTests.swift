@@ -90,4 +90,59 @@ final class FinanceDefaultsTests: XCTestCase {
 
         XCTAssertEqual(dataset.filename, "entries.csv")
     }
+
+    func testIntentRecordResolverCreatesDraftWhenLinksAreMissing() {
+        let resolution = IntentRecordResolver.resolve(
+            accountName: "招商",
+            categoryName: "咖啡",
+            accounts: [IntentNamedCandidate(id: "a1", name: "招商银行")],
+            categories: []
+        )
+
+        XCTAssertEqual(resolution.status, .draft)
+        XCTAssertEqual(resolution.accountID, "a1")
+        XCTAssertNil(resolution.categoryID)
+        XCTAssertEqual(resolution.missingFields, ["category"])
+    }
+
+    func testIntentRecordResolverConfirmsWhenAccountAndCategoryMatch() {
+        let resolution = IntentRecordResolver.resolve(
+            accountName: "工资卡",
+            categoryName: "餐饮",
+            accounts: [IntentNamedCandidate(id: "a1", name: "工资卡")],
+            categories: [IntentNamedCandidate(id: "c1", name: "日常餐饮")]
+        )
+
+        XCTAssertEqual(resolution.status, .confirmed)
+        XCTAssertEqual(resolution.accountID, "a1")
+        XCTAssertEqual(resolution.categoryID, "c1")
+        XCTAssertTrue(resolution.missingFields.isEmpty)
+    }
+
+    func testMonthWindowResolverUsesCurrentYearAndWholeMonth() throws {
+        let now = DateFormatter.linoCoreTestDate.date(from: "2026-05-20")!
+        let window = try XCTUnwrap(MonthWindowResolver.window(month: 2, now: now))
+
+        XCTAssertEqual(DateFormatter.linoCoreTestDate.string(from: window.start), "2026-02-01")
+        XCTAssertEqual(DateFormatter.linoCoreTestDate.string(from: window.end), "2026-02-28")
+    }
+
+    func testSpotlightTargetRoundTrips() throws {
+        let target = SpotlightTargetID(type: "entry", id: "abc-123")
+        let parsed = try XCTUnwrap(SpotlightTargetID.parse(target.uniqueIdentifier))
+
+        XCTAssertEqual(parsed, target)
+        XCTAssertNil(SpotlightTargetID.parse("entry.abc-123"))
+    }
+}
+
+private extension DateFormatter {
+    static let linoCoreTestDate: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 }

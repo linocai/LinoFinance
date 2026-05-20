@@ -50,8 +50,34 @@ final class AppEnvironment {
     ) {
         didSet {
             UserDefaults.standard.set(privacyMaskEnabled, forKey: "linofinance.privacyMaskEnabled")
+            privacyMaskEnabled ? lockPrivacy() : unlockPrivacy()
         }
     }
+    var privacyUnlockMethod: PrivacyUnlockMethod = AppEnvironment.defaultPrivacyUnlockMethod() {
+        didSet {
+            UserDefaults.standard.set(privacyUnlockMethod.rawValue, forKey: "linofinance.privacyUnlockMethod")
+        }
+    }
+    var privacyAutoMaskOnBackground: Bool = AppEnvironment.defaultBool(
+        key: "linofinance.privacyAutoMaskOnBackground",
+        defaultValue: true
+    ) {
+        didSet {
+            UserDefaults.standard.set(privacyAutoMaskOnBackground, forKey: "linofinance.privacyAutoMaskOnBackground")
+        }
+    }
+    var privacyIdleLockInterval: PrivacyIdleLockInterval = AppEnvironment.defaultPrivacyIdleLockInterval() {
+        didSet {
+            UserDefaults.standard.set(privacyIdleLockInterval.rawValue, forKey: "linofinance.privacyIdleLockMinutes")
+        }
+    }
+    var isPrivacyLocked: Bool = false {
+        didSet {
+            UserDefaults.standard.set(isPrivacyLocked, forKey: "linofinance.privacyLocked")
+        }
+    }
+    var isAuthenticatingPrivacy = false
+    private var lastUserInteractionAt = Date()
     var widgetAutoUpdateEnabled: Bool = AppEnvironment.defaultBool(
         key: "linofinance.widgetAutoUpdateEnabled",
         defaultValue: true
@@ -102,6 +128,8 @@ final class AppEnvironment {
         self.aiViewModel = AIWorkspaceViewModel(apiClient: client)
         self.notificationsViewModel = NotificationsViewModel(apiClient: client)
         self.settingsViewModel = SettingsViewModel(apiClient: client)
+        self.isPrivacyLocked = privacyMaskEnabled
+        UserDefaults.standard.set(self.isPrivacyLocked, forKey: "linofinance.privacyLocked")
 #if os(iOS)
         if apiToken == nil {
             selectedModule = .settings
@@ -152,9 +180,17 @@ final class AppEnvironment {
             try await notificationsViewModel.refresh()
             try await settingsViewModel.refresh()
             WidgetSnapshotStore.shared.writeSnapshot(from: self)
+#if canImport(CoreSpotlight)
+            await SpotlightIndexer.shared.index(environment: self)
+#endif
             lastErrorMessage = nil
         } catch {
             lastErrorMessage = error.localizedDescription
+#if canImport(CoreSpotlight)
+            if Self.isAuthErrorMessage(error.localizedDescription) {
+                await SpotlightIndexer.shared.clear()
+            }
+#endif
         }
     }
 
@@ -183,6 +219,55 @@ final class AppEnvironment {
         inspectorSelection = .module(.ai)
     }
 
+    func recordUserActivity() {
+        lastUserInteractionAt = Date()
+    }
+
+    func enforceIdlePrivacyLock() {
+        guard privacyMaskEnabled,
+              !isPrivacyLocked,
+              let seconds = privacyIdleLockInterval.seconds,
+              Date().timeIntervalSince(lastUserInteractionAt) >= seconds else {
+            return
+        }
+        lockPrivacy()
+    }
+
+    func lockPrivacy() {
+        guard privacyMaskEnabled else { return }
+        isPrivacyLocked = true
+    }
+
+    func unlockPrivacy() {
+        isPrivacyLocked = false
+        recordUserActivity()
+    }
+
+    func lockPrivacyForBackgroundIfNeeded() {
+        guard privacyAutoMaskOnBackground else { return }
+        lockPrivacy()
+    }
+
+    func authenticatePrivacyIfNeeded() async {
+        guard privacyMaskEnabled, isPrivacyLocked, !isAuthenticatingPrivacy else {
+            return
+        }
+        if privacyUnlockMethod == .never {
+            unlockPrivacy()
+            return
+        }
+        isAuthenticatingPrivacy = true
+        defer { isAuthenticatingPrivacy = false }
+        do {
+            let unlocked = try await PrivacyAuthenticator.shared.authenticate(method: privacyUnlockMethod)
+            if unlocked {
+                unlockPrivacy()
+            }
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
     func configureAPI(baseURL: URL, apiToken: String?) async {
         UserDefaults.standard.set(baseURL.absoluteString, forKey: "linofinance.apiBaseURL")
         do {
@@ -193,6 +278,11 @@ final class AppEnvironment {
             return
         }
         rebuildClients(baseURL: baseURL, apiToken: apiToken)
+        if !isAPITokenConfigured {
+#if canImport(CoreSpotlight)
+            await SpotlightIndexer.shared.clear()
+#endif
+        }
         do {
             try await settingsViewModel.refresh()
             if isAPITokenConfigured {
@@ -257,6 +347,22 @@ final class AppEnvironment {
         return appearance
     }
 
+    nonisolated static func defaultPrivacyUnlockMethod() -> PrivacyUnlockMethod {
+        guard let value = UserDefaults.standard.string(forKey: "linofinance.privacyUnlockMethod"),
+              let method = PrivacyUnlockMethod(rawValue: value) else {
+            return .systemAuthentication
+        }
+        return method
+    }
+
+    nonisolated static func defaultPrivacyIdleLockInterval() -> PrivacyIdleLockInterval {
+        guard UserDefaults.standard.object(forKey: "linofinance.privacyIdleLockMinutes") != nil,
+              let interval = PrivacyIdleLockInterval(rawValue: UserDefaults.standard.integer(forKey: "linofinance.privacyIdleLockMinutes")) else {
+            return .fifteen
+        }
+        return interval
+    }
+
     nonisolated static func defaultBool(key: String, defaultValue: Bool) -> Bool {
         guard UserDefaults.standard.object(forKey: key) != nil else {
             return defaultValue
@@ -269,6 +375,10 @@ final class AppEnvironment {
             return defaultValue
         }
         return UserDefaults.standard.integer(forKey: key)
+    }
+
+    nonisolated static func isAuthErrorMessage(_ message: String) -> Bool {
+        message.contains("API 401") || message.localizedCaseInsensitiveContains("invalid API token")
     }
 }
 

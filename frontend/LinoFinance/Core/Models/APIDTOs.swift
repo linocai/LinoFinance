@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(AppIntents)
+import AppIntents
+#endif
 
 struct AppHealthDTO: Decodable, Equatable {
     let status: String
@@ -486,6 +489,21 @@ enum CurrencyCode: String, Codable, CaseIterable, Hashable {
         }
     }
 }
+
+#if canImport(AppIntents)
+extension CurrencyCode: AppEnum {
+    static var typeDisplayRepresentation: TypeDisplayRepresentation {
+        TypeDisplayRepresentation(name: "币种")
+    }
+
+    static var caseDisplayRepresentations: [CurrencyCode: DisplayRepresentation] {
+        [
+            .cny: DisplayRepresentation(title: "人民币"),
+            .usd: DisplayRepresentation(title: "美元"),
+        ]
+    }
+}
+#endif
 
 struct DecimalValue: Codable, Equatable, Hashable, Comparable {
     let value: Decimal
