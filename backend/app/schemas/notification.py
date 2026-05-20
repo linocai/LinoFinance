@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class NotificationRuleCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     rule_type: str = Field(
-        pattern="^(credit_repayment|cash_flow|reimbursement|subscription|anomaly)$"
+        pattern="^(credit_repayment|cash_flow|reimbursement|subscription|anomaly|ai_plan)$"
     )
     channel: str = Field(default="in_app", pattern="^(in_app|system|email)$")
     trigger_payload: Dict[str, Any] = Field(default_factory=dict)

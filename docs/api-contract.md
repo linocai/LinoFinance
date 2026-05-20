@@ -23,10 +23,12 @@ Response:
 {
   "status": "ok",
   "app": "LinoFinance API",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "environment": "local",
   "auth_required": false,
-  "rate_limit_enabled": false
+  "rate_limit_enabled": false,
+  "apns_use_sandbox": true,
+  "apns_dry_run": false
 }
 ```
 
@@ -206,8 +208,9 @@ Response:
 
 - `GET /search?q=&limit=&types=` returns `{query, limit, items}` with cross-module hits for accounts, entries, cash-flow items, reimbursement claims, AI plans, and notification rules. `types` is a comma-separated filter.
 - `POST /attachments` accepts multipart fields `owner_type`, `owner_id`, optional `uploaded_by`/`note`, and `file`. Supported owners are `entry_category_line`, `reimbursement_claim`, and `ai_action`. Files are stored under `LINOFINANCE_STORAGE_ROOT` with a relative `storage_key`, sha256 checksum, 10 MB per file, and 25 MB total for reimbursement owners.
-- `GET /attachments/{id}` streams the stored file; `DELETE /attachments/{id}` soft-deletes metadata and removes the local file.
+- `GET /attachments?owner_type=&owner_id=` returns undeleted attachments for an owner. `GET /attachments/{id}` streams the stored file. `DELETE /attachments/{id}` soft-deletes metadata and keeps the local file until scheduled cleanup removes files older than 30 days.
 - `GET /reconciliation/accounts` returns expected amount, current amount, delta, and `needs_adjustment` per account using movements, credit cycles, and reconciliation adjustments.
 - `POST /reconciliation/adjustments` creates an account adjustment against an observed `actual_amount`, updates the account's current balance/liability, writes an `account_adjustment.create` audit log, and returns the adjustment row.
 - `GET /ai/memos?period=YYYY-MM` lists non-archived AI memo records. `POST /ai/memos/generate?tone=warm|terse|playful|professional` creates or updates the active memo for a period from report aggregates and the configured AI provider. The response includes additive `created_at` / `updated_at` timestamps and stores full stats JSON for overview, top categories, subscriptions, credit liabilities, reimbursements, and anomalies. `PATCH /ai/memos/{id}` updates summary/status. `DELETE /ai/memos/{id}` archives the memo.
-- `POST /push/devices` idempotently registers an iOS/macOS APNs device by `(platform, apns_token)`. `DELETE /push/devices/{id}` disables the device. Actual APNs delivery is reserved for a later phase.
+- `POST /push/devices` idempotently registers an iOS/macOS APNs device by `(platform, apns_token)`. `DELETE /push/devices/{id}` disables the device. APNs delivery sends only to enabled devices when an active `system` notification rule matches the event payload. `LINOFINANCE_APNS_USE_SANDBOX` and `LINOFINANCE_APNS_DRY_RUN` control APNs environment and dry-run delivery; `/health` exposes both.
+- `NotificationRule.rule_type` includes `ai_plan` for high-risk AI plans waiting for confirmation.

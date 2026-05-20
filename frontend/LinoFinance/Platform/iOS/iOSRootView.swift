@@ -55,6 +55,25 @@ struct iOSRootView: View {
                 syncTabWithEnvironment()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .linoDidRegisterForRemoteNotifications)) { notification in
+            guard let token = notification.userInfo?["token"] as? String else { return }
+            Task {
+                await environment.pushNotificationViewModel.register(apnsToken: token)
+                environment.systemPushEnabled = true
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .linoDidFailRemoteNotificationRegistration)) { notification in
+            let message = notification.userInfo?["message"] as? String ?? "APNs 注册失败"
+            environment.pushNotificationViewModel.markFailure(message)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .linoDidReceivePushTarget)) { notification in
+            let targetType = notification.userInfo?["target_type"] as? String
+            let targetID = notification.userInfo?["target_id"] as? String
+            Task {
+                await environment.handlePushNotificationTarget(type: targetType, id: targetID)
+                syncTabWithEnvironment()
+            }
+        }
     }
 
     private var mainTabs: some View {

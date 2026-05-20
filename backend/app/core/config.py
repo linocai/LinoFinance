@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "LinoFinance API"
-    app_version: str = "0.1.0"
+    app_version: str = "1.1.0"
     environment: str = "local"
     api_v1_prefix: str = "/api/v1"
     database_url: str = (
@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     apns_key_id: Optional[str] = None
     apns_team_id: Optional[str] = None
     apns_key_path: Optional[str] = None
+    apns_use_sandbox: bool = True
+    apns_dry_run: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",

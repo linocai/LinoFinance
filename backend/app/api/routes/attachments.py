@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -10,6 +10,18 @@ from app.services import attachments
 from app.services.ledger import LedgerNotFoundError, LedgerValidationError
 
 router = APIRouter()
+
+
+@router.get("", response_model=list[AttachmentRead])
+def list_attachments(
+    owner_type: str = Query(),
+    owner_id: str = Query(),
+    db: Session = Depends(get_db),
+) -> list[AttachmentRead]:
+    try:
+        return attachments.list_attachments(db, owner_type=owner_type, owner_id=owner_id)
+    except LedgerValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.post("", response_model=AttachmentRead, status_code=status.HTTP_201_CREATED)

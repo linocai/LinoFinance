@@ -3,6 +3,9 @@ import SwiftUI
 @main
 struct LinoFinanceApp: App {
     @State private var environment = AppEnvironment()
+#if os(iOS)
+    @UIApplicationDelegateAdaptor(LinoAppDelegate.self) private var appDelegate
+#endif
 #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     @AppStorage("linofinance.showMenuBarExtra") private var showMenuBarExtra = true

@@ -8,3 +8,5 @@ class HealthResponse(BaseModel):
     environment: str
     auth_required: bool
     rate_limit_enabled: bool
+    apns_use_sandbox: bool
+    apns_dry_run: bool

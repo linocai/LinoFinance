@@ -10,12 +10,14 @@ final class AppEnvironment {
     var entriesViewModel: EntriesViewModel
     var cashFlowViewModel: CashFlowViewModel
     var reimbursementsViewModel: ReimbursementsViewModel
+    var attachmentViewModel: AttachmentViewModel
     var creditViewModel: CreditViewModel
     var reportsViewModel: ReportsViewModel
     var aiViewModel: AIWorkspaceViewModel
     var aiMemoViewModel: AIMemoViewModel
     var reconciliationViewModel: ReconciliationViewModel
     var notificationsViewModel: NotificationsViewModel
+    var pushNotificationViewModel: PushNotificationViewModel
     var settingsViewModel: SettingsViewModel
 
     var selectedModule: FinanceModule = .dashboard
@@ -112,6 +114,14 @@ final class AppEnvironment {
             UserDefaults.standard.set(dynamicIslandAIEnabled, forKey: "linofinance.dynamicIslandAIEnabled")
         }
     }
+    var systemPushEnabled: Bool = AppEnvironment.defaultBool(
+        key: "linofinance.systemPushEnabled",
+        defaultValue: false
+    ) {
+        didSet {
+            UserDefaults.standard.set(systemPushEnabled, forKey: "linofinance.systemPushEnabled")
+        }
+    }
     var isAPITokenConfigured: Bool { apiClient.authToken != nil }
 
     init(
@@ -125,12 +135,14 @@ final class AppEnvironment {
         self.entriesViewModel = EntriesViewModel(apiClient: client)
         self.cashFlowViewModel = CashFlowViewModel(apiClient: client)
         self.reimbursementsViewModel = ReimbursementsViewModel(apiClient: client)
+        self.attachmentViewModel = AttachmentViewModel(apiClient: client)
         self.creditViewModel = CreditViewModel(apiClient: client)
         self.reportsViewModel = ReportsViewModel(apiClient: client)
         self.aiViewModel = AIWorkspaceViewModel(apiClient: client)
         self.aiMemoViewModel = AIMemoViewModel(apiClient: client)
         self.reconciliationViewModel = ReconciliationViewModel(apiClient: client)
         self.notificationsViewModel = NotificationsViewModel(apiClient: client)
+        self.pushNotificationViewModel = PushNotificationViewModel(apiClient: client)
         self.settingsViewModel = SettingsViewModel(apiClient: client)
         self.isPrivacyLocked = privacyMaskEnabled
         UserDefaults.standard.set(self.isPrivacyLocked, forKey: "linofinance.privacyLocked")
@@ -321,12 +333,14 @@ final class AppEnvironment {
         entriesViewModel = EntriesViewModel(apiClient: apiClient)
         cashFlowViewModel = CashFlowViewModel(apiClient: apiClient)
         reimbursementsViewModel = ReimbursementsViewModel(apiClient: apiClient)
+        attachmentViewModel = AttachmentViewModel(apiClient: apiClient)
         creditViewModel = CreditViewModel(apiClient: apiClient)
         reportsViewModel = ReportsViewModel(apiClient: apiClient)
         aiViewModel = AIWorkspaceViewModel(apiClient: apiClient)
         aiMemoViewModel = AIMemoViewModel(apiClient: apiClient)
         reconciliationViewModel = ReconciliationViewModel(apiClient: apiClient)
         notificationsViewModel = NotificationsViewModel(apiClient: apiClient)
+        pushNotificationViewModel = PushNotificationViewModel(apiClient: apiClient)
         settingsViewModel = SettingsViewModel(apiClient: apiClient)
     }
 

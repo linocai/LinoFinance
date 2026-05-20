@@ -210,3 +210,10 @@ struct NotificationRuleCreateRequest: Encodable {
     var nextTriggerDate: Date?
     var note: String?
 }
+
+struct PushDeviceRegisterRequest: Encodable {
+    var deviceId: String
+    var platform: String
+    var apnsToken: String
+    var appVersion: String?
+}

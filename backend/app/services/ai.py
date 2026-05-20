@@ -101,6 +101,13 @@ def create_ai_plan(db: Session, payload: AIPlanCreate) -> AIPlanRead:
         )
 
     db.commit()
+    if plan.risk_level == "high" and plan.status == "requires_confirmation":
+        try:
+            from app.services import push_dispatch
+
+            push_dispatch.dispatch_high_risk_ai_plan(db, plan.id)
+        except Exception:
+            pass
     return get_ai_plan(db, plan.id)
 
 

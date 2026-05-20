@@ -95,6 +95,38 @@ struct FinanceRepository {
         try await apiClient.markReimbursementReceived(id, request: request)
     }
 
+    func attachments(ownerType: String, ownerID: String) async throws -> [AttachmentDTO] {
+        try await apiClient.listAttachments(ownerType: ownerType, ownerID: ownerID)
+    }
+
+    func uploadAttachment(
+        ownerType: String,
+        ownerID: String,
+        filename: String,
+        contentType: String,
+        data: Data,
+        uploadedBy: String? = "app",
+        note: String? = nil
+    ) async throws -> AttachmentDTO {
+        try await apiClient.uploadAttachment(
+            ownerType: ownerType,
+            ownerID: ownerID,
+            filename: filename,
+            contentType: contentType,
+            data: data,
+            uploadedBy: uploadedBy,
+            note: note
+        )
+    }
+
+    func downloadAttachment(_ id: String) async throws -> Data {
+        try await apiClient.downloadAttachment(id)
+    }
+
+    func deleteAttachment(_ id: String) async throws {
+        try await apiClient.deleteAttachment(id)
+    }
+
     func statementCycles() async throws -> [CreditStatementCycleDTO] {
         try await apiClient.listStatementCycles()
     }
@@ -256,6 +288,14 @@ struct FinanceRepository {
 
     func cancelNotificationRule(_ id: String) async throws -> NotificationRuleDTO {
         try await apiClient.cancelNotificationRule(id)
+    }
+
+    func registerPushDevice(_ request: PushDeviceRegisterRequest) async throws -> PushDeviceDTO {
+        try await apiClient.registerPushDevice(request)
+    }
+
+    func disablePushDevice(_ id: String) async throws {
+        try await apiClient.disablePushDevice(id)
     }
 
     func auditLogs(

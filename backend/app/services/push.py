@@ -46,3 +46,13 @@ def disable_device(db: Session, device_id: str) -> None:
     device.enabled = False
     device.last_seen_at = datetime.now(timezone.utc)
     db.commit()
+
+
+def enabled_devices(db: Session) -> list[PushDevice]:
+    return list(
+        db.execute(
+            select(PushDevice)
+            .where(PushDevice.enabled.is_(True))
+            .order_by(PushDevice.last_seen_at.desc())
+        ).scalars()
+    )

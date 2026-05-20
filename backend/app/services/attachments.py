@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
 from re import sub
@@ -71,6 +71,22 @@ def get_attachment(db: Session, attachment_id: str) -> Attachment:
     return attachment
 
 
+def list_attachments(db: Session, owner_type: str, owner_id: str) -> list[Attachment]:
+    if owner_type not in OWNER_TYPES:
+        raise LedgerValidationError("Unsupported attachment owner type")
+    return list(
+        db.execute(
+            select(Attachment)
+            .where(
+                Attachment.owner_type == owner_type,
+                Attachment.owner_id == owner_id,
+                Attachment.deleted_at.is_(None),
+            )
+            .order_by(Attachment.created_at.desc())
+        ).scalars()
+    )
+
+
 def attachment_path(attachment: Attachment) -> Path:
     path = _storage_path(attachment.storage_key)
     if not path.exists():
@@ -81,10 +97,24 @@ def attachment_path(attachment: Attachment) -> Path:
 def delete_attachment(db: Session, attachment_id: str) -> None:
     attachment = get_attachment(db, attachment_id)
     attachment.deleted_at = datetime.now(timezone.utc)
-    path = _storage_path(attachment.storage_key)
-    if path.exists():
-        path.unlink()
     db.commit()
+
+
+def cleanup_deleted_attachments(db: Session, retention_days: int = 30) -> int:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    rows = db.execute(
+        select(Attachment).where(
+            Attachment.deleted_at.is_not(None),
+            Attachment.deleted_at <= cutoff,
+        )
+    ).scalars()
+    removed = 0
+    for attachment in rows:
+        path = _storage_path(attachment.storage_key)
+        if path.exists():
+            path.unlink()
+            removed += 1
+    return removed
 
 
 def _active_owner_attachment_bytes(db: Session, owner_type: str, owner_id: str) -> int:

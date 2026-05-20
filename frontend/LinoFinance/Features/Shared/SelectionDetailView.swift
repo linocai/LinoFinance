@@ -18,7 +18,12 @@ struct SelectionDetailView: View {
             case .cashFlow(let item):
                 CashFlowDetail(item: item, accounts: environment.accountsViewModel.accounts, categories: environment.entriesViewModel.categories)
             case .reimbursement(let claim):
-                ReimbursementDetail(claim: claim, entries: environment.entriesViewModel.entries, accounts: environment.accountsViewModel.accounts)
+                ReimbursementDetail(
+                    claim: claim,
+                    environment: environment,
+                    entries: environment.entriesViewModel.entries,
+                    accounts: environment.accountsViewModel.accounts
+                )
             case .creditCycle(let cycle):
                 CreditCycleDetail(cycle: cycle, accounts: environment.accountsViewModel.accounts)
             case .installment(let plan):
@@ -296,22 +301,26 @@ private struct CashFlowDetail: View {
 
 private struct ReimbursementDetail: View {
     let claim: ReimbursementClaimDTO
+    let environment: AppEnvironment
     let entries: [EntryDTO]
     let accounts: [AccountDTO]
 
     var body: some View {
-        DetailSection(title: "报销详情", systemImage: "arrow.uturn.left.circle.fill", headline: entryTitle) {
-            StatusTag(status: claim.status)
-            DetailLine(title: "付款方", value: claim.payer)
-            DetailLine(title: "预计到账", value: FinanceFormatter.mediumDate(claim.expectedDate))
-            DetailLine(title: "金额", value: FinanceFormatter.money(claim.amount, currency: claim.currency))
-            if let actualReceivedDate = claim.actualReceivedDate {
-                DetailLine(title: "实际到账", value: FinanceFormatter.mediumDate(actualReceivedDate))
+        VStack(alignment: .leading, spacing: 14) {
+            DetailSection(title: "报销详情", systemImage: "arrow.uturn.left.circle.fill", headline: entryTitle) {
+                StatusTag(status: claim.status)
+                DetailLine(title: "付款方", value: claim.payer)
+                DetailLine(title: "预计到账", value: FinanceFormatter.mediumDate(claim.expectedDate))
+                DetailLine(title: "金额", value: FinanceFormatter.money(claim.amount, currency: claim.currency))
+                if let actualReceivedDate = claim.actualReceivedDate {
+                    DetailLine(title: "实际到账", value: FinanceFormatter.mediumDate(actualReceivedDate))
+                }
+                if let receivedAccountId = claim.receivedAccountId {
+                    DetailLine(title: "到账账户", value: accounts.first { $0.id == receivedAccountId }?.name ?? "未知账户")
+                }
+                DetailNote(claim.note)
             }
-            if let receivedAccountId = claim.receivedAccountId {
-                DetailLine(title: "到账账户", value: accounts.first { $0.id == receivedAccountId }?.name ?? "未知账户")
-            }
-            DetailNote(claim.note)
+            AttachmentSection(environment: environment, ownerType: "reimbursement_claim", ownerID: claim.id)
         }
     }
 

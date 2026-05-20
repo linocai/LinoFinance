@@ -151,6 +151,53 @@ struct LinoAPIClient {
         try await post("reimbursement-claims/\(id)/mark-received", body: request)
     }
 
+    func listAttachments(ownerType: String, ownerID: String) async throws -> [AttachmentDTO] {
+        try await get(
+            "attachments",
+            queryItems: [
+                URLQueryItem(name: "owner_type", value: ownerType),
+                URLQueryItem(name: "owner_id", value: ownerID)
+            ]
+        )
+    }
+
+    func uploadAttachment(
+        ownerType: String,
+        ownerID: String,
+        filename: String,
+        contentType: String,
+        data: Data,
+        uploadedBy: String? = "app",
+        note: String? = nil
+    ) async throws -> AttachmentDTO {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var request = request(for: "attachments")
+        request.httpMethod = "POST"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Self.multipartBody(
+            boundary: boundary,
+            fields: [
+                "owner_type": ownerType,
+                "owner_id": ownerID,
+                "uploaded_by": uploadedBy ?? "",
+                "note": note ?? ""
+            ],
+            fileField: "file",
+            filename: filename,
+            contentType: contentType,
+            data: data
+        )
+        return try await send(request)
+    }
+
+    func downloadAttachment(_ id: String) async throws -> Data {
+        try await sendData(request(for: "attachments/\(id)"))
+    }
+
+    func deleteAttachment(_ id: String) async throws {
+        try await delete("attachments/\(id)")
+    }
+
     func listStatementCycles(creditAccountID: String? = nil) async throws -> [CreditStatementCycleDTO] {
         let query = creditAccountID.map { [URLQueryItem(name: "credit_account_id", value: $0)] } ?? []
         return try await get("credit-statement-cycles", queryItems: query)
@@ -350,6 +397,14 @@ struct LinoAPIClient {
         try await post("notification-rules/\(id)/cancel")
     }
 
+    func registerPushDevice(_ request: PushDeviceRegisterRequest) async throws -> PushDeviceDTO {
+        try await post("push/devices", body: request)
+    }
+
+    func disablePushDevice(_ id: String) async throws {
+        try await delete("push/devices/\(id)")
+    }
+
     func listAuditLogs(
         targetType: String? = nil,
         targetID: String? = nil,
@@ -463,6 +518,36 @@ struct LinoAPIClient {
         } catch {
             throw APIError.transport(error.localizedDescription)
         }
+    }
+
+    private static func multipartBody(
+        boundary: String,
+        fields: [String: String],
+        fileField: String,
+        filename: String,
+        contentType: String,
+        data: Data
+    ) -> Data {
+        var body = Data()
+        let lineBreak = "\r\n"
+        for (name, value) in fields where !value.isEmpty {
+            body.append("--\(boundary)\(lineBreak)")
+            body.append("Content-Disposition: form-data; name=\"\(name)\"\(lineBreak)\(lineBreak)")
+            body.append("\(value)\(lineBreak)")
+        }
+        body.append("--\(boundary)\(lineBreak)")
+        body.append("Content-Disposition: form-data; name=\"\(fileField)\"; filename=\"\(filename)\"\(lineBreak)")
+        body.append("Content-Type: \(contentType)\(lineBreak)\(lineBreak)")
+        body.append(data)
+        body.append(lineBreak)
+        body.append("--\(boundary)--\(lineBreak)")
+        return body
+    }
+}
+
+private extension Data {
+    mutating func append(_ string: String) {
+        append(contentsOf: string.utf8)
     }
 }
 

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ReimbursementsView: View {
     @Bindable var environment: AppEnvironment
@@ -244,6 +245,8 @@ struct NewReimbursementClaimSheet: View {
     @State private var payer = "company"
     @State private var expectedDate = Date()
     @State private var note = ""
+    @State private var pendingAttachments: [PendingAttachment] = []
+    @State private var isImportingAttachments = false
     @State private var errorMessage: String?
 
     private var selectedEntry: EntryDTO? {
@@ -276,6 +279,34 @@ struct NewReimbursementClaimSheet: View {
                 TextField("付款方", text: $payer)
                 DatePicker("预计到账", selection: $expectedDate, displayedComponents: .date)
                 TextField("备注", text: $note)
+                Button {
+                    isImportingAttachments = true
+                } label: {
+                    Label("选择凭证文件", systemImage: "paperclip")
+                }
+                if !pendingAttachments.isEmpty {
+                    ForEach(pendingAttachments) { attachment in
+                        HStack {
+                            Image(systemName: attachment.contentType.contains("pdf") ? "doc.richtext" : "doc")
+                                .foregroundStyle(FinanceTokens.Brand.primary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(attachment.filename)
+                                    .font(.subheadline)
+                                    .lineLimit(1)
+                                Text(attachment.formattedSize)
+                                    .font(.caption2)
+                                    .foregroundStyle(FinanceTokens.Text.secondary)
+                            }
+                            Spacer()
+                            Button(role: .destructive) {
+                                pendingAttachments.removeAll { $0.id == attachment.id }
+                            } label: {
+                                Image(systemName: "xmark.circle")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                }
             }
             if let errorMessage {
                 ErrorBanner(message: errorMessage)
@@ -291,6 +322,17 @@ struct NewReimbursementClaimSheet: View {
         .padding(22)
         .task {
             try? await environment.entriesViewModel.refresh()
+        }
+        .fileImporter(
+            isPresented: $isImportingAttachments,
+            allowedContentTypes: [.image, .pdf, .data],
+            allowsMultipleSelection: true
+        ) { result in
+            do {
+                pendingAttachments.append(contentsOf: try result.get().map(PendingAttachment.from(url:)))
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
@@ -316,7 +358,16 @@ struct NewReimbursementClaimSheet: View {
             note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note
         )
         do {
-            try await environment.reimbursementsViewModel.create(request)
+            let claim = try await environment.reimbursementsViewModel.create(request)
+            for attachment in pendingAttachments {
+                try await environment.attachmentViewModel.upload(
+                    ownerType: "reimbursement_claim",
+                    ownerID: claim.id,
+                    filename: attachment.filename,
+                    contentType: attachment.contentType,
+                    data: attachment.data
+                )
+            }
             try? await environment.reportsViewModel.refresh()
             environment.isShowingNewReimbursementSheet = false
         } catch {

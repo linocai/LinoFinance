@@ -59,11 +59,14 @@ def create_entry(db: Session, payload: EntryCreate, commit: bool = True) -> Entr
 
     if entry.status == "confirmed":
         _validate_confirmable(entry, lines, movements)
-        _apply_movements(db, movements, sign=Decimal("1"))
+        generated_statement_cycle_ids = _apply_movements(db, movements, sign=Decimal("1"))
         _create_reimbursement_claims_for_entry(db, entry, lines)
+    else:
+        generated_statement_cycle_ids = set()
 
     if commit:
         db.commit()
+        _dispatch_generated_statement_cycles(db, generated_statement_cycle_ids)
     return get_entry(db, entry.id)
 
 
@@ -94,11 +97,12 @@ def confirm_entry(db: Session, entry_id: str) -> EntryRead:
 
     lines, movements = _load_entry_parts(db, entry_id)
     _validate_confirmable(entry, lines, movements)
-    _apply_movements(db, movements, sign=Decimal("1"))
+    generated_statement_cycle_ids = _apply_movements(db, movements, sign=Decimal("1"))
     entry.status = "confirmed"
     _create_reimbursement_claims_for_entry(db, entry, lines)
 
     db.commit()
+    _dispatch_generated_statement_cycles(db, generated_statement_cycle_ids)
     return get_entry(db, entry_id)
 
 
@@ -424,7 +428,8 @@ def _validate_confirmable(
         raise LedgerValidationError("Entry start date cannot be after end date")
 
 
-def _apply_movements(db: Session, movements: Iterable[AccountMovement], sign: Decimal) -> None:
+def _apply_movements(db: Session, movements: Iterable[AccountMovement], sign: Decimal) -> set[str]:
+    generated_statement_cycle_ids: set[str] = set()
     for movement in movements:
         account = db.get(Account, movement.account_id)
         if account is None:
@@ -437,19 +442,22 @@ def _apply_movements(db: Session, movements: Iterable[AccountMovement], sign: De
             account.current_balance = quantize_money(account.current_balance - signed_amount)
         elif movement.movement_type == "credit_charge":
             account.current_liability = quantize_money(account.current_liability + signed_amount)
-            _apply_statement_cycle_movement(db, movement, sign)
+            if cycle_id := _apply_statement_cycle_movement(db, movement, sign):
+                generated_statement_cycle_ids.add(cycle_id)
         elif movement.movement_type == "credit_repayment":
             account.current_liability = quantize_money(account.current_liability - signed_amount)
-            _apply_statement_cycle_movement(db, movement, sign)
+            if cycle_id := _apply_statement_cycle_movement(db, movement, sign):
+                generated_statement_cycle_ids.add(cycle_id)
         else:
             raise LedgerValidationError("Unsupported account movement type")
+    return generated_statement_cycle_ids
 
 
 def _apply_statement_cycle_movement(
     db: Session,
     movement: AccountMovement,
     sign: Decimal,
-) -> None:
+) -> Optional[str]:
     if movement.statement_cycle_id is None:
         raise LedgerValidationError("Credit movement requires a statement cycle")
 
@@ -457,6 +465,7 @@ def _apply_statement_cycle_movement(
     if cycle is None:
         raise LedgerValidationError("Credit statement cycle not found")
 
+    previous_statement_amount = cycle.statement_amount
     signed_amount = movement.amount * sign
     if movement.movement_type == "credit_charge":
         cycle.statement_amount = quantize_money(cycle.statement_amount + signed_amount)
@@ -469,6 +478,14 @@ def _apply_statement_cycle_movement(
         raise LedgerValidationError("Statement cycle paid amount cannot be negative")
     _refresh_statement_cycle_status(cycle)
     sync_credit_statement_cash_flow(db, cycle)
+    if (
+        movement.movement_type == "credit_charge"
+        and sign > 0
+        and previous_statement_amount <= 0
+        and cycle.statement_amount > 0
+    ):
+        return cycle.id
+    return None
 
 
 def _refresh_statement_cycle_status(cycle: CreditStatementCycle) -> None:
@@ -482,6 +499,18 @@ def _refresh_statement_cycle_status(cycle: CreditStatementCycle) -> None:
         cycle.status = "partially_paid"
     elif cycle.status in {"paid", "partially_paid"}:
         cycle.status = "statement_generated"
+
+
+def _dispatch_generated_statement_cycles(db: Session, cycle_ids: set[str]) -> None:
+    if not cycle_ids:
+        return
+    try:
+        from app.services import push_dispatch
+
+        for cycle_id in cycle_ids:
+            push_dispatch.dispatch_credit_statement_generated(db, cycle_id)
+    except Exception:
+        pass
 
 
 def _get_statement_cash_flow(db: Session, item_id: Optional[str]) -> Optional[CashFlowItem]:

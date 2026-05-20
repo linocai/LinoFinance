@@ -10,6 +10,8 @@ struct AppHealthDTO: Decodable, Equatable {
     let environment: String
     let authRequired: Bool?
     let rateLimitEnabled: Bool?
+    let apnsUseSandbox: Bool?
+    let apnsDryRun: Bool?
 }
 
 struct DashboardSummaryDTO: Decodable, Equatable {
@@ -152,6 +154,22 @@ struct ReimbursementReceiveDTO: Decodable, Equatable {
     let entry: EntryDTO
 }
 
+struct AttachmentDTO: Identifiable, Decodable, Equatable, Hashable {
+    let id: String
+    let ownerType: String
+    let ownerId: String
+    let filename: String
+    let contentType: String
+    let sizeBytes: Int
+    let checksumSha256: String
+    let storageKey: String
+    let uploadedBy: String?
+    let note: String?
+    let deletedAt: Date?
+    let createdAt: Date
+    let updatedAt: Date
+}
+
 struct CreditStatementCycleDTO: Identifiable, Decodable, Equatable, Hashable {
     let id: String
     let creditAccountId: String
@@ -252,6 +270,17 @@ struct NotificationRuleDTO: Identifiable, Decodable, Equatable, Hashable {
     let nextTriggerDate: Date?
     let lastTriggeredAt: Date?
     let note: String?
+}
+
+struct PushDeviceDTO: Identifiable, Decodable, Equatable, Hashable {
+    let id: String
+    let deviceId: String
+    let platform: String
+    let apnsToken: String
+    let appVersion: String?
+    let installedAt: Date
+    let lastSeenAt: Date
+    let enabled: Bool
 }
 
 struct AuditLogDTO: Identifiable, Decodable, Equatable, Hashable {

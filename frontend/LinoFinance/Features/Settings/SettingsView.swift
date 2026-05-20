@@ -42,6 +42,7 @@ struct SettingsView: View {
                 if let health = environment.settingsViewModel.health {
                     DetailLine(title: "鉴权", value: health.authRequired == true ? "已启用" : "未启用")
                     DetailLine(title: "限流", value: health.rateLimitEnabled == true ? "已启用" : "未启用")
+                    DetailLine(title: "APNs", value: apnsStatus(health))
                 }
                 if let message = environment.lastErrorMessage {
                     ErrorBanner(message: message)
@@ -119,6 +120,23 @@ struct SettingsView: View {
                     DetailLine(title: "Live Activity 提前", value: "\(environment.liveActivityReminderDays) 天")
                 }
                 Toggle("Dynamic Island AI 计划提示", isOn: $environment.dynamicIslandAIEnabled)
+                Toggle("系统推送", isOn: $environment.systemPushEnabled)
+                Button {
+                    Task { await requestPushRegistration() }
+                } label: {
+                    Label("授权并注册本机", systemImage: "bell.badge")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!environment.systemPushEnabled || environment.pushNotificationViewModel.isRegistering)
+                if let device = environment.pushNotificationViewModel.lastRegisteredDevice {
+                    DetailLine(title: "最近注册", value: FinanceFormatter.mediumDate(device.lastSeenAt))
+                } else if let status = environment.pushNotificationViewModel.statusMessage {
+                    DetailLine(title: "注册状态", value: status)
+                }
+                if let message = environment.pushNotificationViewModel.errorMessage {
+                    ErrorBanner(message: message)
+                }
             }
 
             Section("AI 配置") {
@@ -209,6 +227,7 @@ struct SettingsView: View {
                         if let health = environment.settingsViewModel.health {
                             DetailLine(title: "鉴权", value: health.authRequired == true ? "已启用" : "未启用")
                             DetailLine(title: "限流", value: health.rateLimitEnabled == true ? "已启用" : "未启用")
+                            DetailLine(title: "APNs", value: apnsStatus(health))
                         }
                         if let message = environment.lastErrorMessage {
                             ErrorBanner(message: message)
@@ -298,6 +317,28 @@ struct SettingsView: View {
                             DetailLine(title: "Live Activity 提前", value: "\(environment.liveActivityReminderDays) 天")
                         }
                         Toggle("Dynamic Island AI 计划提示", isOn: $environment.dynamicIslandAIEnabled)
+                        Toggle("系统推送", isOn: $environment.systemPushEnabled)
+#if os(iOS)
+                        Button {
+                            Task { await requestPushRegistration() }
+                        } label: {
+                            Label("授权并注册本机", systemImage: "bell.badge")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!environment.systemPushEnabled || environment.pushNotificationViewModel.isRegistering)
+#else
+                        Text("macOS 本轮保留后端兼容，不主动注册 APNs。")
+                            .font(FinanceTypography.caption)
+                            .foregroundStyle(FinanceTokens.Text.secondary)
+#endif
+                        if let device = environment.pushNotificationViewModel.lastRegisteredDevice {
+                            DetailLine(title: "最近注册", value: FinanceFormatter.mediumDate(device.lastSeenAt))
+                        } else if let status = environment.pushNotificationViewModel.statusMessage {
+                            DetailLine(title: "注册状态", value: status)
+                        }
+                        if let message = environment.pushNotificationViewModel.errorMessage {
+                            ErrorBanner(message: message)
+                        }
 #if os(macOS)
                         Toggle("显示菜单栏入口", isOn: $showMenuBarExtra)
 #endif
@@ -389,6 +430,26 @@ struct SettingsView: View {
         await environment.configureAPI(baseURL: url, apiToken: nil)
         apiToken = ""
         configMessage = "Token 已清除"
+    }
+
+    private func requestPushRegistration() async {
+#if os(iOS)
+        do {
+            environment.pushNotificationViewModel.markWaitingForToken()
+            try await PushNotificationManager.shared.requestAuthorizationAndRegister()
+            errorMessage = nil
+        } catch {
+            environment.pushNotificationViewModel.markFailure(error.localizedDescription)
+            errorMessage = error.localizedDescription
+        }
+#else
+        configMessage = "macOS 本轮不注册 APNs"
+#endif
+    }
+
+    private func apnsStatus(_ health: AppHealthDTO) -> String {
+        let mode = health.apnsUseSandbox == true ? "sandbox" : "production"
+        return health.apnsDryRun == true ? "\(mode) · dry-run" : mode
     }
 
     private func createRate() async {

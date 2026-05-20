@@ -174,6 +174,12 @@ def approve_claim(db: Session, claim_id: str) -> ReimbursementClaimRead:
     claim.status = "approved"
     _sync_reimbursement_cash_flow(db, claim)
     db.commit()
+    try:
+        from app.services import push_dispatch
+
+        push_dispatch.dispatch_reimbursement_status(db, claim_id, "approved")
+    except Exception:
+        pass
     return get_reimbursement_claim(db, claim_id)
 
 
@@ -229,6 +235,12 @@ def mark_claim_received(
         cash_flow.account_id = payload.received_account_id
 
     db.commit()
+    try:
+        from app.services import push_dispatch
+
+        push_dispatch.dispatch_reimbursement_status(db, claim_id, "received")
+    except Exception:
+        pass
     return ReimbursementReceiveRead(
         reimbursement_claim=get_reimbursement_claim(db, claim_id),
         entry=ledger.get_entry(db, entry.id),

@@ -1,12 +1,12 @@
 # LinoFinance State
 
-Last updated: 2026-05-16
+Last updated: 2026-05-20
 
 ## Current Goal
 
-Execute the post-cloud client expansion. Backend and macOS app are deployed
-and production-smoked; the current work adds an iPhone-only iOS app that reuses
-the existing cloud API, DTOs, repositories, view models, and business screens.
+Finish the v1.1.0 release. Local release validation and macOS packaging are
+complete; production deployment is paused because `ssh hz` is currently reset
+by the remote endpoint.
 
 ## Completed
 
@@ -262,20 +262,75 @@ the existing cloud API, DTOs, repositories, view models, and business screens.
   - after iOS first-screen UI repair: iOS generic device build `BUILD SUCCEEDED` with command-line `CODE_SIGNING_ALLOWED=NO`
   - after iOS first-screen UI repair: macOS Debug build `BUILD SUCCEEDED`
 
+## v1.1 P10/P11 Checkpoint — 2026-05-20
+
+- Completed P10 attachment flow:
+  - backend `GET /attachments?owner_type=&owner_id=`, upload, download, soft-delete, and 30-day cleanup helper;
+  - frontend attachment DTO/API/repository/view model;
+  - reimbursement detail attachment section with upload, image/PDF preview, delete, iOS PhotosPicker/file importer, macOS file importer/drop;
+  - new reimbursement sheet uploads selected voucher files after claim creation.
+- Completed P11 push foundation:
+  - backend APNs dry-run/real dispatch service with ES256 JWT support, sandbox/dry-run config in `.env.example` and `/health`;
+  - active `system` notification-rule filtering, enabled-device filtering, `ai_plan` rule type;
+  - triggers for credit statement generation, credit T-5/T-3/T-1/T-0 reminders with audit de-dupe, reimbursement approved/received, and high-risk AI plans;
+  - scheduled script `backend/scripts/run_scheduled_jobs.py`;
+  - iOS `aps-environment=development`, APNs registration manager/app delegate, Settings push controls, and push target routing.
+- Verification passed:
+  - `cd backend && .venv/bin/ruff check .`
+  - `cd backend && .venv/bin/pytest -q` (`69 passed`)
+  - `cd frontend && swift test` (`16 passed`)
+  - macOS Debug xcodebuild `BUILD SUCCEEDED`
+  - iOS Simulator xcodebuild for `iPhone Air,OS=26.4.1` `BUILD SUCCEEDED`
+  - widget extension embedded at `LinoF.app/PlugIns/LinoFinanceWidgets.appex`
+  - iOS simulated entitlements include `aps-environment=development`
+
+## v1.1.0 P12 Release Checkpoint — 2026-05-20
+
+- Local release record is captured in the `Release v1.1.0` commit; local tag
+  `v1.1.0` points at that release commit. The tag is intentionally not pushed.
+- Version numbers are unified at `1.1.0`:
+  - backend package version and default health `app_version`;
+  - API contract health example;
+  - Xcode macOS, iOS, and widget `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION`.
+- Local release verification passed:
+  - `cd backend && .venv/bin/ruff check .`
+  - `cd backend && .venv/bin/pytest -q` (`69 passed`)
+  - `cd backend && .venv/bin/alembic upgrade head --sql`
+  - `python3 -m compileall backend/app backend/scripts backend/tests`
+  - `cd frontend && swift test` (`16 passed`)
+  - macOS Debug xcodebuild `BUILD SUCCEEDED`
+  - macOS Release xcodebuild `BUILD SUCCEEDED`
+  - iOS Simulator xcodebuild for `iPhone Air,OS=26.4.1` `BUILD SUCCEEDED`
+  - iOS generic device compile with `CODE_SIGNING_ALLOWED=NO` `BUILD SUCCEEDED`
+- iOS connected-device signing/install is blocked by Apple provisioning, not by
+  Swift compilation: the current personal development team does not support
+  Push Notifications, and the generated profile lacks Push/App Groups
+  entitlements required by the iOS app and widget.
+- macOS Release app was copied to `/Users/linotsai/Applications/LinoF.app`;
+  its `CFBundleShortVersionString` and `CFBundleVersion` are both `1.1.0`.
+  No previous app bundle was present at that path at copy time, so no backup
+  bundle was created.
+- Production deployment and production smoke were not run:
+  - repeated `ssh hz` checks fail with `kex_exchange_identification: read: Connection reset by peer`;
+  - public `https://lf.linotsai.top/api/v1/health` still reports version `0.1.0`;
+  - per release rule, no alternative high-risk deployment path was attempted.
+- APNs true-push smoke is skipped by product decision for P12.
+- P7 offline queue / 409 conflict smoke is `N/A` because P7 was cancelled.
+
 ## Remaining
 
-1. Install an iOS simulator runtime on the Mac, then run:
-   `xcodebuild -project frontend/LinoFinance.xcodeproj -scheme 'LinoFinance iOS' -configuration Debug -destination 'platform=iOS Simulator,name=iPhone Air' -derivedDataPath frontend/.derivedData-ios build`.
-2. Manual iPhone Air smoke after simulator runtime is available: first-launch no-token settings prompt, token save, `/health`, `/ai/config`, all 10 modules, create flows, status actions, and CSV sharing.
-3. Add partial cash-flow settlement once reimbursement and partial payments need it.
-4. Add credit statement cycle update/close endpoints if manual statement reconciliation needs editing after creation.
-5. Add account balance recalculation/reconciliation command to rebuild balances from movements and cycle amounts.
-6. Add seed scripts for default categories and initial USD/CNY rate in local/test setup.
-7. Add app-level smoke/UI tests once macOS/iOS workflow stabilizes.
+1. Restore `ssh hz`, then deploy the local `v1.1.0` tag to production with
+   backup, migration, restart, and public health verification.
+2. Run production P12 smoke with a unique marker and clean up by business
+   reversal after deployment succeeds.
+3. Resolve Apple Developer provisioning for iOS Push Notifications and App
+   Groups, then rerun connected-device install/smoke on `Kurisu`.
+4. Configure real APNs credentials later and run the P11 true-push smoke.
+5. Add partial cash-flow settlement once reimbursement and partial payments need it.
+6. Add credit statement cycle update/close endpoints if manual statement reconciliation needs editing after creation.
+7. Add account balance recalculation/reconciliation command to rebuild balances from movements and cycle amounts.
 8. Add stronger production observability if needed: external error tracking, persistent rate-limit backend, log shipping, and uptime checks.
-9. Later frontend polish still outstanding from the design direction: command palette (`⌘K`), Menu Bar Extra, account reconciliation UI, multi-window mode, richer charts, privacy blur, and deeper AI narrative insights.
-10. Remaining cross-platform vision items intentionally deferred: Widget, Live Activity, Shortcuts, real system notification delivery, attachment model/preview/printing, offline draft sync/conflict handling, and AI monthly narrative memo.
-11. AI action backlog remains for `GenerateReport` and `CreateRecurringRule`; current report APIs and subscription APIs cover the blocking user workflows.
+9. AI action backlog remains for `GenerateReport` and `CreateRecurringRule`; current report APIs and subscription APIs cover the blocking user workflows.
 
 ## Decisions
 

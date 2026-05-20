@@ -1,5 +1,8 @@
 import Foundation
 import Observation
+#if os(iOS)
+import UIKit
+#endif
 
 @MainActor
 @Observable
@@ -77,9 +80,11 @@ final class ReimbursementsViewModel {
         }
     }
 
-    func create(_ request: ReimbursementClaimCreateRequest) async throws {
-        _ = try await repository.createReimbursementClaim(request)
+    @discardableResult
+    func create(_ request: ReimbursementClaimCreateRequest) async throws -> ReimbursementClaimDTO {
+        let claim = try await repository.createReimbursementClaim(request)
         try await refresh()
+        return claim
     }
 
     func submit(_ id: String) async throws {
@@ -105,6 +110,70 @@ final class ReimbursementsViewModel {
     func markReceived(_ id: String, request: ReimbursementReceiveRequest) async throws {
         _ = try await repository.markReimbursementReceived(id, request: request)
         try await refresh()
+    }
+}
+
+@MainActor
+@Observable
+final class AttachmentViewModel {
+    private let repository: FinanceRepository
+    var attachmentsByOwner: [String: [AttachmentDTO]] = [:]
+    var isLoading = false
+    var errorMessage: String?
+
+    init(apiClient: LinoAPIClient) {
+        repository = FinanceRepository(apiClient: apiClient)
+    }
+
+    func attachments(ownerType: String, ownerID: String) -> [AttachmentDTO] {
+        attachmentsByOwner[Self.ownerKey(ownerType: ownerType, ownerID: ownerID)] ?? []
+    }
+
+    func refresh(ownerType: String, ownerID: String) async throws {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            attachmentsByOwner[Self.ownerKey(ownerType: ownerType, ownerID: ownerID)] = try await repository.attachments(
+                ownerType: ownerType,
+                ownerID: ownerID
+            )
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+            throw error
+        }
+    }
+
+    @discardableResult
+    func upload(
+        ownerType: String,
+        ownerID: String,
+        filename: String,
+        contentType: String,
+        data: Data
+    ) async throws -> AttachmentDTO {
+        let attachment = try await repository.uploadAttachment(
+            ownerType: ownerType,
+            ownerID: ownerID,
+            filename: filename,
+            contentType: contentType,
+            data: data
+        )
+        try await refresh(ownerType: ownerType, ownerID: ownerID)
+        return attachment
+    }
+
+    func download(_ attachment: AttachmentDTO) async throws -> Data {
+        try await repository.downloadAttachment(attachment.id)
+    }
+
+    func delete(_ attachment: AttachmentDTO) async throws {
+        try await repository.deleteAttachment(attachment.id)
+        try await refresh(ownerType: attachment.ownerType, ownerID: attachment.ownerId)
+    }
+
+    private static func ownerKey(ownerType: String, ownerID: String) -> String {
+        "\(ownerType):\(ownerID)"
     }
 }
 
@@ -513,6 +582,79 @@ final class NotificationsViewModel {
     func cancel(_ id: String) async throws {
         _ = try await repository.cancelNotificationRule(id)
         try await refresh()
+    }
+}
+
+@MainActor
+@Observable
+final class PushNotificationViewModel {
+    private let repository: FinanceRepository
+    var lastRegisteredDevice: PushDeviceDTO?
+    var isRegistering = false
+    var statusMessage: String? = UserDefaults.standard.string(forKey: "linofinance.push.statusMessage")
+    var errorMessage: String?
+
+    init(apiClient: LinoAPIClient) {
+        repository = FinanceRepository(apiClient: apiClient)
+    }
+
+    func register(apnsToken: String) async {
+        isRegistering = true
+        defer { isRegistering = false }
+        do {
+            let device = try await repository.registerPushDevice(
+                PushDeviceRegisterRequest(
+                    deviceId: Self.deviceID(),
+                    platform: Self.platform,
+                    apnsToken: apnsToken,
+                    appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+                )
+            )
+            lastRegisteredDevice = device
+            statusMessage = "已注册推送：\(FinanceFormatter.mediumDate(device.lastSeenAt))"
+            if let statusMessage {
+                UserDefaults.standard.set(statusMessage, forKey: "linofinance.push.statusMessage")
+            }
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+            statusMessage = "推送注册失败"
+            UserDefaults.standard.set(statusMessage, forKey: "linofinance.push.statusMessage")
+        }
+    }
+
+    func markWaitingForToken() {
+        statusMessage = "等待系统返回 APNs token"
+        UserDefaults.standard.set(statusMessage, forKey: "linofinance.push.statusMessage")
+        errorMessage = nil
+    }
+
+    func markFailure(_ message: String) {
+        errorMessage = message
+        statusMessage = "推送注册失败"
+        UserDefaults.standard.set(statusMessage, forKey: "linofinance.push.statusMessage")
+    }
+
+    private static var platform: String {
+#if os(iOS)
+        "ios"
+#else
+        "macos"
+#endif
+    }
+
+    private static func deviceID() -> String {
+        let key = "linofinance.push.deviceID"
+        if let existing = UserDefaults.standard.string(forKey: key), !existing.isEmpty {
+            return existing
+        }
+#if os(iOS)
+        let generated = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+#else
+        let generated = Host.current().localizedName ?? UUID().uuidString
+#endif
+        UserDefaults.standard.set(generated, forKey: key)
+        return generated
     }
 }
 

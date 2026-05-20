@@ -1,9 +1,16 @@
+from contextlib import contextmanager
+from datetime import date, datetime, timedelta, timezone
+
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from app.core.config import get_settings
+from app.db.session import get_db
+from app.models.audit_log import AuditLog
 from app.main import create_app
-from app.services import ai_provider
+from app.models.attachment import Attachment
+from app.services import ai_provider, attachments as attachment_service, push_dispatch
 
 
 @pytest.fixture(autouse=True)
@@ -11,6 +18,17 @@ def clear_settings_cache():
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+@contextmanager
+def db_session_from_client(client):
+    override = client.app.dependency_overrides[get_db]
+    generator = override()
+    db = next(generator)
+    try:
+        yield db
+    finally:
+        generator.close()
 
 
 def test_search_finds_account_and_entry(client) -> None:
@@ -89,12 +107,42 @@ def test_attachments_upload_download_and_reject_large_file(client, monkeypatch, 
     assert download.status_code == 200
     assert download.content == b"hello invoice"
 
+    owner_list = client.get(
+        "/api/v1/attachments",
+        params={"owner_type": "entry_category_line", "owner_id": "line-1"},
+    )
+    assert owner_list.status_code == 200
+    assert [item["id"] for item in owner_list.json()] == [attachment["id"]]
+
     too_large = client.post(
         "/api/v1/attachments",
         data={"owner_type": "entry_category_line", "owner_id": "line-1"},
         files={"file": ("large.bin", b"x" * (10 * 1024 * 1024 + 1), "application/octet-stream")},
     )
     assert too_large.status_code == 413
+
+    stored_file = tmp_path / attachment["storage_key"]
+    assert stored_file.exists()
+
+    delete_response = client.delete(f"/api/v1/attachments/{attachment['id']}")
+    assert delete_response.status_code == 204
+    assert stored_file.exists()
+    assert (
+        client.get(
+            "/api/v1/attachments",
+            params={"owner_type": "entry_category_line", "owner_id": "line-1"},
+        ).json()
+        == []
+    )
+    assert client.get(f"/api/v1/attachments/{attachment['id']}").status_code == 404
+
+    with db_session_from_client(client) as db:
+        row = db.get(Attachment, attachment["id"])
+        assert row is not None
+        row.deleted_at = datetime.now(timezone.utc) - timedelta(days=31)
+        db.commit()
+        assert attachment_service.cleanup_deleted_attachments(db, retention_days=30) == 1
+    assert not stored_file.exists()
 
 
 def test_reconciliation_adjustment_zeroes_drift(client) -> None:
@@ -223,6 +271,309 @@ def test_push_devices_register_idempotently_and_disable(client) -> None:
 
     delete_response = client.delete(f"/api/v1/push/devices/{second_body['id']}")
     assert delete_response.status_code == 204
+
+
+def test_push_dispatch_respects_rules_devices_and_due_dedup(client, monkeypatch) -> None:
+    monkeypatch.setenv("LINOFINANCE_APNS_DRY_RUN", "true")
+    get_settings.cache_clear()
+
+    device = client.post(
+        "/api/v1/push/devices",
+        json={
+            "device_id": "iphone-air",
+            "platform": "ios",
+            "apns_token": "apns-token",
+            "app_version": "1.1",
+        },
+    ).json()
+    rule = client.post(
+        "/api/v1/notification-rules",
+        json={
+            "title": "Credit push",
+            "rule_type": "credit_repayment",
+            "channel": "system",
+            "trigger_payload": {},
+        },
+    )
+    assert rule.status_code == 201
+
+    credit_account = client.post(
+        "/api/v1/accounts",
+        json={"name": "Visa", "type": "credit", "currency": "CNY"},
+    ).json()
+    cycle = client.post(
+        "/api/v1/credit-statement-cycles",
+        json={
+            "credit_account_id": credit_account["id"],
+            "cycle_start_date": "2026-04-01",
+            "cycle_end_date": "2026-04-30",
+            "statement_date": "2026-05-01",
+            "due_date": "2026-05-23",
+            "currency": "CNY",
+            "statement_amount": "3375",
+            "minimum_payment": "260",
+        },
+    )
+    assert cycle.status_code == 201
+    assert cycle.json()["status"] == "statement_generated"
+    rules_after_cycle = client.get(
+        "/api/v1/notification-rules", params={"rule_type": "credit_repayment"}
+    ).json()
+    assert rules_after_cycle[0]["last_triggered_at"] is not None
+
+    with db_session_from_client(client) as db:
+        results = push_dispatch.dispatch_due_credit_reminders(db, anchor_date=date(2026, 5, 20))
+        assert len(results) == 1
+        assert results[0].sent == 1
+        assert results[0].payloads[0]["target_type"] == "credit_statement_cycle"
+        assert results[0].payloads[0]["target_id"] == cycle.json()["id"]
+
+        duplicate = push_dispatch.dispatch_due_credit_reminders(db, anchor_date=date(2026, 5, 20))
+        assert duplicate[0].skipped_reason == "already_sent"
+        audit = db.execute(
+            select(AuditLog).where(AuditLog.action_type == "push.credit_due.t_minus_3")
+        ).scalar_one()
+        assert audit.target_id == cycle.json()["id"]
+
+    client.delete(f"/api/v1/push/devices/{device['id']}")
+    with db_session_from_client(client) as db:
+        result = push_dispatch.dispatch_event(
+            db,
+            push_dispatch.PushEvent(
+                event_type="manual_probe",
+                rule_type="credit_repayment",
+                title="Probe",
+                body="Should not send",
+                target_type="credit_statement_cycle",
+                target_id=cycle.json()["id"],
+            ),
+        )
+        assert result.skipped_reason == "no_enabled_push_device"
+
+
+def test_push_dispatch_requires_matching_active_rule(client, monkeypatch) -> None:
+    monkeypatch.setenv("LINOFINANCE_APNS_DRY_RUN", "true")
+    get_settings.cache_clear()
+    client.post(
+        "/api/v1/push/devices",
+        json={
+            "device_id": "iphone-air",
+            "platform": "ios",
+            "apns_token": "apns-token",
+            "app_version": "1.1",
+        },
+    )
+    client.post(
+        "/api/v1/notification-rules",
+        json={
+            "title": "Paused credit push",
+            "rule_type": "credit_repayment",
+            "channel": "system",
+            "trigger_payload": {},
+            "status": "paused",
+        },
+    )
+
+    with db_session_from_client(client) as db:
+        result = push_dispatch.dispatch_event(
+            db,
+            push_dispatch.PushEvent(
+                event_type="manual_probe",
+                rule_type="credit_repayment",
+                title="Probe",
+                body="Paused rules should not send",
+                target_type="credit_statement_cycle",
+                target_id="cycle-1",
+            ),
+        )
+
+    assert result.skipped_reason == "no_matching_notification_rule"
+
+
+def test_credit_charge_statement_generation_dispatches_push(client, monkeypatch) -> None:
+    monkeypatch.setenv("LINOFINANCE_APNS_DRY_RUN", "true")
+    get_settings.cache_clear()
+    client.post(
+        "/api/v1/push/devices",
+        json={
+            "device_id": "iphone-air",
+            "platform": "ios",
+            "apns_token": "apns-token",
+            "app_version": "1.1",
+        },
+    )
+    client.post(
+        "/api/v1/notification-rules",
+        json={
+            "title": "Credit push",
+            "rule_type": "credit_repayment",
+            "channel": "system",
+            "trigger_payload": {},
+        },
+    )
+    credit_account = client.post(
+        "/api/v1/accounts",
+        json={"name": "Visa", "type": "credit", "currency": "CNY"},
+    ).json()
+    cycle = client.post(
+        "/api/v1/credit-statement-cycles",
+        json={
+            "credit_account_id": credit_account["id"],
+            "cycle_start_date": "2026-05-01",
+            "cycle_end_date": "2026-05-31",
+            "statement_date": "2026-06-01",
+            "due_date": "2026-06-20",
+            "currency": "CNY",
+        },
+    ).json()
+    category = client.post(
+        "/api/v1/categories",
+        json={"name": "Travel", "type": "expense"},
+    ).json()
+
+    entry = client.post(
+        "/api/v1/entries",
+        json={
+            "title": "Flight",
+            "date": "2026-05-16",
+            "status": "confirmed",
+            "category_lines": [
+                {
+                    "category_id": category["id"],
+                    "direction": "expense",
+                    "amount": "100",
+                    "currency": "CNY",
+                }
+            ],
+            "account_movements": [
+                {
+                    "account_id": credit_account["id"],
+                    "statement_cycle_id": cycle["id"],
+                    "movement_type": "credit_charge",
+                    "amount": "100",
+                    "currency": "CNY",
+                }
+            ],
+        },
+    )
+
+    assert entry.status_code == 201
+    updated_cycle = client.get(f"/api/v1/credit-statement-cycles/{cycle['id']}").json()
+    assert updated_cycle["statement_amount"] == "100"
+    rule = client.get("/api/v1/notification-rules", params={"rule_type": "credit_repayment"}).json()[0]
+    assert rule["last_triggered_at"] is not None
+
+
+def test_reimbursement_status_dispatches_system_push(client, monkeypatch) -> None:
+    monkeypatch.setenv("LINOFINANCE_APNS_DRY_RUN", "true")
+    get_settings.cache_clear()
+    client.post(
+        "/api/v1/push/devices",
+        json={
+            "device_id": "iphone-air",
+            "platform": "ios",
+            "apns_token": "apns-token",
+            "app_version": "1.1",
+        },
+    )
+    client.post(
+        "/api/v1/notification-rules",
+        json={
+            "title": "Reimbursement push",
+            "rule_type": "reimbursement",
+            "channel": "system",
+            "trigger_payload": {"status": "approved"},
+        },
+    )
+    account = client.post(
+        "/api/v1/accounts",
+        json={"name": "Wallet", "type": "balance", "currency": "CNY", "current_balance": "1000"},
+    ).json()
+    category = client.post(
+        "/api/v1/categories",
+        json={"name": "Travel", "type": "expense"},
+    ).json()
+    entry = client.post(
+        "/api/v1/entries",
+        json={
+            "title": "Client trip",
+            "date": "2026-05-16",
+            "status": "confirmed",
+            "category_lines": [
+                {
+                    "category_id": category["id"],
+                    "direction": "expense",
+                    "amount": "500",
+                    "currency": "CNY",
+                    "reimbursable_flag": True,
+                    "reimbursement_payer": "company",
+                    "reimbursement_expected_date": "2026-06-10",
+                    "reimbursement_status": "submitted",
+                }
+            ],
+            "account_movements": [
+                {
+                    "account_id": account["id"],
+                    "movement_type": "balance_out",
+                    "amount": "500",
+                    "currency": "CNY",
+                }
+            ],
+        },
+    ).json()
+    claim = client.get("/api/v1/reimbursement-claims").json()[0]
+    assert claim["linked_entry_line_id"] == entry["category_lines"][0]["id"]
+
+    approved = client.post(f"/api/v1/reimbursement-claims/{claim['id']}/approve")
+
+    assert approved.status_code == 200
+    rule = client.get("/api/v1/notification-rules", params={"rule_type": "reimbursement"}).json()[0]
+    assert rule["last_triggered_at"] is not None
+
+
+def test_high_risk_ai_plan_dispatches_system_push(client, monkeypatch) -> None:
+    monkeypatch.setenv("LINOFINANCE_APNS_DRY_RUN", "true")
+    get_settings.cache_clear()
+    client.post(
+        "/api/v1/push/devices",
+        json={
+            "device_id": "iphone-air",
+            "platform": "ios",
+            "apns_token": "apns-token",
+            "app_version": "1.1",
+        },
+    )
+    client.post(
+        "/api/v1/notification-rules",
+        json={
+            "title": "AI push",
+            "rule_type": "ai_plan",
+            "channel": "system",
+            "trigger_payload": {},
+        },
+    )
+
+    plan = client.post(
+        "/api/v1/ai/plans",
+        json={
+            "source_text": "删除一条记录",
+            "actions": [
+                {
+                    "action_type": "VoidEntry",
+                    "payload": {"entry_id": "entry-1"},
+                    "explanation": "destructive",
+                }
+            ],
+            "explanation": "needs confirmation",
+            "confidence": "0.9",
+        },
+    )
+
+    assert plan.status_code == 201
+    assert plan.json()["risk_level"] == "high"
+    assert plan.json()["status"] == "requires_confirmation"
+    rule = client.get("/api/v1/notification-rules", params={"rule_type": "ai_plan"}).json()[0]
+    assert rule["last_triggered_at"] is not None
 
 
 def test_cash_flow_pressure_includes_daily_net_window(client) -> None:

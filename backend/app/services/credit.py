@@ -34,7 +34,15 @@ def create_statement_cycle(
         sync_credit_statement_cash_flow(db, cycle)
     db.commit()
     db.refresh(cycle)
-    return CreditStatementCycleRead.from_model(cycle)
+    result = CreditStatementCycleRead.from_model(cycle)
+    if cycle.status == "statement_generated":
+        try:
+            from app.services import push_dispatch
+
+            push_dispatch.dispatch_credit_statement_generated(db, cycle.id)
+        except Exception:
+            pass
+    return result
 
 
 def list_statement_cycles(
@@ -86,3 +94,5 @@ def _refresh_cycle_status(cycle: CreditStatementCycle) -> None:
         cycle.status = "paid"
     elif cycle.paid_amount > 0:
         cycle.status = "partially_paid"
+    else:
+        cycle.status = "statement_generated"
