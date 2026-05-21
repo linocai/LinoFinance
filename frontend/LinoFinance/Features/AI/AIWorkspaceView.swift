@@ -239,16 +239,25 @@ private struct AIPlanCard: View {
 
             HStack {
                 Button("批准") { action(plan, "approve", nil) }
-                    .disabled(["approved", "executed", "rejected"].contains(plan.status))
+                    .disabled(["approved", "executed", "rejected", "cancelled", "failed"].contains(plan.status))
                 Button("拒绝", role: .destructive) { action(plan, "reject", nil) }
-                    .disabled(["executed", "rejected"].contains(plan.status))
+                    .disabled(["executed", "rejected", "cancelled"].contains(plan.status))
                 Spacer()
                 Button("执行") { action(plan, "execute", nil) }
                     .buttonStyle(.borderedProminent)
-                    .disabled(plan.riskLevel == "high" && strongConfirm != "EXECUTE_HIGH_RISK")
+                    .disabled(executeDisabled)
             }
         }
         .padding(.vertical, 8)
+        .opacity(["executed", "rejected", "cancelled", "failed"].contains(plan.status) ? 0.55 : 1)
+    }
+
+    private var executeDisabled: Bool {
+        // 后端只允许 approved / auto_confirm_candidate / requires_confirmation
+        // （后两者由 perform() 自动 approve）状态执行；已完成 / 已拒绝 / 已取消 / 失败 一律禁。
+        if ["executed", "rejected", "cancelled", "failed"].contains(plan.status) { return true }
+        if plan.riskLevel == "high" && strongConfirm != "EXECUTE_HIGH_RISK" { return true }
+        return false
     }
 
     private var planSummary: some View {

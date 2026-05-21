@@ -1,6 +1,7 @@
 import json
 import urllib.error
 import urllib.request
+from datetime import date
 from typing import Any, Dict, List, Tuple
 
 from app.core.config import get_settings
@@ -8,35 +9,69 @@ from app.schemas.ai import AIActionProposal
 from app.services.ledger import LedgerValidationError
 
 
-SYSTEM_PROMPT = """
+SYSTEM_PROMPT_TEMPLATE = """
 You convert personal finance text into JSON actions for LinoFinance.
+Today's date is {today}. If the user does not specify a date, assume the
+event happened today; never invent dates in other months or years.
+
 Return only a JSON object with this shape:
-{"actions":[{"action_type":"CreateEntry","payload":{},"explanation":"..."}],
-"explanation":"...","confidence":0.0}
+{{"actions":[{{"action_type":"CreateEntry","payload":{{}},"explanation":"..."}}],
+"explanation":"...","confidence":0.0}}
 Use exact snake_case backend field names. Do not use aliases like "type" when
 the schema requires "cash_flow_type" or "rule_type".
-Use only supported action_type values:
+
+Decision rule for action_type:
+- If the text describes something that ALREADY HAPPENED (past or present-tense
+  payments, purchases, receipts, transfers, expenses, income), emit ONE
+  CreateEntry action with date = today (or the date the user specified).
+  Common cues: "支付/买了/花了/收到/转账/给了/付了/到账".
+- If the text describes a FUTURE scheduled or expected cash movement
+  (upcoming salary, upcoming bill, planned subscription charge, expected
+  reimbursement to be received), use CreateCashFlowItem.
+  Common cues: "下个月/下周/明天/即将/计划/预计/到期/还款日".
+Default to CreateEntry when uncertain.
+
+Supported action_type values:
 CreateEntry, CreateCashFlowItem, MarkReimbursable, CreateInstallmentPlan,
 RecordCreditRepayment, GenerateNotificationRule, SetCashFlowStatus,
 UpdateReimbursementStatus.
-Do not invent account_id or category_id values if the user did not provide them.
+Do not invent account_id or category_id values if the user did not provide
+them; leave them out of the payload instead.
 
-Required payload shapes for common actions:
+Required payload shapes:
+- CreateEntry (most common: a single past expense/income):
+  {{"title": string,
+   "date": "YYYY-MM-DD",
+   "status": "confirmed|draft" (use "draft" if account_id or category_id is missing),
+   "category_lines": [
+     {{"direction": "expense|income",
+       "amount": decimal string,
+       "currency": "CNY|USD"}}
+   ],
+   "account_movements": [
+     {{"movement_type": "balance_in|balance_out|credit_charge|credit_repayment",
+       "amount": decimal string,
+       "currency": "CNY|USD"}}
+   ]}}
 - CreateCashFlowItem:
-  {"title": string, "direction": "inflow|outflow|transfer",
+  {{"title": string, "direction": "inflow|outflow|transfer",
    "cash_flow_type": "salary|rent_income|reimbursement|subscription|credit_repayment|installment|one_time|other",
-   "amount": decimal string, "currency": "CNY|USD", "expected_date": "YYYY-MM-DD"}
+   "amount": decimal string, "currency": "CNY|USD", "expected_date": "YYYY-MM-DD"}}
 - GenerateNotificationRule:
-  {"title": string,
+  {{"title": string,
    "rule_type": "credit_repayment|cash_flow|reimbursement|subscription|anomaly",
    "channel": "in_app|system|email",
-   "trigger_payload": object, "next_trigger_date": "YYYY-MM-DD"}
+   "trigger_payload": object, "next_trigger_date": "YYYY-MM-DD"}}
 - SetCashFlowStatus:
-  {"cash_flow_item_id": string, "status": "expected|confirmed|cancelled"}
+  {{"cash_flow_item_id": string, "status": "expected|confirmed|cancelled"}}
 - UpdateReimbursementStatus:
-  {"reimbursement_claim_id": string,
-   "status": "reimbursable|invoice_pending|submitted|approved|waiting_received|rejected|abandoned"}
+  {{"reimbursement_claim_id": string,
+   "status": "reimbursable|invoice_pending|submitted|approved|waiting_received|rejected|abandoned"}}
 """.strip()
+
+
+def _build_system_prompt() -> str:
+    return SYSTEM_PROMPT_TEMPLATE.format(today=date.today().isoformat())
 
 
 def generate_action_proposals(
@@ -55,7 +90,7 @@ def generate_action_proposals(
         "temperature": 0,
         "response_format": {"type": "json_object"},
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": _build_system_prompt()},
             {"role": "user", "content": source_text},
         ],
     }
