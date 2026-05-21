@@ -28,6 +28,14 @@ enum FinanceTokens {
                 darkOpacity: 0.82
             )
         }
+        static var deepGlass: Color {
+            FinanceTokens.adaptiveColor(
+                light: 0xF5F6FA,
+                dark: 0x141418,
+                lightOpacity: 0.85,
+                darkOpacity: 0.92
+            )
+        }
     }
 
     enum Text {
@@ -107,6 +115,91 @@ enum FinanceTokens {
         }
 
         static let row: CGFloat = 10
+
+        static var hero: CGFloat {
+#if os(iOS)
+            24
+#else
+            36
+#endif
+        }
+    }
+
+    /// 三档 elevation —— 每档只挂一层 shadow，禁止 caller 再叠加 `.shadow()`。
+    /// 数值对齐 HTML `--shadow-soft / --shadow-elevated / --shadow-floating`，
+    /// 颜色基底使用 `rgb(15,23,42)`（slate-900）以匹配 HTML 的冷调投影。
+    struct Shadow {
+        let color: Color
+        let radius: CGFloat
+        let x: CGFloat
+        let y: CGFloat
+
+        static var soft: Shadow {
+            Shadow(color: slate(lightOpacity: 0.06, darkOpacity: 0.30), radius: 18, x: 0, y: 8)
+        }
+
+        static var elevated: Shadow {
+            Shadow(color: slate(lightOpacity: 0.18, darkOpacity: 0.50), radius: 26, x: 0, y: 14)
+        }
+
+        static var floating: Shadow {
+            Shadow(color: slate(lightOpacity: 0.28, darkOpacity: 0.65), radius: 34, x: 0, y: 20)
+        }
+
+        /// 按 tint 着色的阴影 —— 用于 FAB / 选中态发光；HTML 中体现为 brand 调色的 shadow。
+        static func tinted(_ tint: Color, intensity: Double = 0.32, radius: CGFloat = 22, y: CGFloat = 12) -> Shadow {
+            Shadow(color: tint.opacity(intensity), radius: radius, x: 0, y: y)
+        }
+
+        private static func slate(lightOpacity: Double, darkOpacity: Double) -> Color {
+            FinanceTokens.adaptiveColor(
+                light: 0x0F172A,
+                dark: 0x000000,
+                lightOpacity: lightOpacity,
+                darkOpacity: darkOpacity
+            )
+        }
+    }
+
+    /// Hero 容器的三色径向光晕（对齐 HTML `.hero` 的 3 层 radial-gradient）。
+    /// 返回 `RadialGradient`，直接当 background / overlay 用。
+    enum Halo {
+        static var topLeftBlue: RadialGradient {
+            RadialGradient(
+                colors: [Color(red: 0.039, green: 0.518, blue: 1.0).opacity(0.20), .clear],
+                center: UnitPoint(x: 0, y: 0),
+                startRadius: 0,
+                endRadius: 520
+            )
+        }
+
+        static var topRightPurple: RadialGradient {
+            RadialGradient(
+                colors: [Color(red: 0.647, green: 0.341, blue: 0.961).opacity(0.18), .clear],
+                center: UnitPoint(x: 1, y: 0),
+                startRadius: 0,
+                endRadius: 420
+            )
+        }
+
+        static var bottomRightOrange: RadialGradient {
+            RadialGradient(
+                colors: [Color(red: 1.0, green: 0.541, blue: 0.122).opacity(0.15), .clear],
+                center: UnitPoint(x: 0.8, y: 1),
+                startRadius: 0,
+                endRadius: 380
+            )
+        }
+
+        /// KPI 卡右上的小角落 brand 光晕（对齐 HTML `.kpi` 的 `radial-gradient(80% 50% at 100% 0%)`）。
+        static var brandCorner: RadialGradient {
+            RadialGradient(
+                colors: [FinanceTokens.Brand.primary.opacity(0.10), .clear],
+                center: UnitPoint(x: 1, y: 0),
+                startRadius: 0,
+                endRadius: 220
+            )
+        }
     }
 }
 

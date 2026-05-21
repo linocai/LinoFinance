@@ -1,81 +1,106 @@
 import SwiftUI
 
+enum EntryStatusFilter: String, CaseIterable, Identifiable {
+    case all, draft, confirmed, voided
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .all: "全部"
+        case .draft: "草稿"
+        case .confirmed: "已确认"
+        case .voided: "已作废"
+        }
+    }
+}
+
+/// 记账页 —— 用 Dashboard 卡片语言重设计。
+/// SectionHeader + SegmentedSwitcher + HeroSummary（本月支出/收入）+ 按日期分组卡片。
 struct EntriesView: View {
     @Bindable var environment: AppEnvironment
-    @State private var statusFilter = "all"
+    @State private var statusFilter: EntryStatusFilter = .all
     @State private var confirmation: ConfirmAction?
 
     private var filteredEntries: [EntryDTO] {
-        let entries = statusFilter == "all" ? environment.entriesViewModel.entries : environment.entriesViewModel.entries.filter { $0.status.rawValue == statusFilter }
-        guard !environment.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return entries
+        let entries: [EntryDTO]
+        switch statusFilter {
+        case .all: entries = environment.entriesViewModel.entries
+        default: entries = environment.entriesViewModel.entries.filter { $0.status.rawValue == statusFilter.rawValue }
         }
+        let trimmed = environment.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return entries }
         return entries.filter {
-            $0.title.localizedCaseInsensitiveContains(environment.searchText)
-                || ($0.note?.localizedCaseInsensitiveContains(environment.searchText) ?? false)
+            $0.title.localizedCaseInsensitiveContains(trimmed)
+                || ($0.note?.localizedCaseInsensitiveContains(trimmed) ?? false)
         }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            PageHeader(title: "记账", subtitle: "单笔记录、分类拆分和账户流水")
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 10) {
-                    entryControls
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SectionHeader(
+                    kicker: "Entries",
+                    title: "记账",
+                    description: "单笔记录、分类拆分和账户流水"
+                ) {
+                    Button {
+                        environment.beginNewEntry()
+                    } label: {
+                        Label("新建记录", systemImage: "plus")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+
+                HStack(spacing: 12) {
+                    SegmentedSwitcher(options: EntryStatusFilter.allCases, selection: $statusFilter) { $0.title }
+                        .frame(maxWidth: 320)
                     Spacer()
+                    if !environment.entriesViewModel.expenseCategories.contains(where: { $0.name == "日常支出" }) {
+                        Button {
+                            Task { await createQuickExpenseCategory() }
+                        } label: {
+                            Label("补一个支出分类", systemImage: "tag")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .buttonStyle(.bordered)
+                    }
                 }
-                VStack(alignment: .leading, spacing: 10) {
-                    entryControls
-                }
-            }
 
-            if environment.entriesViewModel.entries.isEmpty {
-                EmptyState(
-                    title: "还没有记录",
-                    message: "创建账户和分类后，就可以添加第一条单笔记账。",
-                    systemImage: "square.and.pencil",
-                    actionTitle: "新建记录",
-                    action: environment.beginNewEntry
-                )
-            } else {
-                List(filteredEntries, selection: Binding(
-                    get: {
-                        if case .entry(let entry) = environment.inspectorSelection {
-                            return entry.id
-                        }
-                        return nil
-                    },
-                    set: { id in
-                        guard let id, let entry = environment.entriesViewModel.entries.first(where: { $0.id == id }) else { return }
-                        environment.inspectorSelection = .entry(entry)
-                    }
-                )) { entry in
-                    HStack {
-                        EntryRow(entry: entry, accounts: environment.accountsViewModel.accounts, categories: environment.entriesViewModel.categories)
-                        EntryActionMenu(entry: entry, confirm: confirm)
-                    }
-                    .tag(entry.id)
-                    .contentShape(Rectangle())
-                    .onTapGesture { environment.inspectorSelection = .entry(entry) }
-                    .contextMenu {
-                        if entry.status == .draft {
-                            Button("确认") { confirm(entry, operation: "confirm") }
-                        }
-                        if entry.status != .voided {
-                            Button("作废", role: .destructive) { confirm(entry, operation: "void") }
+                if environment.entriesViewModel.entries.isEmpty {
+                    EmptyState(
+                        title: "还没有记录",
+                        message: "创建账户和分类后，就可以添加第一条单笔记账。",
+                        systemImage: "square.and.pencil",
+                        actionTitle: "新建记录",
+                        action: environment.beginNewEntry
+                    )
+                } else {
+                    EntriesHeroCard(entries: monthlyEntries, categories: environment.entriesViewModel.categories)
+
+                    if filteredEntries.isEmpty {
+                        Text("当前过滤下没有记录。")
+                            .font(.system(size: 13))
+                            .foregroundStyle(FinanceTokens.Text.secondary)
+                            .padding(.vertical, 18)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .glassBackground(strength: .regular, elevation: nil)
+                    } else {
+                        ForEach(groupedEntries, id: \.key) { group in
+                            entriesSectionCard(group: group)
                         }
                     }
                 }
-                .listStyle(.inset)
-            }
 
-            if let message = environment.entriesViewModel.errorMessage {
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(FinanceTokens.State.warning)
+                if let message = environment.entriesViewModel.errorMessage {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(FinanceTokens.State.warning)
+                }
             }
+            .padding(.horizontal, entriesPagePadding)
+            .padding(.top, 16)
+            .padding(.bottom, 32)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .padding(FinanceTokens.Spacing.page)
         .moduleFrame()
         .task {
             try? await environment.entriesViewModel.refresh()
@@ -94,31 +119,86 @@ struct EntriesView: View {
         }
     }
 
-    private var entryControls: some View {
-        Group {
-                Picker("状态", selection: $statusFilter) {
-                    Text("全部").tag("all")
-                    Text("草稿").tag("draft")
-                    Text("已确认").tag("confirmed")
-                    Text("已作废").tag("voided")
-                }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 320)
+    private var entriesPagePadding: CGFloat {
+#if os(iOS)
+        16
+#else
+        28
+#endif
+    }
 
-                Button {
-                    environment.beginNewEntry()
-                } label: {
-                    Label("新建记录", systemImage: "plus")
-                }
-                .buttonStyle(.borderedProminent)
+    // MARK: - Aggregations
 
-                Button {
-                    Task { await createQuickExpenseCategory() }
-                } label: {
-                    Label("补一个支出分类", systemImage: "tag")
-                }
-                .disabled(environment.entriesViewModel.expenseCategories.contains(where: { $0.name == "日常支出" }))
+    private var monthlyEntries: [EntryDTO] {
+        let now = Date()
+        let calendar = Calendar.current
+        guard let monthStart = calendar.dateInterval(of: .month, for: now)?.start else { return [] }
+        return environment.entriesViewModel.entries.filter { $0.date >= monthStart && $0.status == .confirmed }
+    }
+
+    private struct DateGroup {
+        let key: String
+        let date: Date
+        let title: String
+        let entries: [EntryDTO]
+    }
+
+    private var groupedEntries: [DateGroup] {
+        let calendar = Calendar.current
+        let entries = filteredEntries.sorted { $0.date > $1.date }
+        let dictionary = Dictionary(grouping: entries) { entry -> Date in
+            calendar.startOfDay(for: entry.date)
         }
+        return dictionary.keys.sorted(by: >).map { dayStart in
+            DateGroup(
+                key: "\(dayStart.timeIntervalSince1970)",
+                date: dayStart,
+                title: dayLabel(for: dayStart),
+                entries: dictionary[dayStart] ?? []
+            )
+        }
+    }
+
+    private func dayLabel(for day: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(day) { return "今日" }
+        if calendar.isDateInYesterday(day) { return "昨天" }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "M 月 d 日 EEEE"
+        return f.string(from: day)
+    }
+
+    @ViewBuilder
+    private func entriesSectionCard(group: DateGroup) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(group.title)
+                    .font(FinanceTypography.headline)
+                    .foregroundStyle(FinanceTokens.Text.primary)
+                Spacer()
+                Text("\(group.entries.count) 条")
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundStyle(FinanceTokens.Text.secondary)
+            }
+            VStack(spacing: 0) {
+                ForEach(Array(group.entries.enumerated()), id: \.element.id) { index, entry in
+                    if index > 0 {
+                        Divider().background(FinanceTokens.Stroke.soft)
+                    }
+                    EntryListRowItem(
+                        entry: entry,
+                        accounts: environment.accountsViewModel.accounts,
+                        categories: environment.entriesViewModel.categories,
+                        confirm: confirm
+                    )
+                    .onTapGesture { environment.inspectorSelection = .entry(entry) }
+                }
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassBackground(strength: .strong, elevation: .soft)
     }
 
     private func createQuickExpenseCategory() async {
@@ -158,108 +238,254 @@ struct EntriesView: View {
     }
 }
 
-private struct EntryRow: View {
-    let entry: EntryDTO
-    let accounts: [AccountDTO]
+// MARK: - Hero summary card
+
+private struct EntriesHeroCard: View {
+    let entries: [EntryDTO]
     let categories: [CategoryDTO]
 
-    private var primaryLine: EntryCategoryLineDTO? {
-        entry.categoryLines.first
+    private func categoryById(_ id: String) -> CategoryDTO? {
+        categories.first(where: { $0.id == id })
     }
 
-    private var primaryMovement: AccountMovementDTO? {
-        entry.accountMovements.first
-    }
-
-    private var accountName: String {
-        guard let movement = primaryMovement,
-              let account = accounts.first(where: { $0.id == movement.accountId }) else {
-            return "未匹配账户"
+    private var totals: (expense: Decimal, income: Decimal) {
+        var expense: Decimal = 0
+        var income: Decimal = 0
+        for entry in entries {
+            for line in entry.categoryLines {
+                let cny = line.convertedCnyAmount?.value ?? line.amount.value
+                if let cat = categoryById(line.categoryId) {
+                    if cat.type == .expense { expense += cny }
+                    if cat.type == .income { income += cny }
+                }
+            }
         }
-        return account.name
+        return (expense, income)
     }
 
-    private var categoryName: String {
-        guard let line = primaryLine,
-              let category = categories.first(where: { $0.id == line.categoryId }) else {
-            return "未分类"
+    private struct CategoryStat: Identifiable {
+        let id: String
+        let name: String
+        let amount: Decimal
+    }
+
+    private var topExpenseCategories: [CategoryStat] {
+        var bucket: [String: Decimal] = [:]
+        for entry in entries {
+            for line in entry.categoryLines {
+                let cny = line.convertedCnyAmount?.value ?? line.amount.value
+                if let cat = categoryById(line.categoryId), cat.type == .expense {
+                    bucket[cat.name, default: 0] += cny
+                }
+            }
         }
-        return category.name
+        return bucket
+            .map { CategoryStat(id: $0.key, name: $0.key, amount: $0.value) }
+            .sorted { $0.amount > $1.amount }
+            .prefix(4)
+            .map { $0 }
     }
 
     var body: some View {
-        #if os(iOS)
-        HStack(alignment: .top, spacing: 12) {
-            entryIcon
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(entry.title)
-                        .font(.headline)
-                        .lineLimit(2)
-                    StatusTag(title: entry.status.title, style: entry.status == .confirmed ? .confirmed : .draft)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("本月支出")
+                        .font(FinanceTypography.sectionKicker)
+                        .kickerTracking()
+                        .foregroundStyle(FinanceTokens.Text.secondary)
+                    PrivacyAmount(
+                        value: "-" + FinanceFormatter.money(DecimalValue(totals.expense), currency: .cny),
+                        font: FinanceTypography.statValue,
+                        tint: FinanceTokens.State.expense
+                    )
+                    if totals.income > 0 {
+                        Text("本月收入 +\(FinanceFormatter.money(DecimalValue(totals.income), currency: .cny))")
+                            .font(.system(size: 11.5).monospacedDigit())
+                            .foregroundStyle(FinanceTokens.State.income)
+                    }
                 }
-                Text("\(FinanceFormatter.shortDate(entry.date)) · \(accountName) · \(categoryName)")
-                    .font(.caption)
-                    .foregroundStyle(FinanceTokens.Text.secondary)
-                    .lineLimit(2)
-                if let primaryLine {
-                    MoneyText(amount: primaryLine.amount, currency: primaryLine.currency, convertedCNY: primaryLine.convertedCnyAmount)
-                }
+                Spacer(minLength: 12)
+                AccountIconTile(systemImage: "square.and.pencil", tint: FinanceTokens.Brand.primary)
             }
 
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 6)
-        #else
-        HStack(spacing: 12) {
-            entryIcon
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text(entry.title)
-                        .font(.headline)
-                    StatusTag(title: entry.status.title, style: entry.status == .confirmed ? .confirmed : .draft)
-                }
-                Text("\(FinanceFormatter.shortDate(entry.date)) · \(accountName) · \(categoryName)")
-                    .font(.caption)
-                    .foregroundStyle(FinanceTokens.Text.secondary)
-            }
-
-            Spacer()
-
-            if let primaryLine {
-                MoneyText(amount: primaryLine.amount, currency: primaryLine.currency, convertedCNY: primaryLine.convertedCnyAmount)
+            if !topExpenseCategories.isEmpty {
+                FlowChips(items: topExpenseCategories.map { stat in
+                    "\(stat.name) ¥\(formatCompact(stat.amount))"
+                })
             }
         }
-        .padding(.vertical, 6)
-        #endif
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassBackground(
+            strength: .strong,
+            accent: AnyShapeStyle(FinanceTokens.Halo.brandCorner),
+            elevation: .elevated
+        )
     }
 
-    private var entryIcon: some View {
-        Image(systemName: entry.status == .confirmed ? "checkmark.circle.fill" : "circle.dotted")
-            .foregroundStyle(entry.status == .confirmed ? FinanceTokens.State.income : FinanceTokens.State.pending)
-            .frame(width: 28)
+    private func formatCompact(_ value: Decimal) -> String {
+        let number = NSDecimalNumber(decimal: value).intValue
+        if number >= 10000 {
+            return String(format: "%.1fk", Double(number) / 1000)
+        }
+        return "\(number)"
     }
 }
 
-private struct EntryActionMenu: View {
-    let entry: EntryDTO
-    let confirm: (EntryDTO, String) -> Void
+private struct FlowChips: View {
+    let items: [String]
 
     var body: some View {
-        Menu {
+        FlowLayout(spacing: 6) {
+            ForEach(items, id: \.self) { item in
+                Text(item)
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
+                    .foregroundStyle(FinanceTokens.Text.primary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule().fill(FinanceTokens.Surface.glass)
+                            .overlay { Capsule().stroke(FinanceTokens.Stroke.hairline, lineWidth: 0.5) }
+                    )
+            }
+        }
+    }
+}
+
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowH: CGFloat = 0
+        for sub in subviews {
+            let s = sub.sizeThatFits(.unspecified)
+            if x + s.width > maxWidth {
+                x = 0
+                y += rowH + spacing
+                rowH = 0
+            }
+            x += s.width + spacing
+            rowH = max(rowH, s.height)
+        }
+        return CGSize(width: maxWidth.isFinite ? maxWidth : x, height: y + rowH)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowH: CGFloat = 0
+        for sub in subviews {
+            let s = sub.sizeThatFits(.unspecified)
+            if x + s.width > bounds.maxX {
+                x = bounds.minX
+                y += rowH + spacing
+                rowH = 0
+            }
+            sub.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(s))
+            x += s.width + spacing
+            rowH = max(rowH, s.height)
+        }
+    }
+}
+
+// MARK: - Row item with menu
+
+private struct EntryListRowItem: View {
+    let entry: EntryDTO
+    let accounts: [AccountDTO]
+    let categories: [CategoryDTO]
+    let confirm: (EntryDTO, String) -> Void
+
+    private var primaryLine: EntryCategoryLineDTO? { entry.categoryLines.first }
+    private var primaryMovement: AccountMovementDTO? { entry.accountMovements.first }
+    private var account: AccountDTO? { primaryMovement.flatMap { mv in accounts.first(where: { $0.id == mv.accountId }) } }
+    private var category: CategoryDTO? { primaryLine.flatMap { line in categories.first(where: { $0.id == line.categoryId }) } }
+
+    private var iconSymbol: String {
+        switch category?.type {
+        case .income: return "arrow.down.left.circle"
+        case .expense: return "arrow.up.right.circle"
+        default: return entry.status == .confirmed ? "checkmark.circle" : "circle.dotted"
+        }
+    }
+
+    private var iconTint: Color {
+        switch category?.type {
+        case .income: return FinanceTokens.State.income
+        case .expense: return account?.type == .credit ? FinanceTokens.State.credit : FinanceTokens.State.expense
+        default: return FinanceTokens.State.pending
+        }
+    }
+
+    private var amountTint: Color { iconTint }
+    private var amountPrefix: String {
+        switch category?.type {
+        case .income: return "+"
+        case .expense: return "-"
+        default: return ""
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            AccountIconTile(systemImage: iconSymbol, tint: iconTint)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(entry.title)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(FinanceTokens.Text.primary)
+                        .lineLimit(1)
+                    StatusTag(title: entry.status.title, style: entry.status == .confirmed ? .confirmed : .draft)
+                }
+                Text("\((account?.name).map { "\($0) · " } ?? "")\(category?.name ?? "未分类") · \(FinanceFormatter.shortDate(entry.date))")
+                    .font(FinanceTypography.caption)
+                    .foregroundStyle(FinanceTokens.Text.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            if let primaryLine {
+                PrivacyAmount(
+                    value: amountPrefix + FinanceFormatter.money(primaryLine.amount, currency: primaryLine.currency),
+                    font: .system(size: 14, weight: .semibold).monospacedDigit(),
+                    tint: amountTint,
+                    alignment: .trailing
+                )
+            }
+
+            Menu {
+                if entry.status == .draft {
+                    Button("确认") { confirm(entry, "confirm") }
+                }
+                if entry.status != .voided {
+                    Button("作废", role: .destructive) { confirm(entry, "void") }
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(FinanceTokens.Text.secondary)
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .contextMenu {
             if entry.status == .draft {
                 Button("确认") { confirm(entry, "confirm") }
             }
             if entry.status != .voided {
                 Button("作废", role: .destructive) { confirm(entry, "void") }
             }
-        } label: {
-            Image(systemName: "ellipsis.circle")
-                .foregroundStyle(FinanceTokens.Text.secondary)
         }
-        .menuStyle(.button)
     }
 }
 

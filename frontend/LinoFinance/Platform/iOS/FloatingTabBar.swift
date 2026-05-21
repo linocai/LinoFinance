@@ -28,7 +28,7 @@ struct FloatingTabBar: View {
             Capsule()
                 .stroke(FinanceTokens.Stroke.hairline, lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.16), radius: 18, y: 8)
+        .elevation(.floating)
         .padding(.horizontal, 14)
         .padding(.top, 6)
         .padding(.bottom, 2)
@@ -42,7 +42,7 @@ struct FloatingTabBar: View {
                 Image(systemName: tab.symbolName)
                     .font(.system(size: 16, weight: .semibold))
                 Text(tab.title)
-                    .font(.caption2.weight(.semibold))
+                    .font(FinanceTypography.pillLabel)
                     .lineLimit(1)
             }
             .foregroundStyle(selection == tab ? FinanceTokens.Brand.primary : FinanceTokens.Text.secondary)
@@ -57,11 +57,19 @@ struct FloatingTabBar: View {
             quickEntry(.expense)
         } label: {
             Image(systemName: "plus")
-                .font(.system(size: 22, weight: .bold))
+                .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 58, height: 58)
-                .background(Circle().fill(FinanceTokens.Brand.primary))
-                .shadow(color: FinanceTokens.Brand.primary.opacity(0.32), radius: 14, y: 6)
+                .background(
+                    Circle().fill(
+                        LinearGradient(
+                            colors: [FinanceTokens.Brand.primary, FinanceTokens.Brand.deep],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                )
+                .elevation(.tinted(FinanceTokens.Brand.primary, intensity: 0.42, radius: 18, y: 8))
         }
         .buttonStyle(.plain)
         .contextMenu {

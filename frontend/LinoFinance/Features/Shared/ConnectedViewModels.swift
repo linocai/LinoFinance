@@ -271,11 +271,11 @@ final class ReportsViewModel {
         repository = FinanceRepository(apiClient: apiClient)
     }
 
-    func refresh() async throws {
+    func refresh(cashFlowFrom: Date? = nil, cashFlowTo: Date? = nil) async throws {
         isLoading = true
         defer { isLoading = false }
         do {
-            bundle = try await repository.refreshReports()
+            bundle = try await repository.refreshReports(cashFlowFrom: cashFlowFrom, cashFlowTo: cashFlowTo)
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription

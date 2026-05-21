@@ -6,38 +6,6 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXFileReference section */
-		A10000000000000000000001 /* LinoF.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LinoF.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A20000000000000000000001 /* LinoF.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LinoF.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A30000000000000000000001 /* LinoFinanceWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LinoFinanceWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-/* End PBXFileReference section */
-
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		A10000000000000000000002 /* LinoFinance */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = LinoFinance;
-			sourceTree = "<group>";
-		};
-		A30000000000000000000002 /* LinoFinanceWidgets */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				A30000000000000000000014 /* Exceptions for "LinoFinanceWidgets" folder in "LinoFinanceWidgets" target */,
-			);
-			path = LinoFinanceWidgets;
-			sourceTree = "<group>";
-		};
-/* End PBXFileSystemSynchronizedRootGroup section */
-
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		A30000000000000000000014 /* Exceptions for "LinoFinanceWidgets" folder in "LinoFinanceWidgets" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = A30000000000000000000006 /* LinoFinanceWidgets */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXBuildFile section */
 		A20000000000000000000012 /* LinoFinanceWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A30000000000000000000001 /* LinoFinanceWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -65,6 +33,38 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		A10000000000000000000001 /* LinoF.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LinoF.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000001 /* LinoF.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LinoF.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A30000000000000000000001 /* LinoFinanceWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LinoFinanceWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A30000000000000000000014 /* Exceptions for "LinoFinanceWidgets" folder in "LinoFinanceWidgets" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A30000000000000000000006 /* LinoFinanceWidgets */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		A10000000000000000000002 /* LinoFinance */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LinoFinance;
+			sourceTree = "<group>";
+		};
+		A30000000000000000000002 /* LinoFinanceWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A30000000000000000000014 /* Exceptions for "LinoFinanceWidgets" folder in "LinoFinanceWidgets" target */,
+			);
+			path = LinoFinanceWidgets;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A10000000000000000000003 /* Frameworks */ = {
@@ -183,14 +183,6 @@
 		};
 /* End PBXNativeTarget section */
 
-/* Begin PBXTargetDependency section */
-		A20000000000000000000010 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = A30000000000000000000006 /* LinoFinanceWidgets */;
-			targetProxy = A20000000000000000000011 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
-
 /* Begin PBXProject section */
 		A10000000000000000000009 /* Project object */ = {
 			isa = PBXProject;
@@ -279,6 +271,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A20000000000000000000010 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A30000000000000000000006 /* LinoFinanceWidgets */;
+			targetProxy = A20000000000000000000011 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A1000000000000000000000A /* Debug */ = {

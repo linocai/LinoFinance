@@ -86,7 +86,7 @@ struct LinoFinanceApp: App {
                 }
             }
             CommandMenu("窗口") {
-                Button("打开 Command Palette") {
+                Button("快速记账") {
                     openWindow(id: "command")
                 }
                 .keyboardShortcut("k", modifiers: .command)
@@ -116,14 +116,15 @@ struct LinoFinanceApp: App {
         }
         .windowStyle(.titleBar)
 
-        Window("Command Palette", id: "command") {
-            CommandPalette(environment: environment)
+        Window("快速记账", id: "command") {
+            MacQuickEntryView(environment: environment)
         }
         .windowResizability(.contentSize)
 
-        MenuBarExtra("LinoF", systemImage: "yensign.circle.fill") {
+        MenuBarExtra("LinoF", systemImage: "yensign.circle") {
             MenuBarPopover(environment: environment)
         }
+        .menuBarExtraStyle(.window)
 #else
         WindowGroup {
             iOSRootView(environment: environment)

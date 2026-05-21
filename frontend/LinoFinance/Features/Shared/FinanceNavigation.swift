@@ -22,31 +22,31 @@ enum FinanceModule: String, CaseIterable, Identifiable, Hashable, Codable {
         case .accounts: "账户"
         case .entries: "记账"
         case .cashFlow: "现金流"
-        case .reimbursements: "报销"
-        case .credit: "信用"
-        case .reports: "分析"
-        case .ai: "AI"
+        case .reimbursements: "报销中心"
+        case .credit: "信用 · 账单"
+        case .reports: "报表"
+        case .ai: "AI 工作台"
         case .aiMemo: "AI 月报"
         case .reconciliation: "对账"
-        case .notifications: "通知"
+        case .notifications: "通知规则"
         case .settings: "设置"
         }
     }
 
     var symbolName: String {
         switch self {
-        case .dashboard: "chart.pie.fill"
-        case .accounts: "wallet.pass.fill"
+        case .dashboard: "rectangle.grid.2x2"
+        case .accounts: "wallet.bifold"
         case .entries: "square.and.pencil"
-        case .cashFlow: "arrow.left.arrow.right.circle.fill"
-        case .reimbursements: "arrow.uturn.left.circle.fill"
-        case .credit: "creditcard.trianglebadge.exclamationmark"
-        case .reports: "chart.line.uptrend.xyaxis"
+        case .cashFlow: "arrow.left.arrow.right"
+        case .reimbursements: "arrow.uturn.left"
+        case .credit: "creditcard"
+        case .reports: "chart.bar"
         case .ai: "sparkles"
         case .aiMemo: "doc.text.magnifyingglass"
-        case .reconciliation: "checklist.checked"
-        case .notifications: "bell.badge.fill"
-        case .settings: "gearshape.fill"
+        case .reconciliation: "checklist"
+        case .notifications: "bell"
+        case .settings: "gearshape"
         }
     }
 }

@@ -1,73 +1,188 @@
 import SwiftUI
 
+/// 账户页 —— 用 Dashboard 卡片语言（HTML B + C 节 DNA）重设计。
+/// 自上而下：SectionHeader + AccountsHeroCard + 余额账户 SectionCard + 信用账户 SectionCard。
+/// NewAccountSheet 表单部分保留不动。
 struct AccountsView: View {
     @Bindable var environment: AppEnvironment
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            PageHeader(title: "账户", subtitle: "余额账户和信用账户统一管理")
-            HStack {
-                Button {
-                    environment.beginNewAccount()
-                } label: {
-                    Label("新建账户", systemImage: "plus")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SectionHeader(
+                    kicker: "Accounts",
+                    title: "账户",
+                    description: "余额账户和信用账户统一管理"
+                ) {
+                    HStack(spacing: 8) {
+                        Button {
+                            environment.beginReconciliation()
+                        } label: {
+                            Label("对账", systemImage: FinanceModule.reconciliation.symbolName)
+                        }
+                        Button {
+                            environment.beginNewAccount()
+                        } label: {
+                            Label("新建账户", systemImage: "plus")
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
                 }
-                .buttonStyle(.borderedProminent)
-                Button {
-                    environment.beginReconciliation()
-                } label: {
-                    Label("对账", systemImage: FinanceModule.reconciliation.symbolName)
-                }
-                Spacer()
-            }
 
-            if environment.accountsViewModel.accounts.isEmpty {
-                EmptyState(
-                    title: "还没有账户",
-                    message: "创建一个余额账户后，就可以开始记账。",
-                    systemImage: "wallet.pass",
-                    actionTitle: "新建账户",
-                    action: environment.beginNewAccount
-                )
-            } else {
-                List(selection: Binding(
-                    get: {
-                        if case .account(let account) = environment.inspectorSelection {
-                            return account.id
-                        }
-                        return nil
-                    },
-                    set: { id in
-                        guard let id, let account = environment.accountsViewModel.accounts.first(where: { $0.id == id }) else { return }
-                        environment.inspectorSelection = .account(account)
-                    }
-                )) {
-                    Section("余额账户") {
-                        ForEach(environment.accountsViewModel.accounts.balanceAccounts) { account in
-                            AccountRow(account: account, convertedCNY: convertedCNY(for: account))
-                                .tag(account.id)
-                                .contentShape(Rectangle())
+                if environment.accountsViewModel.accounts.isEmpty {
+                    EmptyState(
+                        title: "还没有账户",
+                        message: "创建一个余额账户后，就可以开始记账。",
+                        systemImage: "wallet.pass",
+                        actionTitle: "新建账户",
+                        action: environment.beginNewAccount
+                    )
+                } else {
+                    AccountsHeroCard(
+                        netWorthCny: environment.dashboardViewModel.summary?.netWorthCny ?? totalNetCny(),
+                        cnyBalance: totalBalance(currency: .cny),
+                        usdBalance: totalBalance(currency: .usd),
+                        creditLiabilityCny: environment.dashboardViewModel.summary?.creditLiabilityTotalCny ?? totalCreditLiabilityCny()
+                    )
+
+                    sectionCard(title: "余额账户", count: environment.accountsViewModel.accounts.balanceAccounts.count) {
+                        ForEach(Array(environment.accountsViewModel.accounts.balanceAccounts.enumerated()), id: \.element.id) { index, account in
+                            if index > 0 {
+                                Divider().background(FinanceTokens.Stroke.soft)
+                            }
+                            balanceAccountRow(account)
                                 .onTapGesture { environment.inspectorSelection = .account(account) }
                         }
                     }
-                    Section("信用账户") {
-                        ForEach(environment.accountsViewModel.accounts.creditAccounts) { account in
-                            AccountRow(account: account, convertedCNY: convertedCNY(for: account))
-                                .tag(account.id)
-                                .contentShape(Rectangle())
+
+                    sectionCard(title: "信用账户", count: environment.accountsViewModel.accounts.creditAccounts.count) {
+                        ForEach(Array(environment.accountsViewModel.accounts.creditAccounts.enumerated()), id: \.element.id) { index, account in
+                            if index > 0 {
+                                Divider().background(FinanceTokens.Stroke.soft)
+                            }
+                            creditAccountRow(account)
                                 .onTapGesture { environment.inspectorSelection = .account(account) }
                         }
                     }
                 }
-                .listStyle(.inset)
             }
+            .padding(.horizontal, accountsPagePadding)
+            .padding(.top, 16)
+            .padding(.bottom, 32)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .padding(FinanceTokens.Spacing.page)
         .moduleFrame()
         .task {
             try? await environment.accountsViewModel.refresh()
             try? await environment.settingsViewModel.refresh()
         }
+    }
+
+    private var accountsPagePadding: CGFloat {
+#if os(iOS)
+        16
+#else
+        28
+#endif
+    }
+
+    // MARK: - Section card
+
+    @ViewBuilder
+    private func sectionCard<Content: View>(title: String, count: Int, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center) {
+                Text(title)
+                    .font(FinanceTypography.headline)
+                    .foregroundStyle(FinanceTokens.Text.primary)
+                Spacer()
+                Text("\(count)")
+                    .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(FinanceTokens.Text.secondary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(FinanceTokens.Surface.glass))
+                    .overlay { Capsule().stroke(FinanceTokens.Stroke.hairline, lineWidth: 0.5) }
+            }
+            VStack(spacing: 0) {
+                content()
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassBackground(strength: .strong, elevation: .soft)
+    }
+
+    // MARK: - Rows
+
+    private func balanceAccountRow(_ account: AccountDTO) -> some View {
+        let convertedCNY = convertedCNY(for: account)
+        let primary = FinanceFormatter.money(account.currentBalance, currency: account.currency)
+        let secondary = convertedCNY.map { "约 \(FinanceFormatter.money($0, currency: .cny, approximate: true))" }
+        return AccountListRow(
+            systemImage: balanceIcon(for: account.currency),
+            iconTint: balanceTint(for: account.currency),
+            title: "\(account.name) · \(account.currency.rawValue)",
+            subtitle: "余额账户 · " + (account.notes ?? account.status.financeStatusTitle),
+            amountPrimary: primary,
+            amountSecondary: secondary,
+            amountTint: FinanceTokens.State.income
+        )
+    }
+
+    private func creditAccountRow(_ account: AccountDTO) -> some View {
+        let primary = "-" + FinanceFormatter.money(account.currentLiability, currency: account.currency)
+        let limitText = account.creditLimit.map { "额度 \(FinanceFormatter.money($0, currency: account.currency))" }
+        let statement = account.statementDay.map { "账单日 \($0)" } ?? ""
+        let due = account.dueDay.map { "还款日 \($0)" } ?? ""
+        let parts = [statement, due, limitText].compactMap { $0?.isEmpty == false ? $0 : nil }
+        let subtitle = parts.isEmpty ? "信用账户 · \(account.currency.rawValue)" : parts.joined(separator: " · ")
+        return AccountListRow(
+            systemImage: "creditcard",
+            iconTint: FinanceTokens.State.credit,
+            title: "\(account.name) · \(account.currency.rawValue)",
+            subtitle: subtitle,
+            amountPrimary: primary,
+            amountSecondary: account.minimumPayment.map { "最低 \(FinanceFormatter.money($0, currency: account.currency))" },
+            amountTint: FinanceTokens.State.credit
+        )
+    }
+
+    // MARK: - Aggregation helpers
+
+    private func totalBalance(currency: CurrencyCode) -> DecimalValue {
+        let sum = environment.accountsViewModel.accounts
+            .balanceAccounts
+            .filter { $0.currency == currency }
+            .map { $0.currentBalance.value }
+            .reduce(Decimal(0), +)
+        return DecimalValue(sum)
+    }
+
+    private func totalCreditLiabilityCny() -> DecimalValue {
+        let sum = environment.accountsViewModel.accounts
+            .creditAccounts
+            .map { convertedToCny($0.currentLiability, from: $0.currency) }
+            .reduce(Decimal(0), +)
+        return DecimalValue(sum)
+    }
+
+    private func totalNetCny() -> DecimalValue {
+        let balance = environment.accountsViewModel.accounts
+            .balanceAccounts
+            .map { convertedToCny($0.currentBalance, from: $0.currency) }
+            .reduce(Decimal(0), +)
+        return DecimalValue(balance - totalCreditLiabilityCny().value)
+    }
+
+    private func convertedToCny(_ amount: DecimalValue, from currency: CurrencyCode) -> Decimal {
+        if currency == .cny { return amount.value }
+        if let rate = environment.settingsViewModel.rates.first(where: {
+            $0.fromCurrency == currency && $0.toCurrency == .cny
+        }) {
+            return amount.value * rate.rate.value
+        }
+        return amount.value
     }
 
     private func convertedCNY(for account: AccountDTO) -> DecimalValue? {
@@ -80,67 +195,85 @@ struct AccountsView: View {
         let amount = account.type == .credit ? account.currentLiability : account.currentBalance
         return DecimalValue(amount.value * rate.rate.value)
     }
+
+    private func balanceIcon(for currency: CurrencyCode) -> String {
+        switch currency {
+        case .usd: return "dollarsign.circle"
+        case .cny: return "yensign.circle"
+        }
+    }
+
+    private func balanceTint(for currency: CurrencyCode) -> Color {
+        switch currency {
+        case .usd: return FinanceTokens.Currency.usd
+        case .cny: return FinanceTokens.Currency.cny
+        }
+    }
 }
 
-private struct AccountRow: View {
-    let account: AccountDTO
-    let convertedCNY: DecimalValue?
+// MARK: - Hero card
+
+private struct AccountsHeroCard: View {
+    let netWorthCny: DecimalValue
+    let cnyBalance: DecimalValue
+    let usdBalance: DecimalValue
+    let creditLiabilityCny: DecimalValue
 
     var body: some View {
-        #if os(iOS)
-        HStack(alignment: .top, spacing: 12) {
-            accountIcon
-            VStack(alignment: .leading, spacing: 6) {
-                Text(account.name)
-                    .font(.headline)
-                    .lineLimit(2)
-                HStack(spacing: 8) {
-                    StatusTag(title: account.type.title, style: account.type == .credit ? .warning : .confirmed)
-                    Text(account.currency.rawValue)
-                        .font(.caption.monospaced())
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("总资产")
+                        .font(FinanceTypography.sectionKicker)
+                        .kickerTracking()
                         .foregroundStyle(FinanceTokens.Text.secondary)
+                    PrivacyAmount(
+                        value: FinanceFormatter.money(netWorthCny),
+                        font: FinanceTypography.statValue,
+                        tint: FinanceTokens.Text.primary
+                    )
                 }
-                MoneyText(
-                    amount: account.type == .credit ? account.currentLiability : account.currentBalance,
-                    currency: account.currency,
-                    convertedCNY: convertedCNY,
-                    prominence: .headline
+                Spacer(minLength: 12)
+                AccountIconTile(systemImage: "wallet.bifold", tint: FinanceTokens.Brand.primary, size: 36)
+            }
+
+            LazyVGrid(columns: heroColumns, spacing: 10) {
+                MetricChip(
+                    title: "CNY 合计",
+                    value: FinanceFormatter.money(cnyBalance, currency: .cny),
+                    tint: FinanceTokens.Currency.cny
+                )
+                MetricChip(
+                    title: "USD 合计",
+                    value: FinanceFormatter.money(usdBalance, currency: .usd),
+                    tint: FinanceTokens.Currency.usd
+                )
+                MetricChip(
+                    title: "信用负债",
+                    value: FinanceFormatter.money(creditLiabilityCny, currency: .cny),
+                    tint: FinanceTokens.State.credit
                 )
             }
-            Spacer(minLength: 0)
         }
-        .padding(.vertical, 6)
-        #else
-        HStack(spacing: 12) {
-            accountIcon
-            VStack(alignment: .leading, spacing: 4) {
-                Text(account.name)
-                    .font(.headline)
-                HStack(spacing: 8) {
-                    StatusTag(title: account.type.title, style: account.type == .credit ? .warning : .confirmed)
-                    Text(account.currency.rawValue)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(FinanceTokens.Text.secondary)
-                }
-            }
-            Spacer()
-            MoneyText(
-                amount: account.type == .credit ? account.currentLiability : account.currentBalance,
-                currency: account.currency,
-                convertedCNY: convertedCNY,
-                prominence: .headline
-            )
-        }
-        .padding(.vertical, 6)
-        #endif
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassBackground(
+            strength: .strong,
+            accent: AnyShapeStyle(FinanceTokens.Halo.brandCorner),
+            elevation: .elevated
+        )
     }
 
-    private var accountIcon: some View {
-        Image(systemName: account.type == .credit ? "creditcard.fill" : "wallet.pass.fill")
-            .foregroundStyle(account.type == .credit ? FinanceTokens.State.credit : FinanceTokens.Brand.primary)
-            .frame(width: 28)
+    private var heroColumns: [GridItem] {
+#if os(iOS)
+        [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+#else
+        Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
+#endif
     }
 }
+
+// MARK: - NewAccountSheet (unchanged)
 
 struct NewAccountSheet: View {
     @Bindable var environment: AppEnvironment

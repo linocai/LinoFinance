@@ -266,8 +266,15 @@ struct LinoAPIClient {
         try await get("reports/category-expenses")
     }
 
-    func cashFlowPressureReport() async throws -> CashFlowPressureReportDTO {
-        try await get("reports/cash-flow-pressure")
+    func cashFlowPressureReport(dateFrom: Date? = nil, dateTo: Date? = nil) async throws -> CashFlowPressureReportDTO {
+        var query: [URLQueryItem] = []
+        if let dateFrom {
+            query.append(URLQueryItem(name: "date_from", value: DateFormatter.linoAPIDate.string(from: dateFrom)))
+        }
+        if let dateTo {
+            query.append(URLQueryItem(name: "date_to", value: DateFormatter.linoAPIDate.string(from: dateTo)))
+        }
+        return try await get("reports/cash-flow-pressure", queryItems: query)
     }
 
     func creditLiabilityTrendReport() async throws -> CreditLiabilityTrendReportDTO {

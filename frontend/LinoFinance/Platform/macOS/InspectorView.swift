@@ -10,8 +10,14 @@ struct InspectorView: View {
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
         }
+        .scrollContentBackground(.hidden)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(FinanceTokens.Surface.glass)
+        .background(FinanceTokens.Surface.deepGlass)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(FinanceTokens.Stroke.hairline)
+                .frame(width: 0.5)
+        }
     }
 }
 #endif

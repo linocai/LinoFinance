@@ -102,61 +102,9 @@ private struct InspectorInsightCards: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            FinancePanel {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("审计 · 最近 3 条")
-                        .font(FinanceTypography.headline)
-                    if auditLogs.isEmpty {
-                        Text("暂无审计记录")
-                            .font(.caption)
-                            .foregroundStyle(FinanceTokens.Text.secondary)
-                    } else {
-                        ForEach(auditLogs) { log in
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(log.actionType.financeStatusTitle)
-                                    .font(.caption.weight(.semibold))
-                                if let note = log.note {
-                                    Text(note)
-                                        .font(.caption2)
-                                        .foregroundStyle(FinanceTokens.Text.secondary)
-                                        .lineLimit(2)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            Divider()
-                        }
-                    }
-                }
-            }
-
-            FinancePanel {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("AI 建议")
-                        .font(FinanceTypography.headline)
-                    if relatedPlans.isEmpty {
-                        Text("暂无关联 AI 计划")
-                            .font(.caption)
-                            .foregroundStyle(FinanceTokens.Text.secondary)
-                    } else {
-                        ForEach(relatedPlans.prefix(3)) { plan in
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Text(plan.sourceText)
-                                        .font(.caption.weight(.semibold))
-                                        .lineLimit(2)
-                                    Spacer()
-                                    StatusTag(status: plan.status)
-                                }
-                                Text("\(plan.actions.count) 个动作 · \(plan.riskLevel.financeStatusTitle)")
-                                    .font(.caption2)
-                                    .foregroundStyle(FinanceTokens.Text.secondary)
-                            }
-                            Divider()
-                        }
-                    }
-                }
-            }
+        VStack(alignment: .leading, spacing: 14) {
+            aiSuggestionSection
+            auditSection
 
             if let errorMessage {
                 ErrorBanner(message: errorMessage)
@@ -165,6 +113,69 @@ private struct InspectorInsightCards: View {
         .task(id: "\(target.type)-\(target.id)") {
             await refresh()
         }
+    }
+
+    @ViewBuilder
+    private var aiSuggestionSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("AI 建议")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(FinanceTokens.Text.secondary)
+                .kickerTracking()
+
+            if let topPlan = relatedPlans.first {
+                InspectorAISuggestionCard(
+                    title: topPlan.sourceText,
+                    meta: "\(topPlan.actions.count) 个动作 · \(topPlan.riskLevel.financeStatusTitle)",
+                    message: planBody(topPlan),
+                    primaryActionTitle: "查看",
+                    primaryAction: { /* TODO Phase H: routing to AI workspace */ },
+                    secondaryActionTitle: "忽略",
+                    secondaryAction: { relatedPlans.removeFirst() }
+                )
+            } else {
+                InspectorAISuggestionCard(
+                    title: "暂无 AI 建议",
+                    meta: nil,
+                    message: "AI 工作台尚未对该对象生成相关计划。等下次自动扫描或在 ⌘K 里发起命令式记账后会出现。"
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var auditSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("审计 · 最近 3 条")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(FinanceTokens.Text.secondary)
+                .kickerTracking()
+
+            InspectorAuditCard(
+                title: "操作历史",
+                rows: auditLogs.prefix(3).map { log in
+                    InspectorAuditCard.Row(
+                        label: log.actionType.financeStatusTitle + (log.note.map { " · \($0)" } ?? ""),
+                        value: auditValue(for: log)
+                    )
+                }
+            )
+        }
+    }
+
+    private func auditValue(for log: AuditLogDTO) -> InspectorAuditCard.Row.Value {
+        if log.actor.lowercased().contains("ai") {
+            return .tag(log.actor, style: .ai)
+        }
+        return .text(log.actor, tint: FinanceTokens.Text.secondary)
+    }
+
+    private func planBody(_ plan: AIPlanDTO) -> String {
+        if plan.actions.isEmpty {
+            return "已就绪：\(plan.sourceText)。点查看进入 AI 工作台审阅完整计划。"
+        }
+        let preview = plan.actions.prefix(2).map { "「\($0.actionType.financeStatusTitle)」" }.joined(separator: "、")
+        return "建议执行 \(preview) 等 \(plan.actions.count) 个动作；当前风险等级 \(plan.riskLevel.financeStatusTitle)。"
     }
 
     @MainActor

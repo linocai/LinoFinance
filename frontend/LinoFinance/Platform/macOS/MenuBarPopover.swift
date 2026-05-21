@@ -1,6 +1,10 @@
 #if os(macOS)
 import SwiftUI
 
+/// macOS 菜单栏弹窗 —— 对齐 HTML 第 1498-1518 行 `.menubar-extra`：
+/// title + 4 metric rows（label 左 / value 右 mono + 语义着色）+ 3 pill action 按钮 + footer。
+/// 需要在 LinoFinanceApp 里给 MenuBarExtra 设 `.menuBarExtraStyle(.window)`，
+/// 否则默认 `.menu` 风格会破坏自定义版式。
 struct MenuBarPopover: View {
     @Bindable var environment: AppEnvironment
     @Environment(\.openWindow) private var openWindow
@@ -19,74 +23,65 @@ struct MenuBarPopover: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("LinoF")
-                        .font(FinanceTypography.caption)
-                        .foregroundStyle(FinanceTokens.Text.secondary)
-                    PrivacyAmount(
-                        value: FinanceFormatter.money(environment.dashboardViewModel.summary?.netWorthCny ?? DecimalValue(0)),
-                        font: .title2.weight(.semibold).monospacedDigit()
-                    )
-                }
-                Spacer()
-                Button {
-                    Task { await environment.refreshPrimaryData() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.borderless)
-                .help("同步")
-            }
+        VStack(alignment: .leading, spacing: 12) {
+            Text("LinoFinance")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(FinanceTokens.Text.primary)
 
-            VStack(spacing: 8) {
-                MenuBarMetric(
-                    title: "今日新增",
+            VStack(spacing: 7) {
+                MenuBarRow(
+                    label: "净资产",
+                    value: FinanceFormatter.money(environment.dashboardViewModel.summary?.netWorthCny ?? DecimalValue(0)),
+                    tint: FinanceTokens.Text.primary
+                )
+                MenuBarRow(
+                    label: "今日新增",
                     value: "\(todayEntryCount) 笔",
-                    systemImage: "calendar.badge.plus"
+                    tint: todayEntryCount > 0 ? FinanceTokens.State.income : FinanceTokens.Text.secondary
                 )
-                MenuBarMetric(
-                    title: "下次还款",
-                    value: nextCreditDue.map { FinanceFormatter.mediumDate($0.dueDate) } ?? "无待还款",
-                    systemImage: "creditcard"
+                MenuBarRow(
+                    label: "下次还款",
+                    value: nextCreditDueText,
+                    tint: nextCreditDue == nil ? FinanceTokens.Text.secondary : FinanceTokens.State.credit
                 )
-                MenuBarMetric(
-                    title: "AI 待确认",
-                    value: "\(pendingAIPlans.count)",
-                    systemImage: "sparkles"
+                MenuBarRow(
+                    label: "AI 待确认",
+                    value: pendingAIPlans.isEmpty ? "无" : "\(pendingAIPlans.count) 个计划",
+                    tint: pendingAIPlans.isEmpty ? FinanceTokens.Text.secondary : FinanceTokens.State.ai
                 )
             }
 
-            Divider()
-
-            Button {
-                environment.beginNewEntry()
-                openWindow(id: "main")
-            } label: {
-                Label("快速记账", systemImage: "plus.circle.fill")
+            HStack(spacing: 6) {
+                MenuBarPillButton(title: "快速记账", systemImage: "plus") {
+                    openWindow(id: "command")
+                }
+                MenuBarPillButton(title: "同步", systemImage: "arrow.triangle.2.circlepath") {
+                    Task { await environment.refreshPrimaryData() }
+                }
+                MenuBarPillButton(title: "⌘K", systemImage: "wand.and.stars") {
+                    openWindow(id: "command")
+                }
             }
+            .padding(.top, 2)
 
-            Button {
-                Task { await environment.refreshPrimaryData() }
-            } label: {
-                Label("同步", systemImage: "arrow.triangle.2.circlepath")
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(environment.lastErrorMessage == nil ? FinanceTokens.State.income : FinanceTokens.State.warning)
+                    .frame(width: 6, height: 6)
+                Text(environment.apiClient.baseURL.host ?? environment.apiClient.baseURL.absoluteString)
+                    .font(.system(size: 10.5).monospacedDigit())
+                    .foregroundStyle(FinanceTokens.Text.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 4)
+                Text("v1.1.0")
+                    .font(.system(size: 10.5).monospacedDigit())
+                    .foregroundStyle(FinanceTokens.Text.tertiary)
             }
-
-            Button {
-                openWindow(id: "command")
-            } label: {
-                Label("打开 ⌘K", systemImage: "command")
-            }
-
-            Divider()
-
-            Label("菜单栏入口已固定显示", systemImage: "pin.fill")
-                .font(FinanceTypography.caption)
-                .foregroundStyle(FinanceTokens.Text.secondary)
+            .padding(.top, 4)
         }
         .padding(14)
-        .frame(width: 280)
+        .frame(width: 260)
         .task {
             await environment.refreshPrimaryData()
         }
@@ -98,26 +93,66 @@ struct MenuBarPopover: View {
             calendar.isDateInToday($0.date)
         }.count
     }
+
+    private var nextCreditDueText: String {
+        guard let cycle = nextCreditDue else { return "无待还款" }
+        let days = Calendar.current.dateComponents([.day], from: Date(), to: cycle.dueDate).day ?? 0
+        return "\(days) 天 · \(FinanceFormatter.money(cycle.remainingAmount, currency: cycle.currency))"
+    }
 }
 
-private struct MenuBarMetric: View {
-    let title: String
+// MARK: - Row
+
+private struct MenuBarRow: View {
+    let label: String
     let value: String
-    let systemImage: String
+    let tint: Color
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: systemImage)
-                .foregroundStyle(FinanceTokens.Brand.primary)
-                .frame(width: 20)
-            Text(title)
-                .font(FinanceTypography.caption)
+        HStack {
+            Text(label)
+                .font(.system(size: 12))
                 .foregroundStyle(FinanceTokens.Text.secondary)
-            Spacer()
+            Spacer(minLength: 8)
             Text(value)
-                .font(FinanceTypography.bodyMono)
-                .foregroundStyle(FinanceTokens.Text.primary)
+                .font(.system(size: 12, weight: .medium).monospacedDigit())
+                .foregroundStyle(tint)
+                .lineLimit(1)
         }
+    }
+}
+
+// MARK: - Pill button
+
+private struct MenuBarPillButton: View {
+    let title: String
+    let systemImage: String
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 10, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(FinanceTokens.Text.primary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
+            .background(
+                Capsule()
+                    .fill(isHovering ? FinanceTokens.Surface.glassStrong : FinanceTokens.Surface.glass)
+                    .overlay {
+                        Capsule().stroke(FinanceTokens.Stroke.hairline, lineWidth: 0.5)
+                    }
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
     }
 }
 #endif

@@ -179,10 +179,10 @@ struct FinanceRepository {
         try await apiClient.generateNextSubscriptionCashFlow(id)
     }
 
-    func refreshReports() async throws -> ReportsBundle {
+    func refreshReports(cashFlowFrom: Date? = nil, cashFlowTo: Date? = nil) async throws -> ReportsBundle {
         let monthly = try await apiClient.monthlyOverviewReport()
         let categories = try await apiClient.categoryExpensesReport()
-        let cashFlow = try await apiClient.cashFlowPressureReport()
+        let cashFlow = try await apiClient.cashFlowPressureReport(dateFrom: cashFlowFrom, dateTo: cashFlowTo)
         let credit = try await apiClient.creditLiabilityTrendReport()
         let reimbursement = try await apiClient.reimbursementReport()
         let subscriptions = try await apiClient.subscriptionReport()

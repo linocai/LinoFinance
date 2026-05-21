@@ -21,7 +21,7 @@ struct iOSRootView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .preferredColorScheme(environment.appearance.colorScheme)
         .tint(FinanceTokens.Brand.primary)
-        .background(FinanceTokens.Surface.base.ignoresSafeArea())
+        .background(CanvasBackground())
         .privacyActivityMonitor(environment: environment)
         .onChange(of: requiresConnectionSetup) { _, needsSetup in
             if needsSetup {
@@ -102,7 +102,7 @@ struct iOSRootView: View {
             .toolbar(.hidden, for: .tabBar)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(FinanceTokens.Surface.base.ignoresSafeArea())
+        .background(CanvasBackground())
         .safeAreaInset(edge: .bottom) {
             FloatingTabBar(
                 selection: $selectedTab,
@@ -142,7 +142,7 @@ struct iOSRootView: View {
                 .toolbar(.hidden, for: .navigationBar)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(FinanceTokens.Surface.base.ignoresSafeArea())
+        .background(CanvasBackground())
     }
 
     private var requiresConnectionSetup: Bool {
@@ -201,6 +201,16 @@ struct iOSRootView: View {
                 Section("连接") {
                     ConnectionStatusView(environment: environment)
                 }
+
+#if DEBUG
+                Section("Debug") {
+                    NavigationLink {
+                        DesignSystemShowcaseView()
+                    } label: {
+                        Label("DesignSystem Showcase", systemImage: "paintpalette")
+                    }
+                }
+#endif
             }
             .navigationTitle("更多")
             .navigationDestination(for: FinanceModule.self) { module in

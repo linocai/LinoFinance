@@ -132,6 +132,7 @@ struct KPIStat: View {
     let value: String
     var systemImage: String
     var tint: Color = FinanceTokens.Brand.primary
+    var accent: RadialGradient? = nil
     @AppStorage("linofinance.useHeroNumbers") private var useHeroNumbers = true
 
     var body: some View {
@@ -157,7 +158,11 @@ struct KPIStat: View {
         }
         .padding(FinanceTokens.Spacing.panel)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassBackground(radius: FinanceTokens.Radius.lg)
+        .glassBackground(
+            radius: FinanceTokens.Radius.lg,
+            accent: accent.map { AnyShapeStyle($0) },
+            elevation: .soft
+        )
     }
 }
 
@@ -193,6 +198,9 @@ struct EmptyState: View {
 }
 
 struct FinancePanel<Content: View>: View {
+    var radius: CGFloat = FinanceTokens.Radius.lg
+    var strength: GlassBackground.Strength = .regular
+    var elevation: FinanceTokens.Shadow? = .soft
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -201,6 +209,6 @@ struct FinancePanel<Content: View>: View {
 #if os(iOS)
             .frame(maxWidth: .infinity, alignment: .leading)
 #endif
-            .glassBackground(radius: FinanceTokens.Radius.lg)
+            .glassBackground(radius: radius, strength: strength, elevation: elevation)
     }
 }

@@ -5,59 +5,88 @@ import SwiftUI
 
 struct MacRootView: View {
     @Bindable var environment: AppEnvironment
+    @Environment(\.openWindow) private var openWindow
     @FocusState private var isSearchFocused: Bool
+#if DEBUG
+    @State private var isShowingDesignShowcase = false
+#endif
 
     var body: some View {
         NavigationSplitView {
             SidebarView(environment: environment)
-                .navigationSplitViewColumnWidth(min: 210, ideal: 240)
+                .navigationSplitViewColumnWidth(min: 220, ideal: 230)
         } content: {
             FinanceModuleContentView(environment: environment)
-                .navigationSplitViewColumnWidth(min: 560, ideal: 760)
+                .navigationSplitViewColumnWidth(min: 600, ideal: 820)
         } detail: {
             InspectorView(environment: environment)
-                .navigationSplitViewColumnWidth(min: 280, ideal: 340)
+                .navigationSplitViewColumnWidth(min: 300, ideal: 320)
         }
         .toolbar {
+            // HTML C 节标题栏右侧 5 个 icon-only button：币种 / 时间 / 搜索⌘K / 新建⌘N / AI ✦
             ToolbarItemGroup {
+                Menu {
+                    ForEach(CurrencyCode.allCases, id: \.self) { currency in
+                        Button(currency.rawValue) { environment.displayCurrency = currency }
+                    }
+                } label: {
+                    Image(systemName: "globe")
+                }
+                .menuStyle(.borderlessButton)
+                .help("币种：\(environment.displayCurrency.rawValue)")
+
+                Menu {
+                    ForEach(DateRangeChoice.allCases) { range in
+                        Button(range.title) { environment.dateRange = range }
+                    }
+                } label: {
+                    Image(systemName: "calendar")
+                }
+                .menuStyle(.borderlessButton)
+                .help("时间范围：\(environment.dateRange.title)")
+
+                Button {
+                    openWindow(id: "command")
+                } label: {
+                    Image(systemName: "wand.and.stars")
+                }
+                .keyboardShortcut("k", modifiers: [.command])
+                .help("快速记账 ⌘K")
+
                 Button {
                     environment.beginNewEntry()
                 } label: {
-                    Label("新建", systemImage: "plus")
+                    Image(systemName: "plus")
                 }
+                .keyboardShortcut("n", modifiers: [.command])
+                .help("新建 ⌘N")
 
                 Button {
                     environment.beginAI()
                 } label: {
-                    Label("AI 对话", systemImage: "sparkles")
+                    Image(systemName: "sparkles")
+                        .foregroundStyle(FinanceTokens.State.ai)
                 }
+                .help("AI 工作台")
 
-                Picker("币种", selection: $environment.displayCurrency) {
-                    ForEach(CurrencyCode.allCases, id: \.self) { currency in
-                        Text(currency.rawValue).tag(currency)
-                    }
-                }
-                .pickerStyle(.menu)
-
-                Picker("时间范围", selection: $environment.dateRange) {
-                    ForEach(DateRangeChoice.allCases) { range in
-                        Text(range.title).tag(range)
-                    }
-                }
-                .pickerStyle(.menu)
-
-                TextField("搜索", text: $environment.searchText)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 180)
-                    .focused($isSearchFocused)
-
+#if DEBUG
                 Button {
-                    Task { await environment.refreshCurrentModule() }
+                    isShowingDesignShowcase = true
                 } label: {
-                    Label("刷新", systemImage: "arrow.clockwise")
+                    Image(systemName: "paintpalette")
                 }
+                .help("DesignSystem Showcase（仅 DEBUG）")
+#endif
             }
         }
+#if DEBUG
+        .sheet(isPresented: $isShowingDesignShowcase) {
+            NavigationStack {
+                DesignSystemShowcaseView()
+            }
+            .frame(minWidth: 720, minHeight: 640)
+        }
+#endif
         .sheet(isPresented: $environment.isShowingNewAccountSheet) {
             NewAccountSheet(environment: environment)
                 .frame(width: 420)
@@ -115,7 +144,7 @@ struct MacRootView: View {
         }
         .preferredColorScheme(environment.appearance.colorScheme)
         .tint(FinanceTokens.Brand.primary)
-        .background(FinanceTokens.Surface.base)
+        .background(CanvasBackground())
         .privacyActivityMonitor(environment: environment)
     }
 }
@@ -124,41 +153,57 @@ private struct SidebarView: View {
     @Bindable var environment: AppEnvironment
     @Environment(\.openWindow) private var openWindow
 
-    var body: some View {
-        List(selection: $environment.selectedModule) {
-            Section {
-                ForEach([FinanceModule.dashboard, .accounts, .reconciliation, .entries, .cashFlow, .reimbursements, .credit, .reports, .ai, .aiMemo]) { module in
-                    Label(module.title, systemImage: module.symbolName)
-                        .tag(module)
-                        .contextMenu {
-                            Button("在新窗口中打开") {
-                                openWindow(id: "module", value: module)
-                            }
-                        }
-                }
-            }
+    // 对齐 HTML C 节 sidebar：两组 + 共 10 项。
+    // 隐藏：reconciliation（入口在账户页）、aiMemo（入口在 AI 工作台）。
+    private static let consoleModules: [FinanceModule] = [
+        .dashboard, .accounts, .entries, .cashFlow, .credit, .reimbursements
+    ]
 
-            Section {
-                Label(FinanceModule.notifications.title, systemImage: FinanceModule.notifications.symbolName)
-                    .tag(FinanceModule.notifications)
-                    .contextMenu {
-                        Button("在新窗口中打开") {
-                            openWindow(id: "module", value: FinanceModule.notifications)
-                        }
-                    }
-                Label(FinanceModule.settings.title, systemImage: FinanceModule.settings.symbolName)
-                    .tag(FinanceModule.settings)
-                    .contextMenu {
-                        Button("在新窗口中打开") {
-                            openWindow(id: "module", value: FinanceModule.settings)
-                        }
-                    }
+    private static let analyticsModules: [FinanceModule] = [
+        .reports, .ai, .notifications, .settings
+    ]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                sidebarGroup(title: "主控台", modules: Self.consoleModules)
+                sidebarGroup(title: "分析 · AI", modules: Self.analyticsModules)
             }
+            .padding(.horizontal, 10)
+            .padding(.top, 14)
+            .padding(.bottom, 16)
         }
-        .navigationTitle("LinoF")
+        .scrollContentBackground(.hidden)
+        .background(FinanceTokens.Surface.deepGlass)
+        .navigationTitle("LinoFinance")
         .safeAreaInset(edge: .bottom) {
             ConnectionFooter(environment: environment)
                 .padding(12)
+        }
+    }
+
+    @ViewBuilder
+    private func sidebarGroup(title: String, modules: [FinanceModule]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title.uppercased())
+                .font(FinanceTypography.sectionKicker)
+                .tracking(0.8)
+                .foregroundStyle(FinanceTokens.Text.tertiary)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 4)
+            ForEach(modules) { module in
+                SidebarRow(
+                    title: module.title,
+                    systemImage: module.symbolName,
+                    isActive: environment.selectedModule == module,
+                    action: { environment.selectedModule = module }
+                )
+                .contextMenu {
+                    Button("在新窗口中打开") {
+                        openWindow(id: "module", value: module)
+                    }
+                }
+            }
         }
     }
 }
@@ -174,9 +219,10 @@ private struct ConnectionFooter: View {
                     .frame(width: 8, height: 8)
                 Text(environment.lastErrorMessage == nil ? "API 已连接" : "离线 / 待连接")
                     .font(.caption.weight(.semibold))
+                    .foregroundStyle(FinanceTokens.Text.primary)
             }
             Text(environment.apiClient.baseURL.absoluteString)
-                .font(.caption2)
+                .font(.caption2.monospacedDigit())
                 .foregroundStyle(FinanceTokens.Text.secondary)
                 .textSelection(.enabled)
             if let message = environment.lastErrorMessage {
@@ -186,7 +232,9 @@ private struct ConnectionFooter: View {
                     .lineLimit(3)
             }
         }
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .glassBackground(radius: FinanceTokens.Radius.md, strength: .regular, elevation: nil)
     }
 }
 
