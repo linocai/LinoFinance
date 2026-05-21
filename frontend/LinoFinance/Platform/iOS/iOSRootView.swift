@@ -79,24 +79,16 @@ struct iOSRootView: View {
     private var mainTabs: some View {
         // 替代 SwiftUI TabView —— iOS 26 的 TabView 即使 `.toolbar(.hidden, for: .tabBar)`
         // 仍会渲染 floating accessory bar，跟我们自己的 FloatingTabBar 叠在一起。
-        // 这里用 ZStack + .opacity 手动切，每个 tab 的 NavigationStack 始终保活，
-        // 切回去时 state（滚动位置、push 栈）不会丢。
-        ZStack {
-            moduleStack(.dashboard)
-                .opacity(selectedTab == .dashboard ? 1 : 0)
-                .allowsHitTesting(selectedTab == .dashboard)
-            moduleStack(.entries)
-                .opacity(selectedTab == .entries ? 1 : 0)
-                .allowsHitTesting(selectedTab == .entries)
-            moduleStack(.cashFlow)
-                .opacity(selectedTab == .cashFlow ? 1 : 0)
-                .allowsHitTesting(selectedTab == .cashFlow)
-            moduleStack(.credit)
-                .opacity(selectedTab == .credit ? 1 : 0)
-                .allowsHitTesting(selectedTab == .credit)
-            moreStack
-                .opacity(selectedTab == .more ? 1 : 0)
-                .allowsHitTesting(selectedTab == .more)
+        // 这里按 selectedTab switch 渲染单一 NavigationStack —— 切 tab 时 scroll 位置
+        // 和 push 栈会重置，换取无多 stack 手势冲突（NavigationLink 在 more tab 可点）。
+        Group {
+            switch selectedTab {
+            case .dashboard: moduleStack(.dashboard)
+            case .entries: moduleStack(.entries)
+            case .cashFlow: moduleStack(.cashFlow)
+            case .credit: moduleStack(.credit)
+            case .more: moreStack
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(CanvasBackground())
