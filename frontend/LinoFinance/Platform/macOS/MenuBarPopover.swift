@@ -3,7 +3,6 @@ import SwiftUI
 
 struct MenuBarPopover: View {
     @Bindable var environment: AppEnvironment
-    @Binding var showMenuBarExtra: Bool
     @Environment(\.openWindow) private var openWindow
 
     private var nextCreditDue: CreditStatementCycleDTO? {
@@ -82,7 +81,9 @@ struct MenuBarPopover: View {
 
             Divider()
 
-            Toggle("显示菜单栏入口", isOn: $showMenuBarExtra)
+            Label("菜单栏入口已固定显示", systemImage: "pin.fill")
+                .font(FinanceTypography.caption)
+                .foregroundStyle(FinanceTokens.Text.secondary)
         }
         .padding(14)
         .frame(width: 280)

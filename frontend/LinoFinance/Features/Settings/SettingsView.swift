@@ -7,9 +7,6 @@ struct SettingsView: View {
     @State private var usdRate = "6.8"
     @State private var errorMessage: String?
     @State private var configMessage: String?
-#if os(macOS)
-    @AppStorage("linofinance.showMenuBarExtra") private var showMenuBarExtra = true
-#endif
 
     var body: some View {
         #if os(iOS)
@@ -340,7 +337,9 @@ struct SettingsView: View {
                             ErrorBanner(message: message)
                         }
 #if os(macOS)
-                        Toggle("显示菜单栏入口", isOn: $showMenuBarExtra)
+                        Text("菜单栏入口已固定显示。")
+                            .font(FinanceTypography.caption)
+                            .foregroundStyle(FinanceTokens.Text.secondary)
 #endif
                     }
                 }

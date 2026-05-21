@@ -8,7 +8,6 @@ struct LinoFinanceApp: App {
 #endif
 #if os(macOS)
     @Environment(\.openWindow) private var openWindow
-    @AppStorage("linofinance.showMenuBarExtra") private var showMenuBarExtra = true
 #endif
 
     var body: some Scene {
@@ -122,8 +121,8 @@ struct LinoFinanceApp: App {
         }
         .windowResizability(.contentSize)
 
-        MenuBarExtra("LinoF", systemImage: "yensign.circle.fill", isInserted: $showMenuBarExtra) {
-            MenuBarPopover(environment: environment, showMenuBarExtra: $showMenuBarExtra)
+        MenuBarExtra("LinoF", systemImage: "yensign.circle.fill") {
+            MenuBarPopover(environment: environment)
         }
 #else
         WindowGroup {
