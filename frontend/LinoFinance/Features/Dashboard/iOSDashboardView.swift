@@ -73,7 +73,7 @@ struct iOSDashboardView: View {
 
     private var greetingHeader: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("早上好，Lino")
+            Text("\(greetingPhrase)，Lino")
                 .font(.system(size: 26, weight: .semibold))
                 .titleTracking()
                 .foregroundStyle(FinanceTokens.Text.primary)
@@ -82,6 +82,19 @@ struct iOSDashboardView: View {
                 .foregroundStyle(FinanceTokens.Text.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 按当前小时切换问候语。
+    /// 5-11 早上好 · 11-13 中午好 · 13-18 下午好 · 18-23 晚上好 · 其余 夜深了。
+    private var greetingPhrase: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5..<11: return "早上好"
+        case 11..<13: return "中午好"
+        case 13..<18: return "下午好"
+        case 18..<23: return "晚上好"
+        default: return "夜深了"
+        }
     }
 
     private var todayEntries: [EntryDTO] {

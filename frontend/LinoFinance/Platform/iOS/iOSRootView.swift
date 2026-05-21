@@ -77,29 +77,26 @@ struct iOSRootView: View {
     }
 
     private var mainTabs: some View {
+        // 替代 SwiftUI TabView —— iOS 26 的 TabView 即使 `.toolbar(.hidden, for: .tabBar)`
+        // 仍会渲染 floating accessory bar，跟我们自己的 FloatingTabBar 叠在一起。
+        // 这里用 ZStack + .opacity 手动切，每个 tab 的 NavigationStack 始终保活，
+        // 切回去时 state（滚动位置、push 栈）不会丢。
         ZStack {
-            TabView(selection: $selectedTab) {
-                moduleStack(.dashboard)
-                    .tabItem { Label("总览", systemImage: FinanceModule.dashboard.symbolName) }
-                    .tag(iOSTab.dashboard)
-
-                moduleStack(.entries)
-                    .tabItem { Label("记账", systemImage: FinanceModule.entries.symbolName) }
-                    .tag(iOSTab.entries)
-
-                moduleStack(.cashFlow)
-                    .tabItem { Label("现金流", systemImage: FinanceModule.cashFlow.symbolName) }
-                    .tag(iOSTab.cashFlow)
-
-                moduleStack(.credit)
-                    .tabItem { Label("信用", systemImage: FinanceModule.credit.symbolName) }
-                    .tag(iOSTab.credit)
-
-                moreStack
-                    .tabItem { Label("更多", systemImage: "ellipsis.circle.fill") }
-                    .tag(iOSTab.more)
-            }
-            .toolbar(.hidden, for: .tabBar)
+            moduleStack(.dashboard)
+                .opacity(selectedTab == .dashboard ? 1 : 0)
+                .allowsHitTesting(selectedTab == .dashboard)
+            moduleStack(.entries)
+                .opacity(selectedTab == .entries ? 1 : 0)
+                .allowsHitTesting(selectedTab == .entries)
+            moduleStack(.cashFlow)
+                .opacity(selectedTab == .cashFlow ? 1 : 0)
+                .allowsHitTesting(selectedTab == .cashFlow)
+            moduleStack(.credit)
+                .opacity(selectedTab == .credit ? 1 : 0)
+                .allowsHitTesting(selectedTab == .credit)
+            moreStack
+                .opacity(selectedTab == .more ? 1 : 0)
+                .allowsHitTesting(selectedTab == .more)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(CanvasBackground())
