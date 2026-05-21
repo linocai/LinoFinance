@@ -181,9 +181,21 @@ struct iOSRootView: View {
             List {
                 Section("模块") {
                     ForEach([FinanceModule.accounts, .reconciliation, .reimbursements, .reports, .ai, .aiMemo, .notifications, .settings]) { module in
-                        NavigationLink(value: module) {
-                            Label(module.title, systemImage: module.symbolName)
+                        // iOS 26 List + NavigationLink(value:) 偶发不响应；
+                        // 改成 Button 手动 append path，最稳。
+                        Button {
+                            morePath.append(module)
+                        } label: {
+                            HStack {
+                                Label(module.title, systemImage: module.symbolName)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(FinanceTokens.Text.tertiary)
+                            }
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
                     }
                 }
 
@@ -206,8 +218,7 @@ struct iOSRootView: View {
                 FinanceModuleContentView(environment: environment, module: module)
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar { toolbarItems(for: module) }
-                    .toolbarBackground(FinanceTokens.Surface.raised, for: .navigationBar)
-                    .toolbarBackground(.visible, for: .navigationBar)
+                    .toolbarBackground(.hidden, for: .navigationBar)
                     .onAppear {
                         environment.selectedModule = module
                     }
@@ -223,8 +234,7 @@ struct iOSRootView: View {
             FinanceModuleContentView(environment: environment, module: module)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarItems(for: module) }
-                .toolbarBackground(FinanceTokens.Surface.raised, for: .navigationBar)
-                .toolbarBackground(.visible, for: .navigationBar)
+                .toolbarBackground(.hidden, for: .navigationBar)
         }
         .onAppear {
             environment.selectedModule = module
@@ -309,13 +319,41 @@ enum iOSTab: Hashable {
 private struct ConnectionStatusView: View {
     @Bindable var environment: AppEnvironment
 
+    private enum Status {
+        case ok            // token 已配 + 无错
+        case needsToken    // token 未配
+        case apiError      // token 配了但 API 报错
+
+        var dotColor: Color {
+            switch self {
+            case .ok: return FinanceTokens.State.income
+            case .needsToken: return FinanceTokens.State.warning
+            case .apiError: return FinanceTokens.State.warning
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .ok: return "API 已连接"
+            case .needsToken: return "需要配置 Token"
+            case .apiError: return "API 连接异常"
+            }
+        }
+    }
+
+    private var status: Status {
+        guard environment.isAPITokenConfigured else { return .needsToken }
+        if environment.lastErrorMessage != nil { return .apiError }
+        return .ok
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Circle()
-                    .fill(environment.lastErrorMessage == nil && environment.isAPITokenConfigured ? FinanceTokens.State.income : FinanceTokens.State.warning)
+                    .fill(status.dotColor)
                     .frame(width: 8, height: 8)
-                Text(environment.isAPITokenConfigured ? "API 已配置" : "需要配置 Token")
+                Text(status.title)
                     .font(.subheadline.weight(.semibold))
             }
             Text(environment.apiClient.baseURL.absoluteString)
