@@ -5,6 +5,7 @@ struct AIWorkspaceView: View {
     @State private var prompt = ""
     @State private var strongConfirm = ""
     @State private var confirmation: ConfirmAction?
+    @State private var errorAlertMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -83,6 +84,14 @@ struct AIWorkspaceView: View {
         } message: { item in
             Text(item.message)
         }
+        .alert("操作失败", isPresented: Binding(
+            get: { errorAlertMessage != nil },
+            set: { if !$0 { errorAlertMessage = nil } }
+        ), presenting: errorAlertMessage) { _ in
+            Button("好") { errorAlertMessage = nil }
+        } message: { message in
+            Text(message)
+        }
     }
 
     private var aiConfigColumns: [GridItem] {
@@ -159,6 +168,12 @@ struct AIWorkspaceView: View {
                 try await environment.aiViewModel.reject(plan.id)
             case "execute":
                 let confirm = plan.riskLevel == "high" ? strongConfirm : nil
+                // 后端只允许 approved / auto_confirm_candidate 状态 execute；
+                // 用户角度"执行"是一步操作，这里如果还没批准，先 approve 再 execute。
+                let approvedStates: Set<String> = ["approved", "auto_confirm_candidate", "executed"]
+                if !approvedStates.contains(plan.status) {
+                    try await environment.aiViewModel.approve(plan.id)
+                }
                 try await environment.aiViewModel.execute(plan.id, strongConfirm: confirm)
                 await environment.refreshPrimaryData()
             default:
@@ -168,7 +183,10 @@ struct AIWorkspaceView: View {
                 }
             }
         } catch {
-            environment.aiViewModel.errorMessage = error.localizedDescription
+            // 把错误同时写入 errorMessage（banner）和触发 alert，确保用户看得见。
+            let message = error.localizedDescription
+            environment.aiViewModel.errorMessage = message
+            errorAlertMessage = message
         }
     }
 }
