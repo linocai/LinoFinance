@@ -3,7 +3,7 @@
 LinoFinance is a personal dual-currency finance control center with iOS/macOS
 clients and a cloud API backend.
 
-The current source of truth for implementation scope is [plan.md](plan.md).
+v1.1 has shipped. Historical planning and design docs are under [archive/](archive/). For day-to-day operations see [docs/deployment.md](docs/deployment.md).
 
 ## Current Architecture
 
