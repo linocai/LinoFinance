@@ -231,9 +231,9 @@ private struct TodayEntriesSection: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(FinanceTokens.Text.primary)
                 Spacer()
-                if !entries.isEmpty {
-                    StatusTag(title: "AI 已自动分类", style: .ai)
-                }
+                // 之前这里挂了一个无条件的 "AI 已自动分类" 标签，但 EntryDTO 上
+                // 并没有 ai_classified 标记，所以它在每一次安装上都误导用户。
+                // v1.1.5 暂时拿掉，等后续给 EntryDTO 加上分类来源字段再恢复。
             }
 
             if entries.isEmpty {
