@@ -163,11 +163,16 @@ struct ReimbursementsView: View {
         guard let category = environment.entriesViewModel.categories.first(where: { $0.type == .income }) else {
             throw APIError.badStatus(400, "标记到账需要至少一个收入分类")
         }
+        // Prefix every note with [claim:<uuid>] so the resulting income
+        // entry is traceable back to the originating reimbursement claim.
+        // The backend does not (yet) carry a claim_id FK on entries; this
+        // greppable trace stands in for that.
+        let traceNote = "[claim:\(claim.id)] " + (claim.note ?? "")
         let entry = EntryCreateRequest(
             title: "报销到账",
             date: Date(),
             status: .confirmed,
-            note: claim.note,
+            note: traceNote,
             categoryLines: [
                 EntryCategoryLineCreateRequest(
                     categoryId: category.id,
@@ -176,7 +181,7 @@ struct ReimbursementsView: View {
                     currency: claim.currency,
                     exchangeRateId: claim.exchangeRateId,
                     convertedCnyAmount: claim.convertedCnyAmount,
-                    note: claim.note
+                    note: traceNote
                 )
             ],
             accountMovements: [
@@ -188,7 +193,7 @@ struct ReimbursementsView: View {
                     currency: claim.currency,
                     exchangeRateId: claim.exchangeRateId,
                     convertedCnyAmount: claim.convertedCnyAmount,
-                    note: claim.note
+                    note: traceNote
                 )
             ]
         )
