@@ -225,8 +225,11 @@ struct EntriesView: View {
                     } else {
                         try await environment.entriesViewModel.voidEntry(entry.id)
                     }
-                    try? await environment.accountsViewModel.refresh()
-                    try? await environment.dashboardViewModel.refresh()
+                    // Defensive double-refresh so monthlyEntries reflects the
+                    // post-write state even if a sibling write races.
+                    try await environment.entriesViewModel.refresh()
+                    try await environment.accountsViewModel.refresh()
+                    try await environment.dashboardViewModel.refresh()
                     try? await environment.reimbursementsViewModel.refresh()
                     try? await environment.creditViewModel.refresh()
                     try? await environment.reportsViewModel.refresh()
@@ -677,6 +680,12 @@ struct NewEntrySheet: View {
                     .font(.caption)
             }
 
+            if let missing = missingFieldSummary {
+                Text(missing)
+                    .font(.caption)
+                    .foregroundStyle(FinanceTokens.State.warning)
+            }
+
             HStack {
                 Spacer()
                 Button("取消") {
@@ -767,6 +776,33 @@ struct NewEntrySheet: View {
             return false
         }
         return true
+    }
+
+    /// Mirrors `canSubmit` and returns a "缺少：…" hint listing each
+    /// missing field in Chinese, or nil if the form is ready.
+    private var missingFieldSummary: String? {
+        if canSubmit { return nil }
+        var missing: [String] = []
+        if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            missing.append("标题")
+        }
+        if Decimal(string: amount) == nil {
+            missing.append("金额")
+        }
+        if mode.usesBalanceAccount && balanceAccountSelection.wrappedValue == nil {
+            missing.append("余额账户")
+        }
+        if mode.usesCreditAccount && creditAccountSelection.wrappedValue == nil {
+            missing.append("信用账户")
+        }
+        if mode.categoryType != nil && categorySelection.wrappedValue == nil {
+            missing.append("分类")
+        }
+        if mode == .creditRepayment && selectedStatementCycleID == nil {
+            missing.append("信用账单周期")
+        }
+        if missing.isEmpty { return nil }
+        return "缺少：" + missing.joined(separator: "、")
     }
 
     private func createCategory() async {

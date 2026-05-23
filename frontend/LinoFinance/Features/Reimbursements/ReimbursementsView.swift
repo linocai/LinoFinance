@@ -105,11 +105,22 @@ struct ReimbursementsView: View {
         case "abandon":
             ("放弃报销？", "放弃后这笔垫付会作为个人支出。", "放弃", .destructive)
         default:
-            ("标记到账？", "到账会创建一条正式收入记录并影响账户余额。", "标记到账", nil)
+            ("标记到账？", receiveConfirmationMessage(for: claim), "标记到账", nil)
         }
         confirmation = ConfirmAction(title: copy.0, message: copy.1, confirmTitle: copy.2, role: copy.3) {
             Task { await perform(claim, operation: operation) }
         }
+    }
+
+    /// Builds the explicit confirmation copy for the 到账 button.
+    /// Names the receiving account, the amount and currency so the user
+    /// understands that an income entry will be created.
+    private func receiveConfirmationMessage(for claim: ReimbursementClaimDTO) -> String {
+        let accountName = environment.accountsViewModel.accounts.balanceAccounts.first(
+            where: { $0.currency == claim.currency }
+        )?.name ?? "<无匹配账户>"
+        let amount = FinanceFormatter.money(claim.amount, currency: claim.currency)
+        return "标记报销到账会创建一条已确认的「工资外收入」记账，并把 \(amount) 计入余额账户「\(accountName)」。继续吗？"
     }
 
     private func perform(_ claim: ReimbursementClaimDTO, operation: String) async {

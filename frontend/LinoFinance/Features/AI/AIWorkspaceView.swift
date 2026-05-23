@@ -6,6 +6,8 @@ struct AIWorkspaceView: View {
     @State private var strongConfirm = ""
     @State private var confirmation: ConfirmAction?
     @State private var errorAlertMessage: String?
+    @State private var isCreatingPlan = false
+    @State private var executingPlanID: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -55,7 +57,12 @@ struct AIWorkspaceView: View {
                         environment.inspectorSelection = .aiPlan(plan)
                     }
                 )) { plan in
-                    AIPlanCard(plan: plan, strongConfirm: strongConfirm, action: confirm)
+                    AIPlanCard(
+                        plan: plan,
+                        strongConfirm: strongConfirm,
+                        isExecuting: executingPlanID == plan.id,
+                        action: confirm
+                    )
                         .tag(plan.id)
                         .contentShape(Rectangle())
                         .onTapGesture { environment.inspectorSelection = .aiPlan(plan) }
@@ -112,13 +119,21 @@ struct AIWorkspaceView: View {
         Button {
             Task { await createPlan() }
         } label: {
-            Label("生成计划", systemImage: "sparkles")
+            HStack(spacing: 6) {
+                Label("生成计划", systemImage: "sparkles")
+                if isCreatingPlan {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
         }
         .buttonStyle(.borderedProminent)
-        .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isCreatingPlan)
     }
 
     private func createPlan() async {
+        isCreatingPlan = true
+        defer { isCreatingPlan = false }
         do {
             _ = try await environment.aiViewModel.createPlan(sourceText: prompt.trimmingCharacters(in: .whitespacesAndNewlines))
             prompt = ""
@@ -160,6 +175,14 @@ struct AIWorkspaceView: View {
     }
 
     private func perform(_ plan: AIPlanDTO, _ operation: String, _ actionID: String?) async {
+        if operation == "execute" {
+            executingPlanID = plan.id
+        }
+        defer {
+            if operation == "execute" {
+                executingPlanID = nil
+            }
+        }
         do {
             switch operation {
             case "approve":
@@ -194,6 +217,7 @@ struct AIWorkspaceView: View {
 private struct AIPlanCard: View {
     let plan: AIPlanDTO
     let strongConfirm: String
+    let isExecuting: Bool
     let action: (AIPlanDTO, String, String?) -> Void
 
     var body: some View {
@@ -230,6 +254,7 @@ private struct AIPlanCard: View {
                     if item.status == "executed" {
                         Button("回滚") { action(plan, "rollback", item.id) }
                             .buttonStyle(.borderless)
+                            .disabled(isExecuting)
                     }
                 }
                 .padding(10)
@@ -239,13 +264,17 @@ private struct AIPlanCard: View {
 
             HStack {
                 Button("批准") { action(plan, "approve", nil) }
-                    .disabled(["approved", "executed", "rejected", "cancelled", "failed"].contains(plan.status))
+                    .disabled(isExecuting || ["approved", "executed", "rejected", "cancelled", "failed"].contains(plan.status))
                 Button("拒绝", role: .destructive) { action(plan, "reject", nil) }
-                    .disabled(["executed", "rejected", "cancelled"].contains(plan.status))
+                    .disabled(isExecuting || ["executed", "rejected", "cancelled"].contains(plan.status))
                 Spacer()
                 Button("执行") { action(plan, "execute", nil) }
                     .buttonStyle(.borderedProminent)
                     .disabled(executeDisabled)
+                if isExecuting {
+                    ProgressView()
+                        .controlSize(.small)
+                }
             }
         }
         .padding(.vertical, 8)
@@ -255,6 +284,7 @@ private struct AIPlanCard: View {
     private var executeDisabled: Bool {
         // 后端只允许 approved / auto_confirm_candidate / requires_confirmation
         // （后两者由 perform() 自动 approve）状态执行；已完成 / 已拒绝 / 已取消 / 失败 一律禁。
+        if isExecuting { return true }
         if ["executed", "rejected", "cancelled", "failed"].contains(plan.status) { return true }
         if plan.riskLevel == "high" && strongConfirm != "EXECUTE_HIGH_RISK" { return true }
         return false
