@@ -110,9 +110,20 @@ struct AIWorkspaceView: View {
     }
 
     private var strongConfirmField: some View {
-        TextField("高风险强确认：EXECUTE_HIGH_RISK", text: $strongConfirm)
-            .textFieldStyle(.roundedBorder)
-            .frame(maxWidth: 280)
+        VStack(alignment: .leading, spacing: 4) {
+            TextField("高风险强确认：EXECUTE_HIGH_RISK", text: $strongConfirm)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 280)
+            if !strongConfirm.isEmpty {
+                Text(strongConfirm == "EXECUTE_HIGH_RISK" ? "已就绪" : "还需输入 EXECUTE_HIGH_RISK")
+                    .font(.caption)
+                    .foregroundStyle(
+                        strongConfirm == "EXECUTE_HIGH_RISK"
+                            ? FinanceTokens.State.income
+                            : FinanceTokens.State.warning
+                    )
+            }
+        }
     }
 
     private var createPlanButton: some View {
