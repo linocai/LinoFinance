@@ -458,7 +458,7 @@ private struct SubscriptionRow: View {
                         .lineLimit(1)
                     StatusTag(status: rule.status)
                 }
-                Text("\(rule.billingInterval.financeStatusTitle) · 下次 \(rule.nextChargeDate.map(FinanceFormatter.shortDate) ?? "未排期")")
+                Text("\(rule.billingInterval.financeStatusTitle) · 下次 \(nextChargeLabel)")
                     .font(FinanceTypography.caption.monospacedDigit())
                     .foregroundStyle(FinanceTokens.Text.secondary)
                     .lineLimit(1)
@@ -473,6 +473,25 @@ private struct SubscriptionRow: View {
         }
         .padding(.vertical, 10)
         .padding(.trailing, 28)
+    }
+
+    /// 订阅状态决定 "下次 …" 的展示文字。
+    /// - 暂停：显示 "已暂停"
+    /// - 已取消：显示 "已取消"
+    /// - 其它：若有 nextChargeDate 则展示短日期，否则展示 "待生成"（不是
+    ///   "未排期"——后者会让用户以为需要手动操作）。
+    private var nextChargeLabel: String {
+        switch rule.status {
+        case "paused":
+            return "已暂停"
+        case "cancelled":
+            return "已取消"
+        default:
+            if let date = rule.nextChargeDate {
+                return FinanceFormatter.shortDate(date)
+            }
+            return "待生成"
+        }
     }
 }
 
