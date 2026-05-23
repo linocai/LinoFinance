@@ -71,7 +71,15 @@ struct AIWorkspaceView: View {
             }
 
             if let message = environment.aiViewModel.errorMessage {
-                ErrorBanner(message: message)
+                ErrorBanner(
+                    message: message,
+                    onRetry: {
+                        Task { try? await environment.aiViewModel.refresh() }
+                    },
+                    onDismiss: {
+                        environment.aiViewModel.errorMessage = nil
+                    }
+                )
             }
         }
         .padding(FinanceTokens.Spacing.page)

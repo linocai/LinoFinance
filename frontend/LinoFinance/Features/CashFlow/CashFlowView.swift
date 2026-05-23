@@ -86,7 +86,15 @@ struct CashFlowView: View {
             }
 
             if let message = environment.cashFlowViewModel.errorMessage {
-                ErrorBanner(message: message)
+                ErrorBanner(
+                    message: message,
+                    onRetry: {
+                        Task { try? await environment.cashFlowViewModel.refresh() }
+                    },
+                    onDismiss: {
+                        environment.cashFlowViewModel.errorMessage = nil
+                    }
+                )
             }
         }
         .padding(FinanceTokens.Spacing.page)

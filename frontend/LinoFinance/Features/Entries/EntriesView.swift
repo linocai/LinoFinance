@@ -91,9 +91,15 @@ struct EntriesView: View {
                 }
 
                 if let message = environment.entriesViewModel.errorMessage {
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(FinanceTokens.State.warning)
+                    ErrorBanner(
+                        message: message,
+                        onRetry: {
+                            Task { try? await environment.entriesViewModel.refresh() }
+                        },
+                        onDismiss: {
+                            environment.entriesViewModel.errorMessage = nil
+                        }
+                    )
                 }
             }
             .padding(.horizontal, entriesPagePadding)

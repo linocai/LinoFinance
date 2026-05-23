@@ -71,7 +71,15 @@ struct ReimbursementsView: View {
             }
 
             if let message = environment.reimbursementsViewModel.errorMessage {
-                ErrorBanner(message: message)
+                ErrorBanner(
+                    message: message,
+                    onRetry: {
+                        Task { try? await environment.reimbursementsViewModel.refresh() }
+                    },
+                    onDismiss: {
+                        environment.reimbursementsViewModel.errorMessage = nil
+                    }
+                )
             }
         }
         .padding(FinanceTokens.Spacing.page)

@@ -57,15 +57,35 @@ struct DetailLine: View {
 
 struct ErrorBanner: View {
     let message: String
+    var onRetry: (() -> Void)? = nil
+    var onDismiss: (() -> Void)? = nil
 
     var body: some View {
-        Label(message, systemImage: "exclamationmark.triangle.fill")
-            .font(.caption)
-            .foregroundStyle(FinanceTokens.State.warning)
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(FinanceTokens.State.warning.opacity(0.12))
-            .clipShape(RoundedRectangle(cornerRadius: FinanceTokens.Radius.sm))
+        HStack(alignment: .top, spacing: 8) {
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(FinanceTokens.State.warning)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if onRetry != nil || onDismiss != nil {
+                HStack(spacing: 6) {
+                    if let onRetry {
+                        Button("重试", action: onRetry)
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+                    }
+                    if let onDismiss {
+                        Button("关闭", action: onDismiss)
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+                            .foregroundStyle(FinanceTokens.Text.secondary)
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(FinanceTokens.State.warning.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: FinanceTokens.Radius.sm))
     }
 }
 
