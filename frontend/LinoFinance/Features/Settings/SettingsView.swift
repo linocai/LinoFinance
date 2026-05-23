@@ -25,7 +25,10 @@ struct SettingsView: View {
                         .font(.headline)
                     Spacer()
                     Button {
-                        Task { try? await environment.settingsViewModel.refresh() }
+                        Task {
+                            do { try await environment.settingsViewModel.refresh() }
+                            catch { environment.lastErrorMessage = error.localizedDescription }
+                        }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }

@@ -145,11 +145,11 @@ struct ReimbursementsView: View {
             default:
                 try await markReceived(claim)
             }
-            try? await environment.dashboardViewModel.refresh()
-            try? await environment.accountsViewModel.refresh()
-            try? await environment.entriesViewModel.refresh()
-            try? await environment.cashFlowViewModel.refresh()
-            try? await environment.reportsViewModel.refresh()
+            try await environment.dashboardViewModel.refresh()
+            try await environment.accountsViewModel.refresh()
+            try await environment.entriesViewModel.refresh()
+            try await environment.cashFlowViewModel.refresh()
+            try await environment.reportsViewModel.refresh()
         } catch {
             environment.reimbursementsViewModel.errorMessage = error.localizedDescription
             environment.lastErrorMessage = error.localizedDescription
@@ -387,7 +387,7 @@ struct NewReimbursementClaimSheet: View {
                     data: attachment.data
                 )
             }
-            try? await environment.reportsViewModel.refresh()
+            try await environment.reportsViewModel.refresh()
             environment.isShowingNewReimbursementSheet = false
         } catch {
             errorMessage = error.localizedDescription

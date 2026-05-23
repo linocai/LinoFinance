@@ -63,7 +63,10 @@ struct ReconciliationView: View {
                 .frame(width: 220)
                 Spacer()
                 Button {
-                    Task { try? await viewModel.refresh() }
+                    Task {
+                        do { try await viewModel.refresh() }
+                        catch { environment.lastErrorMessage = error.localizedDescription }
+                    }
                 } label: {
                     Label("刷新", systemImage: "arrow.clockwise")
                 }
@@ -76,7 +79,10 @@ struct ReconciliationView: View {
                 }
                 .pickerStyle(.segmented)
                 Button {
-                    Task { try? await viewModel.refresh() }
+                    Task {
+                        do { try await viewModel.refresh() }
+                        catch { environment.lastErrorMessage = error.localizedDescription }
+                    }
                 } label: {
                     Label("刷新", systemImage: "arrow.clockwise")
                 }
@@ -256,8 +262,8 @@ private struct AdjustmentSheet: View {
                 reason: reason,
                 note: note
             )
-            try? await environment.accountsViewModel.refresh()
-            try? await environment.dashboardViewModel.refresh()
+            try await environment.accountsViewModel.refresh()
+            try await environment.dashboardViewModel.refresh()
             dismiss()
         } catch {
             errorMessage = error.localizedDescription

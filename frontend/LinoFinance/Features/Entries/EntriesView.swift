@@ -236,9 +236,9 @@ struct EntriesView: View {
                     try await environment.entriesViewModel.refresh()
                     try await environment.accountsViewModel.refresh()
                     try await environment.dashboardViewModel.refresh()
-                    try? await environment.reimbursementsViewModel.refresh()
-                    try? await environment.creditViewModel.refresh()
-                    try? await environment.reportsViewModel.refresh()
+                    try await environment.reimbursementsViewModel.refresh()
+                    try await environment.creditViewModel.refresh()
+                    try await environment.reportsViewModel.refresh()
                 } catch {
                     environment.lastErrorMessage = error.localizedDescription
                 }
@@ -884,10 +884,10 @@ struct NewEntrySheet: View {
             try await environment.entriesViewModel.createEntry(request)
             try await environment.accountsViewModel.refresh()
             try await environment.dashboardViewModel.refresh()
-            try? await environment.reimbursementsViewModel.refresh()
-            try? await environment.creditViewModel.refresh()
-            try? await environment.reportsViewModel.refresh()
-            try? await environment.cashFlowViewModel.refresh()
+            try await environment.reimbursementsViewModel.refresh()
+            try await environment.creditViewModel.refresh()
+            try await environment.reportsViewModel.refresh()
+            try await environment.cashFlowViewModel.refresh()
             environment.isShowingNewEntrySheet = false
         } catch {
             errorMessage = error.localizedDescription

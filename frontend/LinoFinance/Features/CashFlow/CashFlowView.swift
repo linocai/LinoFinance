@@ -156,10 +156,10 @@ struct CashFlowView: View {
             default:
                 try await environment.cashFlowViewModel.cancel(item.id)
             }
-            try? await environment.dashboardViewModel.refresh()
-            try? await environment.accountsViewModel.refresh()
-            try? await environment.entriesViewModel.refresh()
-            try? await environment.reportsViewModel.refresh()
+            try await environment.dashboardViewModel.refresh()
+            try await environment.accountsViewModel.refresh()
+            try await environment.entriesViewModel.refresh()
+            try await environment.reportsViewModel.refresh()
         } catch {
             environment.cashFlowViewModel.errorMessage = error.localizedDescription
             environment.lastErrorMessage = error.localizedDescription
@@ -393,7 +393,7 @@ struct NewCashFlowSheet: View {
         let requests = cashFlowRequests(amount: converted)
         do {
             try await environment.cashFlowViewModel.create(requests)
-            try? await environment.reportsViewModel.refresh()
+            try await environment.reportsViewModel.refresh()
             environment.isShowingNewCashFlowSheet = false
         } catch {
             errorMessage = error.localizedDescription

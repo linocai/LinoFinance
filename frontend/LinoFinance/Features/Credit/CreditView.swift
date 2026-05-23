@@ -245,7 +245,7 @@ struct CreditView: View {
     private func performInstallmentPaidOff(_ plan: InstallmentPlanDTO, early: Bool) async {
         do {
             try await environment.creditViewModel.markInstallmentPaidOff(plan.id, early: early)
-            await refreshCreditDependencies()
+            try await refreshCreditDependencies()
         } catch {
             environment.creditViewModel.errorMessage = error.localizedDescription
             environment.lastErrorMessage = error.localizedDescription
@@ -255,7 +255,7 @@ struct CreditView: View {
     private func performInstallmentCancel(_ plan: InstallmentPlanDTO) async {
         do {
             try await environment.creditViewModel.cancelInstallment(plan.id)
-            await refreshCreditDependencies()
+            try await refreshCreditDependencies()
         } catch {
             environment.creditViewModel.errorMessage = error.localizedDescription
             environment.lastErrorMessage = error.localizedDescription
@@ -274,19 +274,21 @@ struct CreditView: View {
             default:
                 try await environment.creditViewModel.cancelSubscription(rule.id)
             }
-            await refreshCreditDependencies()
+            try await refreshCreditDependencies()
         } catch {
             environment.creditViewModel.errorMessage = error.localizedDescription
             environment.lastErrorMessage = error.localizedDescription
         }
     }
 
-    private func refreshCreditDependencies() async {
-        try? await environment.accountsViewModel.refresh()
-        try? await environment.entriesViewModel.refresh()
-        try? await environment.cashFlowViewModel.refresh()
-        try? await environment.reportsViewModel.refresh()
-        try? await environment.dashboardViewModel.refresh()
+    // Post-write helper: refresh dependents so the UI never outlives a
+    // failed refetch silently. Errors bubble to the caller's catch.
+    private func refreshCreditDependencies() async throws {
+        try await environment.accountsViewModel.refresh()
+        try await environment.entriesViewModel.refresh()
+        try await environment.cashFlowViewModel.refresh()
+        try await environment.reportsViewModel.refresh()
+        try await environment.dashboardViewModel.refresh()
     }
 }
 
@@ -741,7 +743,7 @@ struct NewSubscriptionSheet: View {
         )
         do {
             try await environment.creditViewModel.createSubscription(request)
-            try? await environment.cashFlowViewModel.refresh()
+            try await environment.cashFlowViewModel.refresh()
             environment.isShowingNewSubscriptionSheet = false
         } catch {
             errorMessage = error.localizedDescription
