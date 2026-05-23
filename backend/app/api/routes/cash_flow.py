@@ -17,9 +17,16 @@ def list_cash_flow_items(
     status: Optional[str] = Query(default=None),
     date_from: Optional[DateType] = Query(default=None),
     date_to: Optional[DateType] = Query(default=None),
+    include_cancelled: bool = Query(default=False),
     db: Session = Depends(get_db),
 ) -> List[CashFlowItemRead]:
-    return cash_flow.list_cash_flow_items(db, status=status, date_from=date_from, date_to=date_to)
+    return cash_flow.list_cash_flow_items(
+        db,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        include_cancelled=include_cancelled,
+    )
 
 
 @router.post("", response_model=CashFlowItemRead, status_code=status.HTTP_201_CREATED)

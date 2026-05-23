@@ -47,8 +47,8 @@ struct FinanceRepository {
         try await apiClient.voidEntry(id)
     }
 
-    func cashFlowItems() async throws -> [CashFlowItemDTO] {
-        try await apiClient.listCashFlowItems()
+    func cashFlowItems(includeCancelled: Bool = false) async throws -> [CashFlowItemDTO] {
+        try await apiClient.listCashFlowItems(includeCancelled: includeCancelled)
     }
 
     func createCashFlowItem(_ request: CashFlowItemCreateRequest) async throws -> CashFlowItemDTO {

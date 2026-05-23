@@ -20,7 +20,7 @@ final class CashFlowViewModel {
         isLoading = true
         defer { isLoading = false }
         do {
-            items = try await repository.cashFlowItems().sorted { $0.expectedDate < $1.expectedDate }
+            items = try await repository.cashFlowItems(includeCancelled: false).sorted { $0.expectedDate < $1.expectedDate }
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription

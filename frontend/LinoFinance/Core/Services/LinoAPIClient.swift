@@ -92,7 +92,12 @@ struct LinoAPIClient {
         try await post("entries/\(id)/void")
     }
 
-    func listCashFlowItems(status: String? = nil, dateFrom: Date? = nil, dateTo: Date? = nil) async throws -> [CashFlowItemDTO] {
+    func listCashFlowItems(
+        status: String? = nil,
+        dateFrom: Date? = nil,
+        dateTo: Date? = nil,
+        includeCancelled: Bool = false
+    ) async throws -> [CashFlowItemDTO] {
         var query: [URLQueryItem] = []
         if let status {
             query.append(URLQueryItem(name: "status", value: status))
@@ -102,6 +107,9 @@ struct LinoAPIClient {
         }
         if let dateTo {
             query.append(URLQueryItem(name: "date_to", value: DateFormatter.linoAPIDate.string(from: dateTo)))
+        }
+        if includeCancelled {
+            query.append(URLQueryItem(name: "include_cancelled", value: "true"))
         }
         return try await get("cash-flow-items", queryItems: query)
     }
