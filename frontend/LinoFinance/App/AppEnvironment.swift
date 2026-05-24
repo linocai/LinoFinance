@@ -30,6 +30,8 @@ final class AppEnvironment {
     var isShowingNewInstallmentSheet = false
     var isShowingNewSubscriptionSheet = false
     var isShowingNewNotificationSheet = false
+    var isShowingDailyPnLSheet = false
+    var dailyPnLTargetAccountID: String?
     var isSearchFocused = false
     var searchText = ""
     var displayCurrency: CurrencyCode = .cny
@@ -324,6 +326,26 @@ final class AppEnvironment {
         } catch {
             lastErrorMessage = error.localizedDescription
         }
+    }
+
+    @discardableResult
+    func recordDailyPnL(
+        accountID: String,
+        newBalance: Decimal,
+        asOfDate: Date? = nil,
+        note: String? = nil
+    ) async throws -> DailyPnLReadDTO {
+        let request = DailyPnLCreateRequest(
+            newBalance: DecimalValue(newBalance),
+            asOfDate: asOfDate,
+            note: note?.isEmpty == false ? note : nil
+        )
+        return try await apiClient.recordDailyPnL(accountID: accountID, request: request)
+    }
+
+    func presentDailyPnLSheet(for accountID: String?) {
+        dailyPnLTargetAccountID = accountID
+        isShowingDailyPnLSheet = true
     }
 
     private func rebuildClients(baseURL: URL, apiToken: String?) {

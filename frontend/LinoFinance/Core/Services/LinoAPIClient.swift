@@ -385,6 +385,10 @@ struct LinoAPIClient {
         try await post("reconciliation/adjustments", body: request)
     }
 
+    func recordDailyPnL(accountID: String, request: DailyPnLCreateRequest) async throws -> DailyPnLReadDTO {
+        try await post("accounts/\(accountID)/daily-pnl", body: request)
+    }
+
     func listNotificationRules(status: String? = nil, ruleType: String? = nil) async throws -> [NotificationRuleDTO] {
         var query: [URLQueryItem] = []
         if let status {

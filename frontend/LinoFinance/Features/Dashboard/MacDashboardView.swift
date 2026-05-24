@@ -119,12 +119,29 @@ struct MacDashboardView: View {
 
     @ViewBuilder
     private func kpiGrid(summary: DashboardSummaryDTO) -> some View {
-        let future30Net = environment.reportsViewModel.bundle?.cashFlow.windows.first { $0.days == 30 }?.netCny
-        let creditAccountCount = environment.accountsViewModel.accounts.creditAccounts.count
-        let balanceAccountCount = environment.accountsViewModel.accounts.balanceAccounts.count
-        let nextCredit = nextCreditDueText()
+        let investmentAccountCount = environment.accountsViewModel.accounts.investmentAccounts.count
+        let disposableLines = currencyLines(summary.disposable30dByCurrency)
+        let investmentLines = currencyLines(summary.investmentTotalByCurrency)
+        let cashflow30dLines = currencyLines(summary.cashFlow30dByCurrency)
+        let cashflowCnyAmount = currencyAmount(summary.cashFlow30dByCurrency, currency: .cny)
 
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 4), spacing: 14) {
+            KPICard(
+                title: "未来一月可支配",
+                valueLines: disposableLines,
+                systemImage: "wallet.bifold",
+                tint: FinanceTokens.State.income,
+                tag: .init(text: "30 天滚动", style: .draft),
+                trend: nil
+            )
+            KPICard(
+                title: "投资账户",
+                valueLines: investmentLines,
+                systemImage: "chart.line.uptrend.xyaxis.circle",
+                tint: FinanceTokens.Brand.primary,
+                tag: .init(text: "\(investmentAccountCount) 账户", style: .draft),
+                trend: investmentTrendSpec(summary.todayPnlByCurrency)
+            )
             KPICard(
                 title: "净资产",
                 value: FinanceFormatter.money(summary.netWorthCny),
@@ -134,42 +151,52 @@ struct MacDashboardView: View {
                 trend: .init(text: "已确认 \(summary.confirmedEntryCount) · 草稿 \(summary.draftEntryCount)", tint: FinanceTokens.Text.secondary)
             )
             KPICard(
-                title: "余额合计",
-                value: FinanceFormatter.money(summary.balanceTotalCny),
-                systemImage: "wallet.bifold",
-                tint: FinanceTokens.State.income,
-                tag: .init(text: "\(balanceAccountCount) 账户", style: .income),
-                trend: nil
-            )
-            KPICard(
-                title: "信用负债",
-                value: FinanceFormatter.money(summary.creditLiabilityTotalCny),
-                systemImage: "creditcard",
-                tint: FinanceTokens.State.credit,
-                tag: .init(text: "\(creditAccountCount) 张", style: .warning),
-                trend: nextCredit.map { .init(text: $0, tint: FinanceTokens.State.credit) }
-            )
-            KPICard(
-                title: future30Net == nil ? "确认记录" : "未来 30 天",
-                value: future30Net.map { FinanceFormatter.money($0) } ?? "\(summary.confirmedEntryCount)",
-                systemImage: future30Net == nil ? "checkmark.seal" : "calendar.badge.clock",
-                tint: (future30Net?.value ?? 0) < 0 ? FinanceTokens.State.expense : FinanceTokens.State.income,
-                tag: future30Net != nil ? .init(text: "30 天", style: .draft) : nil,
+                title: "未来 30 天",
+                valueLines: cashflow30dLines,
+                systemImage: "calendar.badge.clock",
+                tint: (cashflowCnyAmount?.value ?? 0) < 0 ? FinanceTokens.State.expense : FinanceTokens.State.income,
+                tag: .init(text: "30 天", style: .draft),
                 trend: nil
             )
         }
     }
 
-    private func nextCreditDueText() -> String? {
-        let now = Date()
-        guard let next = environment.creditViewModel.cycles
-            .filter({ $0.status != "paid" && $0.status != "closed" && $0.dueDate >= now })
-            .sorted(by: { $0.dueDate < $1.dueDate })
-            .first
-        else { return nil }
-        let days = Calendar.current.dateComponents([.day], from: now, to: next.dueDate).day ?? 0
-        let accountName = environment.accountsViewModel.accounts.first(where: { $0.id == next.creditAccountId })?.name ?? "信用卡"
-        return "下次 · \(accountName) · \(days) 天"
+    private func currencyLines(_ rows: [CurrencyAmountDTO]?) -> [String] {
+        guard let rows, !rows.isEmpty else { return [] }
+        return rows.map { row in
+            FinanceFormatter.money(row.amount, currency: row.currency)
+        }
+    }
+
+    private func currencyAmount(_ rows: [CurrencyAmountDTO]?, currency: CurrencyCode) -> DecimalValue? {
+        rows?.first(where: { $0.currency == currency })?.amount
+    }
+
+    private func investmentTrendSpec(_ rows: [CurrencyAmountDTO]?) -> KPICard.TrendSpec? {
+        guard let rows, !rows.isEmpty else {
+            return .init(text: "今日 无数据", tint: FinanceTokens.Text.secondary)
+        }
+        let segments = rows.map { row -> String in
+            let sign: String
+            if row.amount.value > 0 {
+                sign = "+"
+            } else if row.amount.value < 0 {
+                sign = ""
+            } else {
+                sign = ""
+            }
+            return "\(row.currency.symbol) \(sign)\(FinanceFormatter.money(row.amount, currency: row.currency).dropFirst(row.currency.symbol.count))"
+        }
+        let totalCny = rows.first(where: { $0.currency == .cny })?.amount.value ?? 0
+        let tint: Color
+        if totalCny > 0 {
+            tint = FinanceTokens.State.income
+        } else if totalCny < 0 {
+            tint = FinanceTokens.State.expense
+        } else {
+            tint = FinanceTokens.Text.secondary
+        }
+        return .init(text: "今日 " + segments.joined(separator: " · "), tint: tint)
     }
 
     // MARK: - Cashflow card

@@ -42,7 +42,8 @@ struct AccountsView: View {
                         netWorthCny: environment.dashboardViewModel.summary?.netWorthCny ?? totalNetCny(),
                         cnyBalance: totalBalance(currency: .cny),
                         usdBalance: totalBalance(currency: .usd),
-                        creditLiabilityCny: environment.dashboardViewModel.summary?.creditLiabilityTotalCny ?? totalCreditLiabilityCny()
+                        creditLiabilityCny: environment.dashboardViewModel.summary?.creditLiabilityTotalCny ?? totalCreditLiabilityCny(),
+                        investmentTotalCny: environment.dashboardViewModel.summary?.investmentTotalCny ?? totalInvestmentCny()
                     )
 
                     sectionCard(title: "余额账户", count: environment.accountsViewModel.accounts.balanceAccounts.count) {
@@ -52,6 +53,18 @@ struct AccountsView: View {
                             }
                             balanceAccountRow(account)
                                 .onTapGesture { environment.inspectorSelection = .account(account) }
+                        }
+                    }
+
+                    if !environment.accountsViewModel.accounts.investmentAccounts.isEmpty {
+                        sectionCard(title: "投资账户", count: environment.accountsViewModel.accounts.investmentAccounts.count) {
+                            ForEach(Array(environment.accountsViewModel.accounts.investmentAccounts.enumerated()), id: \.element.id) { index, account in
+                                if index > 0 {
+                                    Divider().background(FinanceTokens.Stroke.soft)
+                                }
+                                investmentAccountRow(account)
+                                    .onTapGesture { environment.inspectorSelection = .account(account) }
+                            }
                         }
                     }
 
@@ -130,6 +143,37 @@ struct AccountsView: View {
         )
     }
 
+    private func investmentAccountRow(_ account: AccountDTO) -> some View {
+        let convertedCNY = convertedCNY(for: account)
+        let primary = FinanceFormatter.money(account.currentBalance, currency: account.currency)
+        let secondary = convertedCNY.map { "约 \(FinanceFormatter.money($0, currency: .cny, approximate: true))" }
+        let subtitle = "投资账户 · " + (account.notes ?? account.status.financeStatusTitle)
+        return AccountListRow(
+            systemImage: "chart.line.uptrend.xyaxis.circle",
+            iconTint: FinanceTokens.Brand.primary,
+            title: "\(account.name) · \(account.currency.rawValue)",
+            subtitle: subtitle,
+            amountPrimary: primary,
+            amountSecondary: secondary,
+            amountTint: FinanceTokens.Brand.primary,
+            trailing: {
+#if os(iOS)
+                Button {
+                    environment.presentDailyPnLSheet(for: account.id)
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(FinanceTokens.Brand.primary)
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, 4)
+#else
+                EmptyView()
+#endif
+            }
+        )
+    }
+
     private func creditAccountRow(_ account: AccountDTO) -> some View {
         let primary = "-" + FinanceFormatter.money(account.currentLiability, currency: account.currency)
         let limitText = account.creditLimit.map { "额度 \(FinanceFormatter.money($0, currency: account.currency))" }
@@ -167,12 +211,20 @@ struct AccountsView: View {
         return DecimalValue(sum)
     }
 
+    private func totalInvestmentCny() -> DecimalValue {
+        let sum = environment.accountsViewModel.accounts
+            .investmentAccounts
+            .map { convertedToCny($0.currentBalance, from: $0.currency) }
+            .reduce(Decimal(0), +)
+        return DecimalValue(sum)
+    }
+
     private func totalNetCny() -> DecimalValue {
         let balance = environment.accountsViewModel.accounts
             .balanceAccounts
             .map { convertedToCny($0.currentBalance, from: $0.currency) }
             .reduce(Decimal(0), +)
-        return DecimalValue(balance - totalCreditLiabilityCny().value)
+        return DecimalValue(balance + totalInvestmentCny().value - totalCreditLiabilityCny().value)
     }
 
     private func convertedToCny(_ amount: DecimalValue, from currency: CurrencyCode) -> Decimal {
@@ -218,6 +270,7 @@ private struct AccountsHeroCard: View {
     let cnyBalance: DecimalValue
     let usdBalance: DecimalValue
     let creditLiabilityCny: DecimalValue
+    let investmentTotalCny: DecimalValue
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -249,6 +302,11 @@ private struct AccountsHeroCard: View {
                     tint: FinanceTokens.Currency.usd
                 )
                 MetricChip(
+                    title: "投资合计",
+                    value: FinanceFormatter.money(investmentTotalCny, currency: .cny),
+                    tint: FinanceTokens.Brand.primary
+                )
+                MetricChip(
                     title: "信用负债",
                     value: FinanceFormatter.money(creditLiabilityCny, currency: .cny),
                     tint: FinanceTokens.State.credit
@@ -266,9 +324,9 @@ private struct AccountsHeroCard: View {
 
     private var heroColumns: [GridItem] {
 #if os(iOS)
-        [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+        Array(repeating: GridItem(.flexible(), spacing: 10), count: 2)
 #else
-        Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
+        Array(repeating: GridItem(.flexible(), spacing: 10), count: 4)
 #endif
     }
 }
@@ -339,7 +397,7 @@ struct NewAccountSheet: View {
             name: name,
             type: accountType,
             currency: currency,
-            currentBalance: accountType == .balance ? DecimalValue(amount) : DecimalValue(0),
+            currentBalance: accountType == .credit ? DecimalValue(0) : DecimalValue(amount),
             currentLiability: accountType == .credit ? DecimalValue(amount) : DecimalValue(0),
             creditLimit: Decimal(string: creditLimit).map(DecimalValue.init),
             statementDay: Int(statementDay),

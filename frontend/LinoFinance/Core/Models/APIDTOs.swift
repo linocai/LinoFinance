@@ -14,6 +14,11 @@ struct AppHealthDTO: Decodable, Equatable {
     let apnsDryRun: Bool?
 }
 
+struct CurrencyAmountDTO: Decodable, Equatable, Hashable {
+    let currency: CurrencyCode
+    let amount: DecimalValue
+}
+
 struct DashboardSummaryDTO: Decodable, Equatable {
     let baseCurrency: String
     let balanceTotalCny: DecimalValue
@@ -22,6 +27,13 @@ struct DashboardSummaryDTO: Decodable, Equatable {
     let draftEntryCount: Int
     let confirmedEntryCount: Int
     let voidedEntryCount: Int
+
+    // New in v1.1.6 — optional so an older backend still decodes.
+    let investmentTotalCny: DecimalValue?
+    let investmentTotalByCurrency: [CurrencyAmountDTO]?
+    let todayPnlByCurrency: [CurrencyAmountDTO]?
+    let disposable30dByCurrency: [CurrencyAmountDTO]?
+    let cashFlow30dByCurrency: [CurrencyAmountDTO]?
 }
 
 struct AccountDTO: Identifiable, Decodable, Equatable, Hashable {
@@ -343,6 +355,17 @@ struct AccountAdjustmentDTO: Identifiable, Decodable, Equatable, Hashable {
     let createdBy: String
 }
 
+struct DailyPnLReadDTO: Decodable, Equatable, Hashable {
+    let adjustmentId: String
+    let accountId: String
+    let currency: CurrencyCode
+    let balanceBefore: DecimalValue
+    let balanceAfter: DecimalValue
+    let deltaAmount: DecimalValue
+    let asOfDate: Date
+    let source: String
+}
+
 struct SearchHitDTO: Identifiable, Decodable, Equatable, Hashable {
     let type: String
     let id: String
@@ -496,11 +519,13 @@ struct ExportDatasetListDTO: Decodable, Equatable, Hashable {
 enum AccountType: String, Codable, CaseIterable, Hashable {
     case balance
     case credit
+    case investment
 
     var title: String {
         switch self {
         case .balance: "余额"
         case .credit: "信用"
+        case .investment: "投资"
         }
     }
 }
