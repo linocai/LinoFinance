@@ -19,7 +19,12 @@ struct iOSDashboardView: View {
                     NetWorthHeroSection(
                         summary: summary,
                         future30Net: environment.reportsViewModel.bundle?.cashFlow.windows.first { $0.days == 30 }?.netCny,
-                        dailyNet: environment.reportsViewModel.bundle?.cashFlow.dailyNetCny ?? []
+                        dailyNet: environment.reportsViewModel.bundle?.cashFlow.dailyNetCny ?? [],
+                        onInvestmentTileTap: {
+                            environment.presentDailyPnLSheet(
+                                for: environment.accountsViewModel.accounts.investmentAccounts.first?.id
+                            )
+                        }
                     )
 
                     TodayEntriesSection(
@@ -131,6 +136,7 @@ private struct NetWorthHeroSection: View {
     let summary: DashboardSummaryDTO
     let future30Net: DecimalValue?
     let dailyNet: [CashFlowDailyNetRowDTO]
+    let onInvestmentTileTap: () -> Void
 
     private var trendValues: [Double] {
         dailyNet.map { NSDecimalNumber(decimal: $0.netCny.value).doubleValue }
@@ -160,7 +166,7 @@ private struct NetWorthHeroSection: View {
                     .frame(height: 56)
             }
 
-            statsRow
+            statsGrid
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -179,16 +185,46 @@ private struct NetWorthHeroSection: View {
     }
 
     @ViewBuilder
-    private var statsRow: some View {
-        let columns = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
+    private var statsGrid: some View {
+        let columns = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
+        let disposableLines = summary.disposable30dByCurrency ?? []
+        let investmentLines = summary.investmentTotalByCurrency ?? []
+        let cashflowLines = summary.cashFlow30dByCurrency ?? []
+        let cashflowCny = cashflowLines.first(where: { $0.currency == .cny })?.amount
+        let cashflowFallback = future30Net.map { FinanceFormatter.money($0) }
+
         LazyVGrid(columns: columns, spacing: 8) {
-            statTile(title: "余额合计", value: FinanceFormatter.money(summary.balanceTotalCny), tint: FinanceTokens.State.income)
-            statTile(title: "信用负债", value: FinanceFormatter.money(summary.creditLiabilityTotalCny), tint: FinanceTokens.State.credit)
-            statTile(
-                title: future30Net == nil ? "30 天净额" : "未来 30 天",
-                value: future30Net.map { FinanceFormatter.money($0) } ?? "暂无",
-                tint: (future30Net?.value ?? 0) < 0 ? FinanceTokens.State.expense : FinanceTokens.State.income
+            StatTileMultiCurrency(
+                title: "未来一月可支配",
+                lines: disposableLines,
+                tint: FinanceTokens.State.income,
+                onTap: nil
             )
+            StatTileMultiCurrency(
+                title: "投资账户",
+                lines: investmentLines,
+                tint: FinanceTokens.Brand.primary,
+                onTap: onInvestmentTileTap
+            )
+            statTile(
+                title: "信用负债",
+                value: FinanceFormatter.money(summary.creditLiabilityTotalCny),
+                tint: FinanceTokens.State.credit
+            )
+            if cashflowLines.isEmpty, let fallback = cashflowFallback {
+                statTile(
+                    title: "未来 30 天",
+                    value: fallback,
+                    tint: (future30Net?.value ?? 0) < 0 ? FinanceTokens.State.expense : FinanceTokens.State.income
+                )
+            } else {
+                StatTileMultiCurrency(
+                    title: "未来 30 天 净额",
+                    lines: cashflowLines,
+                    tint: (cashflowCny?.value ?? 0) < 0 ? FinanceTokens.State.expense : FinanceTokens.State.income,
+                    onTap: nil
+                )
+            }
         }
     }
 
@@ -214,6 +250,51 @@ private struct NetWorthHeroSection: View {
                         .stroke(FinanceTokens.Stroke.hairline, lineWidth: 0.5)
                 }
         )
+    }
+}
+
+private struct StatTileMultiCurrency: View {
+    let title: String
+    let lines: [CurrencyAmountDTO]
+    let tint: Color
+    let onTap: (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(size: 11))
+                .foregroundStyle(FinanceTokens.Text.secondary)
+            if lines.isEmpty {
+                PrivacyAmount(
+                    value: "—",
+                    font: .system(size: 13, weight: .semibold).monospacedDigit(),
+                    tint: tint
+                )
+            } else {
+                ForEach(lines, id: \.currency) { line in
+                    PrivacyAmount(
+                        value: FinanceFormatter.money(line.amount, currency: line.currency),
+                        font: .system(size: 13, weight: .semibold).monospacedDigit(),
+                        tint: tint
+                    )
+                }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: FinanceTokens.Radius.md, style: .continuous)
+                .fill(FinanceTokens.Surface.glass)
+                .overlay {
+                    RoundedRectangle(cornerRadius: FinanceTokens.Radius.md, style: .continuous)
+                        .stroke(FinanceTokens.Stroke.hairline, lineWidth: 0.5)
+                }
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onTap?()
+        }
     }
 }
 
