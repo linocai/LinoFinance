@@ -353,7 +353,7 @@ struct NewAccountSheet: View {
             Form {
                 TextField("账户名称", text: $name)
                 Picker("类型", selection: $accountType) {
-                    ForEach(AccountType.allCases, id: \.self) { type in
+                    ForEach([AccountType.balance, .investment, .credit], id: \.self) { type in
                         Text(type.title).tag(type)
                     }
                 }
