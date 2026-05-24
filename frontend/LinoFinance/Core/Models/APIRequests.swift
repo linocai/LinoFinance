@@ -91,6 +91,44 @@ struct CashFlowItemCreateRequest: Encodable {
     var note: String?
 }
 
+/// Wrapper that lets a JSON encoder emit `null` for an explicit clear while
+/// the outer Optional still elides the field when it's truly absent.
+///
+/// PATCH endpoints (v1.1.7+) rely on this to tell "leave unchanged" apart
+/// from "unlink": pass `nil` (the outer Optional) to skip the field, or
+/// `.null` to send JSON `null` so the backend treats the column as cleared.
+enum Nullable<T: Encodable>: Encodable {
+    case value(T)
+    case null
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .value(let value):
+            try container.encode(value)
+        case .null:
+            try container.encodeNil()
+        }
+    }
+}
+
+struct CashFlowItemUpdateRequest: Encodable {
+    var title: String?
+    var direction: String?
+    var cashFlowType: String?
+    var amount: DecimalValue?
+    var currency: CurrencyCode?
+    var exchangeRateId: String?
+    var convertedCnyAmount: DecimalValue?
+    var expectedDate: Date?
+    /// Use `.value(id)` to link, `.null` to unlink, omit entirely to leave alone.
+    var accountId: Nullable<String>?
+    /// Use `.value(id)` to link, `.null` to unlink, omit entirely to leave alone.
+    var categoryId: Nullable<String>?
+    var recurrenceRule: String?
+    var note: String?
+}
+
 struct CashFlowSettleRequest: Encodable {
     var entry: EntryCreateRequest
 }

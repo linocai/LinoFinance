@@ -55,6 +55,10 @@ struct FinanceRepository {
         try await apiClient.createCashFlowItem(request)
     }
 
+    func updateCashFlowItem(_ id: String, request: CashFlowItemUpdateRequest) async throws -> CashFlowItemDTO {
+        try await apiClient.updateCashFlowItem(id, request: request)
+    }
+
     func confirmCashFlowItem(_ id: String) async throws -> CashFlowItemDTO {
         try await apiClient.confirmCashFlowItem(id)
     }

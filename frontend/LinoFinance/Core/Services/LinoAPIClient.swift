@@ -118,6 +118,10 @@ struct LinoAPIClient {
         try await post("cash-flow-items", body: request)
     }
 
+    func updateCashFlowItem(_ id: String, request: CashFlowItemUpdateRequest) async throws -> CashFlowItemDTO {
+        try await patch("cash-flow-items/\(id)", body: request)
+    }
+
     func confirmCashFlowItem(_ id: String) async throws -> CashFlowItemDTO {
         try await post("cash-flow-items/\(id)/confirm")
     }
