@@ -836,7 +836,34 @@ struct NewEntrySheet: View {
             return
         }
 
+        // The account movement's currency must equal the account's currency
+        // (backend ledger check). For non-CNY accounts we also need a rate
+        // to produce convertedCnyAmount + exchange_rate_id; otherwise the
+        // dashboard and net-worth aggregates break.
+        let accountCandidates = mode.usesCreditAccount ? creditAccounts : balanceAccounts
+        guard let selectedAccount = accountCandidates.first(where: { $0.id == accountID }) else {
+            errorMessage = "找不到所选账户，请刷新后重试"
+            return
+        }
+        let accountCurrency = selectedAccount.currency
+
         let decimal = DecimalValue(decimalAmount)
+        let convertedCnyAmount: DecimalValue
+        let exchangeRateId: String?
+        if accountCurrency == .cny {
+            convertedCnyAmount = decimal
+            exchangeRateId = nil
+        } else {
+            let rate = environment.settingsViewModel.rates
+                .first { $0.fromCurrency == accountCurrency && $0.toCurrency == .cny }
+            guard let rate else {
+                errorMessage = "缺少 \(accountCurrency.rawValue) → CNY 汇率，请到设置中添加后再创建"
+                return
+            }
+            convertedCnyAmount = DecimalValue(decimalAmount * rate.rate.value)
+            exchangeRateId = rate.id
+        }
+
         let noteValue = note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note
         let categoryLines: [EntryCategoryLineCreateRequest]
         if let direction = mode.categoryDirection,
@@ -846,9 +873,9 @@ struct NewEntrySheet: View {
                     categoryId: categoryID,
                     direction: direction,
                     amount: decimal,
-                    currency: .cny,
-                    exchangeRateId: nil,
-                    convertedCnyAmount: decimal,
+                    currency: accountCurrency,
+                    exchangeRateId: exchangeRateId,
+                    convertedCnyAmount: convertedCnyAmount,
                     reimbursableFlag: isReimbursable && mode.supportsReimbursement,
                     reimbursementPayer: isReimbursable && mode.supportsReimbursement ? reimbursementPayer : nil,
                     reimbursementExpectedDate: isReimbursable && mode.supportsReimbursement ? reimbursementExpectedDate : nil,
@@ -872,9 +899,9 @@ struct NewEntrySheet: View {
                     statementCycleId: selectedStatementCycleID,
                     movementType: mode.movementType,
                     amount: decimal,
-                    currency: .cny,
-                    exchangeRateId: nil,
-                    convertedCnyAmount: decimal,
+                    currency: accountCurrency,
+                    exchangeRateId: exchangeRateId,
+                    convertedCnyAmount: convertedCnyAmount,
                     note: nil
                 )
             ]
