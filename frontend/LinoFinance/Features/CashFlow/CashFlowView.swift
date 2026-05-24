@@ -6,10 +6,24 @@ struct CashFlowView: View {
 
     private var filteredItems: [CashFlowItemDTO] {
         let search = environment.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !search.isEmpty else { return environment.cashFlowViewModel.items }
-        return environment.cashFlowViewModel.items.filter {
-            $0.title.localizedCaseInsensitiveContains(search)
-                || $0.cashFlowType.financeStatusTitle.localizedCaseInsensitiveContains(search)
+        let base = environment.cashFlowViewModel.items
+        let matched: [CashFlowItemDTO]
+        if search.isEmpty {
+            matched = base
+        } else {
+            matched = base.filter {
+                $0.title.localizedCaseInsensitiveContains(search)
+                    || $0.cashFlowType.financeStatusTitle.localizedCaseInsensitiveContains(search)
+            }
+        }
+        // Active rows first (expected/confirmed), settled drops to the
+        // bottom so the user's eye stays on what still needs action.
+        // Within each bucket, preserve the server's expected_date order.
+        return matched.sorted { lhs, rhs in
+            let lhsDone = lhs.status == "settled"
+            let rhsDone = rhs.status == "settled"
+            if lhsDone != rhsDone { return !lhsDone }
+            return lhs.expectedDate < rhs.expectedDate
         }
     }
 
@@ -249,9 +263,17 @@ private struct CashFlowRow: View {
     let item: CashFlowItemDTO
     let accounts: [AccountDTO]
 
+    private var isSettled: Bool { item.status == "settled" }
+
     private var tint: Color {
-        item.direction == "inflow" ? FinanceTokens.State.income : FinanceTokens.State.expense
+        if isSettled { return FinanceTokens.Text.tertiary }
+        return item.direction == "inflow" ? FinanceTokens.State.income : FinanceTokens.State.expense
     }
+
+    // Settled rows render at ~55% opacity so the whole row visually
+    // recedes; the StatusTag + position-at-bottom already carry the
+    // semantic, this just makes scanning fast.
+    private var rowOpacity: Double { isSettled ? 0.55 : 1.0 }
 
     var body: some View {
         #if os(iOS)
@@ -274,6 +296,7 @@ private struct CashFlowRow: View {
             Spacer(minLength: 0)
         }
         .padding(.vertical, 6)
+        .opacity(rowOpacity)
         #else
         HStack(spacing: 12) {
             directionIcon
@@ -292,6 +315,7 @@ private struct CashFlowRow: View {
             MoneyText(amount: item.amount, currency: item.currency, convertedCNY: item.convertedCnyAmount, prominence: .headline)
         }
         .padding(.vertical, 6)
+        .opacity(rowOpacity)
         #endif
     }
 
