@@ -105,6 +105,12 @@ struct MacRootView: View {
                     .frame(width: 520)
             }
         }
+        .sheet(isPresented: $environment.isShowingSettleCashFlowSheet) {
+            if let item = environment.settlingCashFlowItem {
+                SettleCompletionSheet(environment: environment, item: item)
+                    .frame(width: 460)
+            }
+        }
         .sheet(isPresented: $environment.isShowingNewReimbursementSheet) {
             NewReimbursementClaimSheet(environment: environment)
                 .frame(width: 540)
