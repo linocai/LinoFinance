@@ -388,6 +388,18 @@ private struct NewObjectSheets: ViewModifier {
                 NavigationStack { NewCashFlowSheet(environment: environment) }
                     .presentationDetents([.large])
             }
+            .sheet(isPresented: $environment.isShowingEditCashFlowSheet) {
+                if let item = environment.editingCashFlowItem {
+                    NavigationStack { EditCashFlowSheet(environment: environment, item: item) }
+                        .presentationDetents([.large])
+                }
+            }
+            .sheet(isPresented: $environment.isShowingSettleCashFlowSheet) {
+                if let item = environment.settlingCashFlowItem {
+                    NavigationStack { SettleCompletionSheet(environment: environment, item: item) }
+                        .presentationDetents([.medium, .large])
+                }
+            }
             .sheet(isPresented: $environment.isShowingNewReimbursementSheet) {
                 NavigationStack { NewReimbursementClaimSheet(environment: environment) }
                     .presentationDetents([.large])

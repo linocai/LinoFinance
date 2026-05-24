@@ -81,6 +81,21 @@ struct CashFlowView: View {
                         }
                         Button("取消", role: .destructive) { confirm(item, operation: "cancel") }
                     }
+                    #if os(iOS)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if item.status == "expected" || item.status == "confirmed" {
+                            Button("编辑") { confirm(item, operation: "edit") }
+                                .tint(.blue)
+                            if item.direction != "transfer" {
+                                Button("结算") { confirm(item, operation: "settle") }
+                                    .tint(.green)
+                            }
+                            Button("取消", role: .destructive) {
+                                confirm(item, operation: "cancel")
+                            }
+                        }
+                    }
+                    #endif
                 }
                 .listStyle(.inset)
             }
