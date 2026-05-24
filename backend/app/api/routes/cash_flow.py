@@ -5,7 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.schemas.cash_flow import CashFlowItemCreate, CashFlowItemRead, CashFlowSettle, CashFlowSettleRead
+from app.schemas.cash_flow import (
+    CashFlowItemCreate,
+    CashFlowItemRead,
+    CashFlowItemUpdate,
+    CashFlowSettle,
+    CashFlowSettleRead,
+)
 from app.services import cash_flow
 from app.services.ledger import LedgerNotFoundError, LedgerValidationError
 
@@ -47,6 +53,21 @@ def get_cash_flow_item(item_id: str, db: Session = Depends(get_db)) -> CashFlowI
         return cash_flow.get_cash_flow_item(db, item_id)
     except LedgerNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.patch("/{item_id}", response_model=CashFlowItemRead)
+def update_cash_flow_item(
+    item_id: str,
+    payload: CashFlowItemUpdate,
+    db: Session = Depends(get_db),
+) -> CashFlowItemRead:
+    try:
+        return cash_flow.update_cash_flow_item(db, item_id, payload)
+    except LedgerNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LedgerValidationError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.post("/{item_id}/confirm", response_model=CashFlowItemRead)

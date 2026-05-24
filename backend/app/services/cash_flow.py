@@ -9,7 +9,13 @@ from app.models.account import Account
 from app.models.cash_flow import CashFlowItem
 from app.models.category import Category
 from app.models.credit_statement_cycle import CreditStatementCycle
-from app.schemas.cash_flow import CashFlowItemCreate, CashFlowItemRead, CashFlowSettle, CashFlowSettleRead
+from app.schemas.cash_flow import (
+    CashFlowItemCreate,
+    CashFlowItemRead,
+    CashFlowItemUpdate,
+    CashFlowSettle,
+    CashFlowSettleRead,
+)
 from app.services import ledger
 from app.services.ledger import LedgerNotFoundError, LedgerValidationError, quantize_money
 
@@ -119,6 +125,108 @@ def settle_cash_flow_item(
         cash_flow_item=get_cash_flow_item(db, item_id),
         entry=ledger.get_entry(db, entry.id),
     )
+
+
+def update_cash_flow_item(
+    db: Session,
+    item_id: str,
+    payload: CashFlowItemUpdate,
+) -> CashFlowItemRead:
+    """Patch a cash flow item.
+
+    Uses ``payload.model_fields_set`` as the sentinel to distinguish
+    "field absent" (leave unchanged) from "field explicitly null"
+    (clear the value, only meaningful for the optional foreign-key
+    columns). ``settled`` and ``cancelled`` rows are immutable here —
+    callers must go through the dedicated lifecycle endpoints.
+    """
+
+    item = _get_cash_flow_or_raise(db, item_id)
+    if item.status in {"settled", "cancelled"}:
+        raise LedgerValidationError(
+            "Settled or cancelled cash flow items cannot be edited"
+        )
+
+    provided = payload.model_fields_set
+
+    if "title" in provided:
+        item.title = payload.title
+    if "direction" in provided:
+        item.direction = payload.direction
+    if "cash_flow_type" in provided:
+        item.cash_flow_type = payload.cash_flow_type
+    if "expected_date" in provided:
+        item.expected_date = payload.expected_date
+    if "account_id" in provided:
+        item.account_id = payload.account_id
+    if "category_id" in provided:
+        item.category_id = payload.category_id
+    if "recurrence_rule" in provided:
+        item.recurrence_rule = payload.recurrence_rule
+    if "note" in provided:
+        item.note = payload.note
+
+    money_provided = bool(
+        provided & {"amount", "currency", "exchange_rate_id", "converted_cny_amount"}
+    )
+    if money_provided:
+        new_amount = (
+            quantize_money(payload.amount) if "amount" in provided else item.amount
+        )
+        if "currency" in provided and payload.currency is not None:
+            new_currency = payload.currency.upper()
+        else:
+            new_currency = item.currency
+        new_rate_id = (
+            payload.exchange_rate_id
+            if "exchange_rate_id" in provided
+            else item.exchange_rate_id
+        )
+        new_converted = (
+            payload.converted_cny_amount
+            if "converted_cny_amount" in provided
+            else None
+        )
+
+        if new_currency != "CNY" and not new_rate_id:
+            raise LedgerValidationError(
+                "exchange_rate_id is required when currency is not CNY"
+            )
+
+        converted, resolved_rate_id = _resolve_payload_conversion(
+            db,
+            new_amount,
+            new_currency,
+            item.expected_date,
+            new_rate_id,
+            new_converted,
+        )
+        item.amount = new_amount
+        item.currency = new_currency
+        item.exchange_rate_id = resolved_rate_id
+        item.converted_cny_amount = converted
+
+    _validate_update_links(db, item)
+
+    db.flush()
+    db.commit()
+    return get_cash_flow_item(db, item_id)
+
+
+def _validate_update_links(db: Session, item: CashFlowItem) -> None:
+    """Re-validate optional link columns against the post-mutation state."""
+
+    if item.account_id is not None:
+        account = db.get(Account, item.account_id)
+        if account is None:
+            raise LedgerValidationError("Account not found")
+        if account.currency != item.currency:
+            raise LedgerValidationError(
+                "Cash flow currency must match linked account currency"
+            )
+
+    if item.category_id is not None and db.get(Category, item.category_id) is None:
+        raise LedgerValidationError("Category not found")
 
 
 def _build_cash_flow_item(db: Session, payload: CashFlowItemCreate) -> CashFlowItem:
