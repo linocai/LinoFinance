@@ -71,7 +71,15 @@ struct ReimbursementsView: View {
             }
 
             if let message = environment.reimbursementsViewModel.errorMessage {
-                ErrorBanner(message: message)
+                ErrorBanner(
+                    message: message,
+                    onRetry: {
+                        Task { try? await environment.reimbursementsViewModel.refresh() }
+                    },
+                    onDismiss: {
+                        environment.reimbursementsViewModel.errorMessage = nil
+                    }
+                )
             }
         }
         .padding(FinanceTokens.Spacing.page)
@@ -105,11 +113,22 @@ struct ReimbursementsView: View {
         case "abandon":
             ("放弃报销？", "放弃后这笔垫付会作为个人支出。", "放弃", .destructive)
         default:
-            ("标记到账？", "到账会创建一条正式收入记录并影响账户余额。", "标记到账", nil)
+            ("标记到账？", receiveConfirmationMessage(for: claim), "标记到账", nil)
         }
         confirmation = ConfirmAction(title: copy.0, message: copy.1, confirmTitle: copy.2, role: copy.3) {
             Task { await perform(claim, operation: operation) }
         }
+    }
+
+    /// Builds the explicit confirmation copy for the 到账 button.
+    /// Names the receiving account, the amount and currency so the user
+    /// understands that an income entry will be created.
+    private func receiveConfirmationMessage(for claim: ReimbursementClaimDTO) -> String {
+        let accountName = environment.accountsViewModel.accounts.balanceAccounts.first(
+            where: { $0.currency == claim.currency }
+        )?.name ?? "<无匹配账户>"
+        let amount = FinanceFormatter.money(claim.amount, currency: claim.currency)
+        return "标记报销到账会创建一条已确认的「工资外收入」记账，并把 \(amount) 计入余额账户「\(accountName)」。继续吗？"
     }
 
     private func perform(_ claim: ReimbursementClaimDTO, operation: String) async {
@@ -126,11 +145,11 @@ struct ReimbursementsView: View {
             default:
                 try await markReceived(claim)
             }
-            try? await environment.dashboardViewModel.refresh()
-            try? await environment.accountsViewModel.refresh()
-            try? await environment.entriesViewModel.refresh()
-            try? await environment.cashFlowViewModel.refresh()
-            try? await environment.reportsViewModel.refresh()
+            try await environment.dashboardViewModel.refresh()
+            try await environment.accountsViewModel.refresh()
+            try await environment.entriesViewModel.refresh()
+            try await environment.cashFlowViewModel.refresh()
+            try await environment.reportsViewModel.refresh()
         } catch {
             environment.reimbursementsViewModel.errorMessage = error.localizedDescription
             environment.lastErrorMessage = error.localizedDescription
@@ -144,11 +163,16 @@ struct ReimbursementsView: View {
         guard let category = environment.entriesViewModel.categories.first(where: { $0.type == .income }) else {
             throw APIError.badStatus(400, "标记到账需要至少一个收入分类")
         }
+        // Prefix every note with [claim:<uuid>] so the resulting income
+        // entry is traceable back to the originating reimbursement claim.
+        // The backend does not (yet) carry a claim_id FK on entries; this
+        // greppable trace stands in for that.
+        let traceNote = "[claim:\(claim.id)] " + (claim.note ?? "")
         let entry = EntryCreateRequest(
             title: "报销到账",
             date: Date(),
             status: .confirmed,
-            note: claim.note,
+            note: traceNote,
             categoryLines: [
                 EntryCategoryLineCreateRequest(
                     categoryId: category.id,
@@ -157,7 +181,7 @@ struct ReimbursementsView: View {
                     currency: claim.currency,
                     exchangeRateId: claim.exchangeRateId,
                     convertedCnyAmount: claim.convertedCnyAmount,
-                    note: claim.note
+                    note: traceNote
                 )
             ],
             accountMovements: [
@@ -169,7 +193,7 @@ struct ReimbursementsView: View {
                     currency: claim.currency,
                     exchangeRateId: claim.exchangeRateId,
                     convertedCnyAmount: claim.convertedCnyAmount,
-                    note: claim.note
+                    note: traceNote
                 )
             ]
         )
@@ -368,7 +392,7 @@ struct NewReimbursementClaimSheet: View {
                     data: attachment.data
                 )
             }
-            try? await environment.reportsViewModel.refresh()
+            try await environment.reportsViewModel.refresh()
             environment.isShowingNewReimbursementSheet = false
         } catch {
             errorMessage = error.localizedDescription

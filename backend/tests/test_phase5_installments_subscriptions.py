@@ -155,7 +155,7 @@ def test_cancel_installment_plan_cancels_open_cash_flows(client) -> None:
     assert cancel_response.json()["status"] == "cancelled"
     cash_flows = [
         item
-        for item in client.get("/api/v1/cash-flow-items").json()
+        for item in client.get("/api/v1/cash-flow-items?include_cancelled=true").json()
         if item["linked_installment_plan_id"] == plan["id"]
     ]
     assert {item["status"] for item in cash_flows} == {"cancelled"}
@@ -342,7 +342,7 @@ def test_cancel_subscription_rule_cancels_open_cash_flows(client) -> None:
     assert cancel_response.json()["status"] == "cancelled"
     cash_flow = [
         item
-        for item in client.get("/api/v1/cash-flow-items").json()
+        for item in client.get("/api/v1/cash-flow-items?include_cancelled=true").json()
         if item["linked_subscription_rule_id"] == rule["id"]
     ][0]
     assert cash_flow["status"] == "cancelled"

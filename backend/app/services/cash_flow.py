@@ -34,10 +34,14 @@ def list_cash_flow_items(
     status: Optional[str] = None,
     date_from: Optional[DateType] = None,
     date_to: Optional[DateType] = None,
+    include_cancelled: bool = False,
 ) -> List[CashFlowItemRead]:
     statement = select(CashFlowItem)
     if status is not None:
+        # Explicit status filter wins; include_cancelled is ignored.
         statement = statement.where(CashFlowItem.status == status)
+    elif not include_cancelled:
+        statement = statement.where(CashFlowItem.status != "cancelled")
     if date_from is not None:
         statement = statement.where(CashFlowItem.expected_date >= date_from)
     if date_to is not None:
@@ -73,10 +77,14 @@ def set_cash_flow_status(
     item = _get_cash_flow_or_raise(db, item_id)
     if status not in {"expected", "confirmed", "cancelled"}:
         raise LedgerValidationError("Unsupported cash flow status")
-    if item.status in {"settled", "cancelled"}:
-        raise LedgerValidationError("Settled or cancelled cash flow items cannot be changed")
     if item.status == status:
+        # Idempotent no-op for any matching status (incl. cancelled→cancel).
         return CashFlowItemRead.model_validate(item)
+    if item.status == "settled":
+        raise LedgerValidationError("Settled cash flow items cannot be changed")
+    if item.status == "cancelled":
+        # Cancelled is terminal for non-cancel targets.
+        raise LedgerValidationError("Cancelled cash flow items cannot be changed")
     if status == "confirmed" and item.status != "expected":
         raise LedgerValidationError("Only expected cash flow items can be confirmed")
     item.status = status

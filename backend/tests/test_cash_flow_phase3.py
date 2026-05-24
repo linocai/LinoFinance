@@ -356,3 +356,122 @@ def test_credit_charge_generates_and_repayment_settles_repayment_cash_flow(clien
     assert settled_cash_flow["converted_cny_amount"] == "0"
     assert settled_cash_flow["status"] == "settled"
     assert Decimal(client.get(f"/api/v1/accounts/{credit_account['id']}").json()["current_liability"]) == Decimal("0")
+
+
+def test_recancel_is_idempotent(client) -> None:
+    response = client.post(
+        "/api/v1/cash-flow-items",
+        json={
+            "title": "Expected rent",
+            "direction": "outflow",
+            "cash_flow_type": "one_time",
+            "amount": "800",
+            "currency": "CNY",
+            "expected_date": "2026-06-05",
+        },
+    )
+    item = response.json()
+
+    first = client.post(f"/api/v1/cash-flow-items/{item['id']}/cancel")
+    assert first.status_code == 200
+    assert first.json()["status"] == "cancelled"
+
+    # Cancel again — must be a 200 idempotent no-op, not a 400.
+    second = client.post(f"/api/v1/cash-flow-items/{item['id']}/cancel")
+    assert second.status_code == 200
+    assert second.json()["status"] == "cancelled"
+
+
+def test_list_hides_cancelled_by_default(client) -> None:
+    create_account(client, balance="0")
+    keep = client.post(
+        "/api/v1/cash-flow-items",
+        json={
+            "title": "Keep",
+            "direction": "outflow",
+            "cash_flow_type": "one_time",
+            "amount": "100",
+            "currency": "CNY",
+            "expected_date": "2026-06-05",
+        },
+    ).json()
+    drop = client.post(
+        "/api/v1/cash-flow-items",
+        json={
+            "title": "Drop",
+            "direction": "outflow",
+            "cash_flow_type": "one_time",
+            "amount": "200",
+            "currency": "CNY",
+            "expected_date": "2026-06-06",
+        },
+    ).json()
+
+    cancel_response = client.post(f"/api/v1/cash-flow-items/{drop['id']}/cancel")
+    assert cancel_response.status_code == 200
+
+    default_ids = {row["id"] for row in client.get("/api/v1/cash-flow-items").json()}
+    assert keep["id"] in default_ids
+    assert drop["id"] not in default_ids
+
+    all_ids = {
+        row["id"]
+        for row in client.get("/api/v1/cash-flow-items?include_cancelled=true").json()
+    }
+    assert keep["id"] in all_ids
+    assert drop["id"] in all_ids
+
+    cancelled_only = client.get("/api/v1/cash-flow-items?status=cancelled").json()
+    cancelled_ids = {row["id"] for row in cancelled_only}
+    assert cancelled_ids == {drop["id"]}
+
+
+def test_settled_cannot_be_cancelled(client) -> None:
+    account = create_account(client, balance="100")
+    category = create_category(client)
+    item = client.post(
+        "/api/v1/cash-flow-items",
+        json={
+            "title": "Expected salary",
+            "direction": "inflow",
+            "cash_flow_type": "salary",
+            "amount": "1000",
+            "currency": "CNY",
+            "expected_date": "2026-06-01",
+            "account_id": account["id"],
+            "category_id": category["id"],
+            "status": "confirmed",
+        },
+    ).json()
+
+    settle_response = client.post(
+        f"/api/v1/cash-flow-items/{item['id']}/settle",
+        json={
+            "entry": {
+                "title": "June salary",
+                "entry_type": "single",
+                "date": "2026-06-01",
+                "category_lines": [
+                    {
+                        "category_id": category["id"],
+                        "direction": "income",
+                        "amount": "1000",
+                        "currency": "CNY",
+                    }
+                ],
+                "account_movements": [
+                    {
+                        "account_id": account["id"],
+                        "movement_type": "balance_in",
+                        "amount": "1000",
+                        "currency": "CNY",
+                    }
+                ],
+            }
+        },
+    )
+    assert settle_response.status_code == 200
+
+    cancel_response = client.post(f"/api/v1/cash-flow-items/{item['id']}/cancel")
+    assert cancel_response.status_code == 400
+    assert "Settled" in cancel_response.json()["detail"]
