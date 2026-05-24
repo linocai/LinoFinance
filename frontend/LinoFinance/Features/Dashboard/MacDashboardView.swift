@@ -125,6 +125,13 @@ struct MacDashboardView: View {
         let cashflow30dLines = currencyLines(summary.cashFlow30dByCurrency)
         let cashflowCnyAmount = currencyAmount(summary.cashFlow30dByCurrency, currency: .cny)
 
+        // Four cards, four distinct tints — values render in `tint` so the
+        // grid reads at a glance:
+        //   • 可支配 → 绿 (income)：常态最关心，正向
+        //   • 投资  → 紫 (ai)：独立资产池，自带"未来感"
+        //   • 净资产 → 蓝 (brand.primary)：核心品牌色给到全局指标
+        //   • 现金流 → 橙 (credit)：方向中性时的提醒色；金额本身的正负
+        //              由 trend 行（已有 +/− 着色）承担
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 4), spacing: 14) {
             KPICard(
                 title: "未来一月可支配",
@@ -138,7 +145,7 @@ struct MacDashboardView: View {
                 title: "投资账户",
                 valueLines: investmentLines,
                 systemImage: "chart.line.uptrend.xyaxis.circle",
-                tint: FinanceTokens.Brand.primary,
+                tint: FinanceTokens.State.ai,
                 tag: .init(text: "\(investmentAccountCount) 账户", style: .draft),
                 trend: investmentTrendSpec(summary.todayPnlByCurrency)
             )
@@ -154,9 +161,9 @@ struct MacDashboardView: View {
                 title: "未来 30 天",
                 valueLines: cashflow30dLines,
                 systemImage: "calendar.badge.clock",
-                tint: (cashflowCnyAmount?.value ?? 0) < 0 ? FinanceTokens.State.expense : FinanceTokens.State.income,
+                tint: FinanceTokens.State.credit,
                 tag: .init(text: "30 天", style: .draft),
-                trend: nil
+                trend: cashflowTrendSpec(cashflowCnyAmount)
             )
         }
     }
@@ -170,6 +177,18 @@ struct MacDashboardView: View {
 
     private func currencyAmount(_ rows: [CurrencyAmountDTO]?, currency: CurrencyCode) -> DecimalValue? {
         rows?.first(where: { $0.currency == currency })?.amount
+    }
+
+    private func cashflowTrendSpec(_ cnyAmount: DecimalValue?) -> KPICard.TrendSpec? {
+        guard let cnyAmount else { return nil }
+        let value = cnyAmount.value
+        if value > 0 {
+            return .init(text: "本月净流入", tint: FinanceTokens.State.income)
+        } else if value < 0 {
+            return .init(text: "本月净流出", tint: FinanceTokens.State.expense)
+        } else {
+            return .init(text: "本月持平", tint: FinanceTokens.Text.secondary)
+        }
     }
 
     private func investmentTrendSpec(_ rows: [CurrencyAmountDTO]?) -> KPICard.TrendSpec? {

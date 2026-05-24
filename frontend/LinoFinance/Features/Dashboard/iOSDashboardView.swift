@@ -203,7 +203,7 @@ private struct NetWorthHeroSection: View {
             StatTileMultiCurrency(
                 title: "投资账户",
                 lines: investmentLines,
-                tint: FinanceTokens.Brand.primary,
+                tint: FinanceTokens.State.ai,
                 onTap: onInvestmentTileTap
             )
             statTile(

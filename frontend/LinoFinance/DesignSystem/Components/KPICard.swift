@@ -68,11 +68,14 @@ struct KPICard: View {
                 }
             }
 
+            // Use `tint` for the value text so each card carries a
+            // distinct, scannable colour. Falls back to `Text.primary`
+            // automatically when the caller does not override tint.
             if values.count == 1 {
                 PrivacyAmount(
                     value: values[0],
                     font: FinanceTypography.statValue,
-                    tint: FinanceTokens.Text.primary
+                    tint: tint
                 )
             } else {
                 VStack(alignment: .leading, spacing: 4) {
@@ -80,7 +83,7 @@ struct KPICard: View {
                         PrivacyAmount(
                             value: value,
                             font: .system(size: 22, weight: .semibold).monospacedDigit(),
-                            tint: FinanceTokens.Text.primary
+                            tint: tint
                         )
                     }
                 }
