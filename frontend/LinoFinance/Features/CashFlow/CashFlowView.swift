@@ -437,3 +437,181 @@ struct NewCashFlowSheet: View {
         return dates
     }
 }
+
+struct EditCashFlowSheet: View {
+    @Bindable var environment: AppEnvironment
+    let initial: CashFlowItemDTO
+
+    @State private var title: String
+    @State private var amount: String
+    @State private var expectedDate: Date
+    @State private var direction: String
+    @State private var cashFlowType: String
+    @State private var accountId: String?
+    @State private var categoryId: String?
+    @State private var currency: CurrencyCode
+    @State private var exchangeRateId: String?
+    @State private var note: String
+    @State private var errorMessage: String?
+    @State private var submitting = false
+
+    init(environment: AppEnvironment, item: CashFlowItemDTO) {
+        self.environment = environment
+        self.initial = item
+        _title = State(initialValue: item.title)
+        _amount = State(initialValue: "\(item.amount.value)")
+        _expectedDate = State(initialValue: item.expectedDate)
+        _direction = State(initialValue: item.direction)
+        _cashFlowType = State(initialValue: item.cashFlowType)
+        _accountId = State(initialValue: item.accountId)
+        _categoryId = State(initialValue: item.categoryId)
+        _currency = State(initialValue: item.currency)
+        _exchangeRateId = State(initialValue: item.exchangeRateId)
+        _note = State(initialValue: item.note ?? "")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("编辑现金流")
+                .font(.title2.weight(.semibold))
+            Form {
+                TextField("标题", text: $title)
+                TextField("金额", text: $amount)
+                Picker("方向", selection: $direction) {
+                    Text("进账").tag("inflow")
+                    Text("出账").tag("outflow")
+                    Text("转账").tag("transfer")
+                }
+                Picker("类型", selection: $cashFlowType) {
+                    ForEach(
+                        ["salary", "rent_income", "reimbursement", "subscription",
+                         "credit_repayment", "installment", "one_time", "other"],
+                        id: \.self
+                    ) {
+                        Text($0.financeStatusTitle).tag($0)
+                    }
+                }
+                DatePicker("预计日期", selection: $expectedDate, displayedComponents: .date)
+                Picker("币种", selection: $currency) {
+                    ForEach(CurrencyCode.allCases, id: \.self) { code in
+                        Text(code.rawValue).tag(code)
+                    }
+                }
+                if currency != .cny {
+                    Picker(
+                        "汇率",
+                        selection: Binding(get: { exchangeRateId }, set: { exchangeRateId = $0 })
+                    ) {
+                        Text("未指定").tag(Optional<String>.none)
+                        ForEach(
+                            environment.settingsViewModel.rates.filter { $0.fromCurrency == currency }
+                        ) { rate in
+                            Text("\(rate.fromCurrency.rawValue) → CNY @ \(rate.rate.value)")
+                                .tag(Optional(rate.id))
+                        }
+                    }
+                }
+                Picker(
+                    "账户",
+                    selection: Binding(get: { accountId }, set: { accountId = $0 })
+                ) {
+                    Text("不关联").tag(Optional<String>.none)
+                    ForEach(
+                        environment.accountsViewModel.accounts
+                            .filter { $0.currency == currency }
+                    ) { account in
+                        Text(account.name).tag(Optional(account.id))
+                    }
+                }
+                Picker(
+                    "分类",
+                    selection: Binding(get: { categoryId }, set: { categoryId = $0 })
+                ) {
+                    Text("不关联").tag(Optional<String>.none)
+                    ForEach(
+                        environment.entriesViewModel.categories
+                            .filter { $0.type == (direction == "inflow" ? .income : .expense) }
+                    ) { category in
+                        Text(category.name).tag(Optional(category.id))
+                    }
+                }
+                TextField("备注", text: $note)
+            }
+            if let errorMessage {
+                ErrorBanner(message: errorMessage)
+            }
+            HStack {
+                Spacer()
+                Button("取消") {
+                    environment.clearEditCashFlowSheet()
+                }
+                .disabled(submitting)
+                Button("保存") { Task { await submit() } }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!isFormValid || submitting)
+            }
+        }
+        .padding(22)
+        .task {
+            try? await environment.settingsViewModel.refresh()
+            try? await environment.accountsViewModel.refresh()
+            try? await environment.entriesViewModel.refresh()
+        }
+        .onChange(of: currency) { _, newValue in
+            // Drop any account that no longer matches the chosen currency.
+            if let id = accountId,
+               let account = environment.accountsViewModel.accounts.first(where: { $0.id == id }),
+               account.currency != newValue {
+                accountId = nil
+            }
+            if newValue == .cny {
+                exchangeRateId = nil
+            }
+        }
+    }
+
+    private var isFormValid: Bool {
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        guard Decimal(string: amount) != nil else { return false }
+        if currency != .cny && exchangeRateId == nil { return false }
+        return true
+    }
+
+    private func submit() async {
+        guard let decimal = Decimal(string: amount) else { return }
+        if currency != .cny && exchangeRateId == nil {
+            errorMessage = "缺少 \(currency.rawValue) → CNY 汇率，请到设置中添加"
+            return
+        }
+        submitting = true
+        defer { submitting = false }
+
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let request = CashFlowItemUpdateRequest(
+            title: trimmedTitle,
+            direction: direction,
+            cashFlowType: cashFlowType,
+            amount: DecimalValue(decimal),
+            currency: currency,
+            exchangeRateId: exchangeRateId,
+            convertedCnyAmount: nil,
+            expectedDate: expectedDate,
+            accountId: accountId.map(Nullable.value) ?? .null,
+            categoryId: categoryId.map(Nullable.value) ?? .null,
+            recurrenceRule: nil,
+            note: trimmedNote.isEmpty ? nil : trimmedNote
+        )
+
+        do {
+            try await environment.cashFlowViewModel.update(initial.id, request: request)
+            try await environment.dashboardViewModel.refresh()
+            try await environment.accountsViewModel.refresh()
+            try await environment.entriesViewModel.refresh()
+            try await environment.reportsViewModel.refresh()
+            environment.clearEditCashFlowSheet()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}

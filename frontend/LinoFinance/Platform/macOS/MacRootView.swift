@@ -99,6 +99,12 @@ struct MacRootView: View {
             NewCashFlowSheet(environment: environment)
                 .frame(width: 520)
         }
+        .sheet(isPresented: $environment.isShowingEditCashFlowSheet) {
+            if let item = environment.editingCashFlowItem {
+                EditCashFlowSheet(environment: environment, item: item)
+                    .frame(width: 520)
+            }
+        }
         .sheet(isPresented: $environment.isShowingNewReimbursementSheet) {
             NewReimbursementClaimSheet(environment: environment)
                 .frame(width: 540)

@@ -25,6 +25,8 @@ final class AppEnvironment {
     var isShowingNewAccountSheet = false
     var isShowingNewEntrySheet = false
     var isShowingNewCashFlowSheet = false
+    var isShowingEditCashFlowSheet = false
+    var editingCashFlowItem: CashFlowItemDTO?
     var isShowingNewReimbursementSheet = false
     var isShowingNewStatementCycleSheet = false
     var isShowingNewInstallmentSheet = false
@@ -231,6 +233,16 @@ final class AppEnvironment {
     func beginNewCashFlow() {
         selectedModule = .cashFlow
         isShowingNewCashFlowSheet = true
+    }
+
+    func beginEditCashFlow(_ item: CashFlowItemDTO) {
+        editingCashFlowItem = item
+        isShowingEditCashFlowSheet = true
+    }
+
+    func clearEditCashFlowSheet() {
+        isShowingEditCashFlowSheet = false
+        editingCashFlowItem = nil
     }
 
     func beginNewReimbursement() {
