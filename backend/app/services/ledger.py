@@ -359,8 +359,8 @@ def _resolve_statement_cycle_for_movement(
 def _validate_movement_account_type(account: Account, movement_type: str) -> None:
     if movement_type in {"credit_charge", "credit_repayment"} and account.type != "credit":
         raise LedgerValidationError("Credit movements require a credit account")
-    if movement_type in {"balance_in", "balance_out", "transfer_in", "transfer_out"} and account.type != "balance":
-        raise LedgerValidationError("Balance movements require a balance account")
+    if movement_type in {"balance_in", "balance_out", "transfer_in", "transfer_out"} and account.type == "credit":
+        raise LedgerValidationError("Balance movements require a non-credit account")
 
 
 def _resolve_rate(
