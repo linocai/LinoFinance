@@ -201,6 +201,12 @@ struct AccountAdjustmentCreateRequest: Encodable {
     var createdBy = "user"
 }
 
+struct DailyPnLCreateRequest: Encodable {
+    var newBalance: DecimalValue
+    var asOfDate: Date?
+    var note: String?
+}
+
 struct NotificationRuleCreateRequest: Encodable {
     var title: String
     var ruleType: String

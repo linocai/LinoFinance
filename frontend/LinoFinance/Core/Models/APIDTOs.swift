@@ -14,6 +14,11 @@ struct AppHealthDTO: Decodable, Equatable {
     let apnsDryRun: Bool?
 }
 
+struct CurrencyAmountDTO: Decodable, Equatable, Hashable {
+    let currency: CurrencyCode
+    let amount: DecimalValue
+}
+
 struct DashboardSummaryDTO: Decodable, Equatable {
     let baseCurrency: String
     let balanceTotalCny: DecimalValue
@@ -22,6 +27,35 @@ struct DashboardSummaryDTO: Decodable, Equatable {
     let draftEntryCount: Int
     let confirmedEntryCount: Int
     let voidedEntryCount: Int
+
+    // New in v1.1.6 — optional so an older backend still decodes.
+    let investmentTotalCny: DecimalValue?
+    let investmentTotalByCurrency: [CurrencyAmountDTO]?
+    let todayPnlByCurrency: [CurrencyAmountDTO]?
+    let disposable30dByCurrency: [CurrencyAmountDTO]?
+    let cashFlow30dByCurrency: [CurrencyAmountDTO]?
+
+    // The global decoder uses .convertFromSnakeCase, which first transforms
+    // the JSON key and *then* matches it against CodingKeys raw values.
+    // For digit+letter segments the transformer capitalises the letter
+    // (`"30d".capitalized == "30D"`), so e.g. `disposable_30d_by_currency`
+    // ends up as `disposable30DByCurrency` (capital D). To recover the
+    // small-d Swift name we want, the CodingKeys raw values must be the
+    // transformer's *output*, not the snake-case source.
+    private enum CodingKeys: String, CodingKey {
+        case baseCurrency
+        case balanceTotalCny
+        case creditLiabilityTotalCny
+        case netWorthCny
+        case draftEntryCount
+        case confirmedEntryCount
+        case voidedEntryCount
+        case investmentTotalCny
+        case investmentTotalByCurrency
+        case todayPnlByCurrency
+        case disposable30dByCurrency = "disposable30DByCurrency"
+        case cashFlow30dByCurrency = "cashFlow30DByCurrency"
+    }
 }
 
 struct AccountDTO: Identifiable, Decodable, Equatable, Hashable {
@@ -343,6 +377,17 @@ struct AccountAdjustmentDTO: Identifiable, Decodable, Equatable, Hashable {
     let createdBy: String
 }
 
+struct DailyPnLReadDTO: Decodable, Equatable, Hashable {
+    let adjustmentId: String
+    let accountId: String
+    let currency: CurrencyCode
+    let balanceBefore: DecimalValue
+    let balanceAfter: DecimalValue
+    let deltaAmount: DecimalValue
+    let asOfDate: Date
+    let source: String
+}
+
 struct SearchHitDTO: Identifiable, Decodable, Equatable, Hashable {
     let type: String
     let id: String
@@ -496,11 +541,13 @@ struct ExportDatasetListDTO: Decodable, Equatable, Hashable {
 enum AccountType: String, Codable, CaseIterable, Hashable {
     case balance
     case credit
+    case investment
 
     var title: String {
         switch self {
         case .balance: "余额"
         case .credit: "信用"
+        case .investment: "投资"
         }
     }
 }

@@ -408,6 +408,9 @@ private struct NewObjectSheets: ViewModifier {
                 NavigationStack { NewNotificationRuleSheet(environment: environment) }
                     .presentationDetents([.large])
             }
+            .sheet(isPresented: $environment.isShowingDailyPnLSheet) {
+                DailyPnLSheet(environment: environment)
+            }
     }
 }
 

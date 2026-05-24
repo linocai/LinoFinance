@@ -157,4 +157,9 @@ extension Array where Element == AccountDTO {
         filter { $0.type == .credit }
             .sorted { $0.displayOrder == $1.displayOrder ? $0.name < $1.name : $0.displayOrder < $1.displayOrder }
     }
+
+    var investmentAccounts: [AccountDTO] {
+        filter { $0.type == .investment }
+            .sorted { $0.displayOrder == $1.displayOrder ? $0.name < $1.name : $0.displayOrder < $1.displayOrder }
+    }
 }

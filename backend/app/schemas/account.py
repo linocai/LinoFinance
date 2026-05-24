@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class AccountCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    type: str = Field(pattern="^(balance|credit)$")
+    type: str = Field(pattern="^(balance|credit|investment)$")
     currency: str = Field(min_length=3, max_length=3)
     current_balance: Decimal = Decimal("0")
     current_liability: Decimal = Decimal("0")
