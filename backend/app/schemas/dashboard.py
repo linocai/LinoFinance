@@ -1,8 +1,18 @@
 from decimal import Decimal
+from typing import List
 
 from pydantic import BaseModel, field_serializer
 
 from app.schemas.entry import format_decimal
+
+
+class CurrencyAmount(BaseModel):
+    currency: str
+    amount: Decimal
+
+    @field_serializer("amount")
+    def serialize_amount(self, value: Decimal) -> str:
+        return format_decimal(value)
 
 
 class DashboardSummary(BaseModel):
@@ -14,7 +24,18 @@ class DashboardSummary(BaseModel):
     confirmed_entry_count: int
     voided_entry_count: int
 
-    @field_serializer("balance_total_cny", "credit_liability_total_cny", "net_worth_cny")
+    # new in v1.1.6 — additive, defaults keep older callers safe
+    investment_total_cny: Decimal = Decimal("0")
+    investment_total_by_currency: List[CurrencyAmount] = []
+    today_pnl_by_currency: List[CurrencyAmount] = []
+    disposable_30d_by_currency: List[CurrencyAmount] = []
+    cash_flow_30d_by_currency: List[CurrencyAmount] = []
+
+    @field_serializer(
+        "balance_total_cny",
+        "credit_liability_total_cny",
+        "net_worth_cny",
+        "investment_total_cny",
+    )
     def serialize_decimal(self, value: Decimal) -> str:
         return format_decimal(value)
-
