@@ -34,6 +34,28 @@ struct DashboardSummaryDTO: Decodable, Equatable {
     let todayPnlByCurrency: [CurrencyAmountDTO]?
     let disposable30dByCurrency: [CurrencyAmountDTO]?
     let cashFlow30dByCurrency: [CurrencyAmountDTO]?
+
+    // The global decoder uses .convertFromSnakeCase, which first transforms
+    // the JSON key and *then* matches it against CodingKeys raw values.
+    // For digit+letter segments the transformer capitalises the letter
+    // (`"30d".capitalized == "30D"`), so e.g. `disposable_30d_by_currency`
+    // ends up as `disposable30DByCurrency` (capital D). To recover the
+    // small-d Swift name we want, the CodingKeys raw values must be the
+    // transformer's *output*, not the snake-case source.
+    private enum CodingKeys: String, CodingKey {
+        case baseCurrency
+        case balanceTotalCny
+        case creditLiabilityTotalCny
+        case netWorthCny
+        case draftEntryCount
+        case confirmedEntryCount
+        case voidedEntryCount
+        case investmentTotalCny
+        case investmentTotalByCurrency
+        case todayPnlByCurrency
+        case disposable30dByCurrency = "disposable30DByCurrency"
+        case cashFlow30dByCurrency = "cashFlow30DByCurrency"
+    }
 }
 
 struct AccountDTO: Identifiable, Decodable, Equatable, Hashable {
