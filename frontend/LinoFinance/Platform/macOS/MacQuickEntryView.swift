@@ -8,7 +8,10 @@ import AppKit
 struct MacQuickEntryView: View {
     @Bindable var environment: AppEnvironment
     @Environment(\.dismiss) private var dismiss
-    @State private var mode: Mode = .ai
+    // Form is the most common path; AI mode lives behind the segmented
+    // switcher when needed. Defaulting to .form also means @FocusState
+    // can plant the caret on 标题 the moment the window opens.
+    @State private var mode: Mode = .form
     @State private var sourceText = ""
     @State private var pastedText = ""
     @State private var title = ""
@@ -19,6 +22,7 @@ struct MacQuickEntryView: View {
     @State private var date = Date()
     @State private var errorMessage: String?
     @State private var isSubmitting = false
+    @FocusState private var titleFieldFocused: Bool
 
     enum Mode: String, CaseIterable, Identifiable {
         case ai, form, paste
@@ -44,8 +48,25 @@ struct MacQuickEntryView: View {
         .frame(minWidth: 560, minHeight: 440)
         .background(CanvasBackground())
         .task {
+            // Pull the app forward; the call site in MenuBarPopover /
+            // MacRootView already does this, but doing it again from
+            // inside the window is cheap and handles the case where
+            // the user re-focused some other app between click and
+            // window appear.
+            NSApp.activate(ignoringOtherApps: true)
+            // Plant the caret on 标题 so the user can start typing
+            // immediately — this is the actual fix for "字打不进去".
+            titleFieldFocused = true
             try? await environment.accountsViewModel.refresh()
             try? await environment.entriesViewModel.refresh()
+        }
+        .onChange(of: mode) { _, newMode in
+            // Re-focus 标题 every time the user pops back into the
+            // form tab. AI / paste tabs use TextEditor so they don't
+            // need the @FocusState bridge.
+            if newMode == .form {
+                titleFieldFocused = true
+            }
         }
     }
 
@@ -58,7 +79,7 @@ struct MacQuickEntryView: View {
                 Text("快速记账")
                     .font(FinanceTypography.headline)
                     .foregroundStyle(FinanceTokens.Text.primary)
-                Text("⌘K · 自然语言 / 表单 / 粘贴")
+                Text("自然语言 / 表单 / 粘贴")
                     .font(FinanceTypography.caption)
                     .foregroundStyle(FinanceTokens.Text.secondary)
             }
@@ -127,6 +148,7 @@ struct MacQuickEntryView: View {
             HStack(spacing: 10) {
                 TextField("标题", text: $title)
                     .textFieldStyle(.roundedBorder)
+                    .focused($titleFieldFocused)
                 TextField("金额", text: $amount)
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 140)

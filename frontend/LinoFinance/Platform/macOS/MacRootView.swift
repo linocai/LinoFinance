@@ -46,12 +46,12 @@ struct MacRootView: View {
                 .help("时间范围：\(environment.dateRange.title)")
 
                 Button {
+                    NSApp.activate(ignoringOtherApps: true)
                     openWindow(id: "command")
                 } label: {
                     Image(systemName: "wand.and.stars")
                 }
-                .keyboardShortcut("k", modifiers: [.command])
-                .help("快速记账 ⌘K")
+                .help("快速记账")
 
                 Button {
                     environment.beginNewEntry()

@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import SwiftUI
 
 /// macOS 菜单栏弹窗 —— 对齐 HTML 第 1498-1518 行 `.menubar-extra`：
@@ -30,14 +31,14 @@ struct MenuBarPopover: View {
 
             VStack(spacing: 7) {
                 MenuBarRow(
-                    label: "净资产",
-                    value: FinanceFormatter.money(environment.dashboardViewModel.summary?.netWorthCny ?? DecimalValue(0)),
-                    tint: FinanceTokens.Text.primary
+                    label: "未来一月可支配",
+                    value: FinanceFormatter.money(disposableCny),
+                    tint: FinanceTokens.State.income
                 )
                 MenuBarRow(
-                    label: "今日新增",
-                    value: "\(todayEntryCount) 笔",
-                    tint: todayEntryCount > 0 ? FinanceTokens.State.income : FinanceTokens.Text.secondary
+                    label: "美元余额",
+                    value: FinanceFormatter.money(usdBalanceTotal, currency: .usd),
+                    tint: usdBalanceTotal.value > 0 ? FinanceTokens.Currency.usd : FinanceTokens.Text.secondary
                 )
                 MenuBarRow(
                     label: "下次还款",
@@ -53,13 +54,13 @@ struct MenuBarPopover: View {
 
             HStack(spacing: 6) {
                 MenuBarPillButton(title: "快速记账", systemImage: "plus") {
+                    // Make sure the new Window comes up as key, otherwise
+                    // TextFields silently swallow keystrokes.
+                    NSApp.activate(ignoringOtherApps: true)
                     openWindow(id: "command")
                 }
                 MenuBarPillButton(title: "同步", systemImage: "arrow.triangle.2.circlepath") {
                     Task { await environment.refreshPrimaryData() }
-                }
-                MenuBarPillButton(title: "⌘K", systemImage: "wand.and.stars") {
-                    openWindow(id: "command")
                 }
             }
             .padding(.top, 2)
@@ -74,7 +75,7 @@ struct MenuBarPopover: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 4)
-                Text("v1.1.0")
+                Text(appVersionLabel)
                     .font(.system(size: 10.5).monospacedDigit())
                     .foregroundStyle(FinanceTokens.Text.tertiary)
             }
@@ -92,6 +93,31 @@ struct MenuBarPopover: View {
         return environment.entriesViewModel.entries.filter {
             calendar.isDateInToday($0.date)
         }.count
+    }
+
+    /// CNY 行的"未来一月可支配"。后端按币种返回；这里只取 CNY，
+    /// USD 部分单独在"美元余额"行展示，避免菜单栏挤成 6 行。
+    private var disposableCny: DecimalValue {
+        let rows = environment.dashboardViewModel.summary?.disposable30dByCurrency ?? []
+        return rows.first(where: { $0.currency == .cny })?.amount ?? DecimalValue(0)
+    }
+
+    /// 所有 type=balance && currency=USD 账户的 current_balance 合计。
+    /// 当前主要就是 USDT 那条；如果未来再加 USD 余额账户会自动合计。
+    private var usdBalanceTotal: DecimalValue {
+        let accounts = environment.accountsViewModel.accounts.balanceAccounts
+        let sum = accounts
+            .filter { $0.currency == .usd }
+            .map { $0.currentBalance.value }
+            .reduce(Decimal(0), +)
+        return DecimalValue(sum)
+    }
+
+    private var appVersionLabel: String {
+        if let v = environment.settingsViewModel.health?.version, !v.isEmpty {
+            return "v\(v)"
+        }
+        return "v1.1.7"
     }
 
     private var nextCreditDueText: String {
