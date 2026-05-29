@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     apns_key_path: Optional[str] = None
     apns_use_sandbox: bool = True
     apns_dry_run: bool = False
+    session_lifetime_days: int = Field(default=365, ge=1)
+    apple_signin_audiences: list[str] = [
+        "com.lino.linofinance.ios",
+        "com.lino.linofinance",
+    ]
+    apple_dev_shortcut: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -69,6 +75,11 @@ class Settings(BaseSettings):
             raise RuntimeError(
                 "LINOFINANCE_API_AUTH_TOKEN is required when LINOFINANCE_ENVIRONMENT "
                 "is production."
+            )
+        if self.is_production and self.apple_dev_shortcut:
+            raise RuntimeError(
+                "LINOFINANCE_APPLE_DEV_SHORTCUT must not be enabled in production; "
+                "it bypasses Apple identity_token verification."
             )
 
 
