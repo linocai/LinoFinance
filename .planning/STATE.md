@@ -319,13 +319,8 @@ by the remote endpoint.
 
 ## Remaining
 
-1. Restore `ssh hz`, then deploy the local `v1.1.0` tag to production with
-   backup, migration, restart, and public health verification.
-2. Run production P12 smoke with a unique marker and clean up by business
-   reversal after deployment succeeds.
-3. Resolve Apple Developer provisioning for iOS Push Notifications and App
-   Groups, then rerun connected-device install/smoke on `Kurisu`.
-4. Configure real APNs credentials later and run the P11 true-push smoke.
+1. All v1.0.x and v1.1.x deployment / push backlog now tracked under
+   `.planning/v1.2_plan.md`.
 5. Add partial cash-flow settlement once reimbursement and partial payments need it.
 6. Add credit statement cycle update/close endpoints if manual statement reconciliation needs editing after creation.
 7. Add account balance recalculation/reconciliation command to rebuild balances from movements and cycle amounts.
