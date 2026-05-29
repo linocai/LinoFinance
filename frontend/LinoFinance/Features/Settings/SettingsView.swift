@@ -3,7 +3,6 @@ import SwiftUI
 struct SettingsView: View {
     @Bindable var environment: AppEnvironment
     @State private var apiBaseURL = ""
-    @State private var apiToken = ""
     @State private var usdRate = "6.8"
     @State private var errorMessage: String?
     @State private var configMessage: String?
@@ -264,17 +263,11 @@ struct SettingsView: View {
                             .font(.headline)
                         TextField("API 地址", text: $apiBaseURL)
                             .autocorrectionDisabled()
-                        SecureField(environment.apiClient.authToken == nil ? "API Token" : "留空则保留当前 Token", text: $apiToken)
-                            .autocorrectionDisabled()
                         HStack {
                             Button("保存并重连") {
                                 Task { await saveAPIConfiguration() }
                             }
                             .buttonStyle(.borderedProminent)
-                            Button("清除 Token", role: .destructive) {
-                                Task { await clearToken() }
-                            }
-                            .disabled(environment.apiClient.authToken == nil)
                             Spacer()
                         }
                         if let configMessage {
@@ -282,6 +275,46 @@ struct SettingsView: View {
                                 .font(.caption)
                                 .foregroundStyle(FinanceTokens.State.income)
                         }
+                    }
+                }
+
+                FinancePanel {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("账号")
+                            .font(.headline)
+                        if environment.isAdminSession {
+                            Text("你正在使用管理员 Token 直连")
+                                .font(.subheadline.weight(.semibold))
+                            Button("退出管理员模式", role: .destructive) {
+                                Task { await environment.exitAdminMode() }
+                            }
+                        } else if let user = environment.authUser {
+                            DetailLine(title: "名称", value: user.displayName ?? "未提供")
+                            DetailLine(title: "邮箱", value: user.email ?? "未提供")
+                            DetailLine(title: "Apple ID", value: user.appleUserId)
+                            Button("退出登录", role: .destructive) {
+                                Task { await environment.logout() }
+                            }
+                        } else {
+                            Text("未登录")
+                                .foregroundStyle(FinanceTokens.Text.secondary)
+                        }
+                    }
+                }
+
+                if environment.authUser != nil {
+                    FinancePanel {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("已登录设备")
+                                .font(.headline)
+                            AuthSessionsSection(environment: environment)
+                        }
+                    }
+                }
+
+                FinancePanel {
+                    DisclosureGroup("高级设置 / 管理员 Token") {
+                        AdminTokenEntryView(environment: environment)
                     }
                 }
 
@@ -426,12 +459,12 @@ struct SettingsView: View {
         .task {
             syncDrafts()
             try? await environment.settingsViewModel.refresh()
+            await environment.refreshSessions()
         }
     }
 
     private func syncDrafts() {
         apiBaseURL = environment.apiClient.baseURL.absoluteString
-        apiToken = ""
     }
 
     private func saveAPIConfiguration() async {
@@ -440,21 +473,9 @@ struct SettingsView: View {
             errorMessage = "请输入合法 API 地址"
             return
         }
-        let trimmedToken = apiToken.trimmingCharacters(in: .whitespacesAndNewlines)
-        let token = trimmedToken.isEmpty ? environment.apiClient.authToken : trimmedToken
-        await environment.configureAPI(baseURL: url, apiToken: token)
-        apiToken = ""
+        await environment.updateBaseURL(url)
         configMessage = "连接配置已保存"
         errorMessage = nil
-    }
-
-    private func clearToken() async {
-        guard let url = URL(string: apiBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)) ?? URL(string: environment.apiClient.baseURL.absoluteString) else {
-            return
-        }
-        await environment.configureAPI(baseURL: url, apiToken: nil)
-        apiToken = ""
-        configMessage = "Token 已清除"
     }
 
     private func requestPushRegistration() async {

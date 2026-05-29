@@ -372,6 +372,18 @@ final class AppEnvironment {
         }
     }
 
+    /// Change the API base URL without touching the stored tokens. Rebuilds
+    /// the clients around the existing effective token and re-resolves auth.
+    func updateBaseURL(_ baseURL: URL) async {
+        UserDefaults.standard.set(baseURL.absoluteString, forKey: "linofinance.apiBaseURL")
+        rebuildClients(baseURL: baseURL, apiToken: SecureTokenStore.shared.readEffectiveToken())
+        await loadCurrentUser()
+        if !needsSignIn {
+            await refreshSessions()
+            await refreshPrimaryData()
+        }
+    }
+
     // MARK: - Auth flow
 
     static var currentPlatform: String {
