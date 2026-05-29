@@ -40,6 +40,11 @@ final class CashFlowViewModel {
         try await refresh()
     }
 
+    func update(_ id: String, request: CashFlowItemUpdateRequest) async throws {
+        _ = try await repository.updateCashFlowItem(id, request: request)
+        try await refresh()
+    }
+
     func confirm(_ id: String) async throws {
         _ = try await repository.confirmCashFlowItem(id)
         try await refresh()

@@ -46,12 +46,12 @@ struct MacRootView: View {
                 .help("时间范围：\(environment.dateRange.title)")
 
                 Button {
+                    NSApp.activate(ignoringOtherApps: true)
                     openWindow(id: "command")
                 } label: {
                     Image(systemName: "wand.and.stars")
                 }
-                .keyboardShortcut("k", modifiers: [.command])
-                .help("快速记账 ⌘K")
+                .help("快速记账")
 
                 Button {
                     environment.beginNewEntry()
@@ -98,6 +98,18 @@ struct MacRootView: View {
         .sheet(isPresented: $environment.isShowingNewCashFlowSheet) {
             NewCashFlowSheet(environment: environment)
                 .frame(width: 520)
+        }
+        .sheet(isPresented: $environment.isShowingEditCashFlowSheet) {
+            if let item = environment.editingCashFlowItem {
+                EditCashFlowSheet(environment: environment, item: item)
+                    .frame(width: 520)
+            }
+        }
+        .sheet(isPresented: $environment.isShowingSettleCashFlowSheet) {
+            if let item = environment.settlingCashFlowItem {
+                SettleCompletionSheet(environment: environment, item: item)
+                    .frame(width: 460)
+            }
         }
         .sheet(isPresented: $environment.isShowingNewReimbursementSheet) {
             NewReimbursementClaimSheet(environment: environment)

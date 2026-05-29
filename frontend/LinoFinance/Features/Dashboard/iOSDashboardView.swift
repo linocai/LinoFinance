@@ -4,7 +4,7 @@ import SwiftUI
 /// iOS Dashboard 整页重建 —— 对齐 HTML B 节：iPhone 26 mockup。
 /// 自上而下 4 块：
 ///   1. Greeting Header（早上好 + 中文日期）
-///   2. NetWorthHero（净资产 38pt + sparkline + 3 stats + 隐藏按钮）
+///   2. DisposableHero（未来一月可支配 38pt + sparkline + 4 stats + 隐藏按钮）
 ///   3. TodayEntriesCard（今日记账列表）
 ///   4. AIMonthlyReportCard（AI 月报节选）
 struct iOSDashboardView: View {
@@ -146,15 +146,22 @@ private struct NetWorthHeroSection: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("净资产")
+                    Text("未来一月可支配")
                         .font(FinanceTypography.sectionKicker)
                         .kickerTracking()
                         .foregroundStyle(FinanceTokens.Text.secondary)
                     PrivacyAmount(
-                        value: FinanceFormatter.money(summary.netWorthCny),
+                        value: disposablePrimary,
                         font: FinanceTypography.heroNumber,
-                        tint: FinanceTokens.Text.primary
+                        tint: FinanceTokens.State.income
                     )
+                    if let secondary = disposableSecondary {
+                        PrivacyAmount(
+                            value: secondary,
+                            font: .system(size: 18, weight: .semibold).monospacedDigit(),
+                            tint: FinanceTokens.State.income.opacity(0.85)
+                        )
+                    }
                     StatusTag(title: trendLabel, style: trendStyle)
                 }
                 Spacer(minLength: 12)
@@ -173,6 +180,38 @@ private struct NetWorthHeroSection: View {
         .glassBackground(strength: .strong, elevation: .soft)
     }
 
+    // Primary line of the hero: CNY 可支配 if present, else first
+    // available currency, else fall back to net worth so the card never
+    // shows "—" while the dashboard summary loads.
+    private var disposablePrimary: String {
+        let rows = summary.disposable30dByCurrency ?? []
+        if let cny = rows.first(where: { $0.currency == .cny }) {
+            return FinanceFormatter.money(cny.amount, currency: cny.currency)
+        }
+        if let first = rows.first {
+            return FinanceFormatter.money(first.amount, currency: first.currency)
+        }
+        return FinanceFormatter.money(summary.netWorthCny)
+    }
+
+    // Secondary line: any non-primary currency (typically USD). Returns nil
+    // when the user only has CNY rows.
+    private var disposableSecondary: String? {
+        let rows = summary.disposable30dByCurrency ?? []
+        // If primary is CNY, secondary is anything else (first match).
+        if rows.first(where: { $0.currency == .cny }) != nil,
+           let other = rows.first(where: { $0.currency != .cny }) {
+            return FinanceFormatter.money(other.amount, currency: other.currency)
+        }
+        // Otherwise, primary picked the first row, so secondary is the
+        // second row if it exists.
+        if rows.first(where: { $0.currency == .cny }) == nil, rows.count > 1 {
+            let second = rows[1]
+            return FinanceFormatter.money(second.amount, currency: second.currency)
+        }
+        return nil
+    }
+
     private var trendLabel: String {
         let delta = trendValues.last ?? 0
         let formatted = String(format: "¥%.0f", abs(delta))
@@ -187,18 +226,16 @@ private struct NetWorthHeroSection: View {
     @ViewBuilder
     private var statsGrid: some View {
         let columns = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
-        let disposableLines = summary.disposable30dByCurrency ?? []
         let investmentLines = summary.investmentTotalByCurrency ?? []
         let cashflowLines = summary.cashFlow30dByCurrency ?? []
         let cashflowCny = cashflowLines.first(where: { $0.currency == .cny })?.amount
         let cashflowFallback = future30Net.map { FinanceFormatter.money($0) }
 
         LazyVGrid(columns: columns, spacing: 8) {
-            StatTileMultiCurrency(
-                title: "未来一月可支配",
-                lines: disposableLines,
-                tint: FinanceTokens.State.income,
-                onTap: nil
+            statTile(
+                title: "净资产",
+                value: FinanceFormatter.money(summary.netWorthCny),
+                tint: FinanceTokens.Brand.primary
             )
             StatTileMultiCurrency(
                 title: "投资账户",

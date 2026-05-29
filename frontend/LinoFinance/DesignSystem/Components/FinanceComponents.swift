@@ -83,8 +83,12 @@ struct StatusTag: View {
         switch style {
         case .draft, .expected:
             return FinanceTokens.State.pending
-        case .confirmed, .settled:
+        case .confirmed:
             return FinanceTokens.State.income
+        case .settled:
+            // Settled = terminal/done. Use the muted tertiary tone so it
+            // visually retreats next to active 已确认 / 已收到 rows.
+            return FinanceTokens.Text.tertiary
         case .cancelled:
             return FinanceTokens.Text.tertiary
         case .expense:
@@ -109,7 +113,9 @@ extension StatusTag {
 extension StatusTag.Style {
     static func from(_ status: String) -> StatusTag.Style {
         switch status {
-        case "confirmed", "settled", "paid", "received", "executed", "active", "approved", "published":
+        case "settled":
+            return .settled
+        case "confirmed", "paid", "received", "executed", "active", "approved", "published":
             return .confirmed
         case "expected", "draft", "pending", "open", "requires_confirmation", "auto_confirm_candidate":
             return .draft

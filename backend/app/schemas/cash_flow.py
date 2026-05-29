@@ -29,6 +29,24 @@ class CashFlowItemCreate(BaseModel):
     note: Optional[str] = None
 
 
+class CashFlowItemUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    direction: Optional[str] = Field(default=None, pattern="^(inflow|outflow|transfer)$")
+    cash_flow_type: Optional[str] = Field(
+        default=None,
+        pattern="^(salary|rent_income|reimbursement|subscription|credit_repayment|installment|one_time|other)$",
+    )
+    amount: Optional[Decimal] = Field(default=None, gt=0)
+    currency: Optional[str] = Field(default=None, min_length=3, max_length=3)
+    exchange_rate_id: Optional[str] = None
+    converted_cny_amount: Optional[Decimal] = None
+    expected_date: Optional[DateType] = None
+    account_id: Optional[str] = None
+    category_id: Optional[str] = None
+    recurrence_rule: Optional[str] = Field(default=None, max_length=200)
+    note: Optional[str] = None
+
+
 class CashFlowSettle(BaseModel):
     entry: EntryCreate
 

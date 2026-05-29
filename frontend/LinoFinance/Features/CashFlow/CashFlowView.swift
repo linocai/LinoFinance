@@ -6,10 +6,24 @@ struct CashFlowView: View {
 
     private var filteredItems: [CashFlowItemDTO] {
         let search = environment.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !search.isEmpty else { return environment.cashFlowViewModel.items }
-        return environment.cashFlowViewModel.items.filter {
-            $0.title.localizedCaseInsensitiveContains(search)
-                || $0.cashFlowType.financeStatusTitle.localizedCaseInsensitiveContains(search)
+        let base = environment.cashFlowViewModel.items
+        let matched: [CashFlowItemDTO]
+        if search.isEmpty {
+            matched = base
+        } else {
+            matched = base.filter {
+                $0.title.localizedCaseInsensitiveContains(search)
+                    || $0.cashFlowType.financeStatusTitle.localizedCaseInsensitiveContains(search)
+            }
+        }
+        // Active rows first (expected/confirmed), settled drops to the
+        // bottom so the user's eye stays on what still needs action.
+        // Within each bucket, preserve the server's expected_date order.
+        return matched.sorted { lhs, rhs in
+            let lhsDone = lhs.status == "settled"
+            let rhsDone = rhs.status == "settled"
+            if lhsDone != rhsDone { return !lhsDone }
+            return lhs.expectedDate < rhs.expectedDate
         }
     }
 
@@ -75,12 +89,27 @@ struct CashFlowView: View {
                     .contentShape(Rectangle())
                     .onTapGesture { environment.inspectorSelection = .cashFlow(item) }
                     .contextMenu {
-                        Button("确认发生") { confirm(item, operation: "confirm") }
+                        Button("编辑") { confirm(item, operation: "edit") }
                         if item.direction != "transfer" {
-                            Button("结算为正式记录") { confirm(item, operation: "settle") }
+                            Button("结算") { confirm(item, operation: "settle") }
                         }
                         Button("取消", role: .destructive) { confirm(item, operation: "cancel") }
                     }
+                    #if os(iOS)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if item.status == "expected" || item.status == "confirmed" {
+                            Button("编辑") { confirm(item, operation: "edit") }
+                                .tint(.blue)
+                            if item.direction != "transfer" {
+                                Button("结算") { confirm(item, operation: "settle") }
+                                    .tint(.green)
+                            }
+                            Button("取消", role: .destructive) {
+                                confirm(item, operation: "cancel")
+                            }
+                        }
+                    }
+                    #endif
                 }
                 .listStyle(.inset)
             }
@@ -120,100 +149,131 @@ struct CashFlowView: View {
     }
 
     private func confirm(_ item: CashFlowItemDTO, operation: String) {
-        let title: String
-        let message: String
-        let confirmTitle: String
-        let role: ButtonRole?
         switch operation {
-        case "confirm":
-            title = "确认现金流已发生？"
-            message = "这会把预计现金流改为已确认，但不会直接改变账户余额。"
-            confirmTitle = "确认发生"
-            role = nil
+        case "edit":
+            // Edit bypasses the confirmation alert and opens the sheet
+            // directly — the sheet itself has its own save button.
+            environment.beginEditCashFlow(item)
+            return
         case "settle":
-            title = "结算为正式记录？"
-            message = "这会创建一条正式记账记录，并影响账户余额。需要现金流已有关联账户和分类。"
-            confirmTitle = "结算"
-            role = nil
+            confirmation = ConfirmAction(
+                title: "结算为正式记录？",
+                message: "这会创建一条正式记账记录，并影响账户余额。",
+                confirmTitle: "结算",
+                role: nil
+            ) {
+                Task { await perform(item, operation: operation) }
+            }
         default:
-            title = "取消现金流？"
-            message = "取消后此现金流不再计入未来压力。"
-            confirmTitle = "取消现金流"
-            role = .destructive
-        }
-        confirmation = ConfirmAction(title: title, message: message, confirmTitle: confirmTitle, role: role) {
-            Task { await perform(item, operation: operation) }
+            confirmation = ConfirmAction(
+                title: "取消现金流？",
+                message: "取消后此现金流不再计入未来压力。",
+                confirmTitle: "取消现金流",
+                role: .destructive
+            ) {
+                Task { await perform(item, operation: operation) }
+            }
         }
     }
 
     private func perform(_ item: CashFlowItemDTO, operation: String) async {
         do {
             switch operation {
-            case "confirm":
-                try await environment.cashFlowViewModel.confirm(item.id)
             case "settle":
-                try await settle(item)
+                await attemptSettle(item)
+                return
             default:
                 try await environment.cashFlowViewModel.cancel(item.id)
             }
-            try await environment.dashboardViewModel.refresh()
-            try await environment.accountsViewModel.refresh()
-            try await environment.entriesViewModel.refresh()
-            try await environment.reportsViewModel.refresh()
+            try await refreshAll(environment: environment)
         } catch {
             environment.cashFlowViewModel.errorMessage = error.localizedDescription
             environment.lastErrorMessage = error.localizedDescription
         }
     }
 
-    private func settle(_ item: CashFlowItemDTO) async throws {
-        guard item.direction != "transfer" else {
-            throw APIError.badStatus(400, "转账现金流请通过记账里的信用还款流程结算")
+    private func attemptSettle(_ item: CashFlowItemDTO) async {
+        if item.direction == "transfer" {
+            environment.cashFlowViewModel.errorMessage = "转账现金流请通过记账里的信用还款流程结算"
+            return
         }
-        guard let accountId = item.accountId, let categoryId = item.categoryId else {
-            throw APIError.badStatus(400, "结算需要现金流已关联账户和分类")
+        if item.accountId != nil, item.categoryId != nil {
+            do {
+                try await runSettle(environment: environment, for: item)
+                try await refreshAll(environment: environment)
+            } catch {
+                environment.cashFlowViewModel.errorMessage = error.localizedDescription
+            }
+        } else {
+            environment.beginSettleCashFlow(item)
         }
-        let isInflow = item.direction == "inflow"
-        let entry = EntryCreateRequest(
-            title: item.title,
-            date: Date(),
-            status: .confirmed,
-            note: item.note,
-            categoryLines: [
-                EntryCategoryLineCreateRequest(
-                    categoryId: categoryId,
-                    direction: isInflow ? .income : .expense,
-                    amount: item.amount,
-                    currency: item.currency,
-                    exchangeRateId: item.exchangeRateId,
-                    convertedCnyAmount: item.convertedCnyAmount,
-                    note: item.note
-                )
-            ],
-            accountMovements: [
-                AccountMovementCreateRequest(
-                    accountId: accountId,
-                    statementCycleId: item.linkedStatementCycleId,
-                    movementType: isInflow ? .balanceIn : .balanceOut,
-                    amount: item.amount,
-                    currency: item.currency,
-                    exchangeRateId: item.exchangeRateId,
-                    convertedCnyAmount: item.convertedCnyAmount,
-                    note: item.note
-                )
-            ]
-        )
-        try await environment.cashFlowViewModel.settle(item.id, request: CashFlowSettleRequest(entry: entry))
     }
+}
+
+/// Build a `CashFlowSettleRequest` from a fully-linked cash flow item and
+/// send it through the view model. Shared by `CashFlowView.attemptSettle`
+/// (fast path) and `SettleCompletionSheet.submit` (post-PATCH path).
+@MainActor
+func runSettle(environment: AppEnvironment, for item: CashFlowItemDTO) async throws {
+    guard let accountId = item.accountId, let categoryId = item.categoryId else {
+        throw APIError.badStatus(400, "结算需要现金流已关联账户和分类")
+    }
+    let isInflow = item.direction == "inflow"
+    let entry = EntryCreateRequest(
+        title: item.title,
+        date: Date(),
+        status: .confirmed,
+        note: item.note,
+        categoryLines: [
+            EntryCategoryLineCreateRequest(
+                categoryId: categoryId,
+                direction: isInflow ? .income : .expense,
+                amount: item.amount,
+                currency: item.currency,
+                exchangeRateId: item.exchangeRateId,
+                convertedCnyAmount: item.convertedCnyAmount,
+                note: item.note
+            )
+        ],
+        accountMovements: [
+            AccountMovementCreateRequest(
+                accountId: accountId,
+                statementCycleId: item.linkedStatementCycleId,
+                movementType: isInflow ? .balanceIn : .balanceOut,
+                amount: item.amount,
+                currency: item.currency,
+                exchangeRateId: item.exchangeRateId,
+                convertedCnyAmount: item.convertedCnyAmount,
+                note: item.note
+            )
+        ]
+    )
+    try await environment.cashFlowViewModel.settle(item.id, request: CashFlowSettleRequest(entry: entry))
+}
+
+@MainActor
+func refreshAll(environment: AppEnvironment) async throws {
+    try await environment.dashboardViewModel.refresh()
+    try await environment.accountsViewModel.refresh()
+    try await environment.entriesViewModel.refresh()
+    try await environment.reportsViewModel.refresh()
 }
 
 private struct CashFlowRow: View {
     let item: CashFlowItemDTO
     let accounts: [AccountDTO]
 
+    private var isSettled: Bool { item.status == "settled" }
+
     private var tint: Color {
-        item.direction == "inflow" ? FinanceTokens.State.income : FinanceTokens.State.expense
+        if isSettled { return FinanceTokens.Text.tertiary }
+        return item.direction == "inflow" ? FinanceTokens.State.income : FinanceTokens.State.expense
     }
+
+    // Settled rows render at ~55% opacity so the whole row visually
+    // recedes; the StatusTag + position-at-bottom already carry the
+    // semantic, this just makes scanning fast.
+    private var rowOpacity: Double { isSettled ? 0.55 : 1.0 }
 
     var body: some View {
         #if os(iOS)
@@ -236,6 +296,7 @@ private struct CashFlowRow: View {
             Spacer(minLength: 0)
         }
         .padding(.vertical, 6)
+        .opacity(rowOpacity)
         #else
         HStack(spacing: 12) {
             directionIcon
@@ -254,6 +315,7 @@ private struct CashFlowRow: View {
             MoneyText(amount: item.amount, currency: item.currency, convertedCNY: item.convertedCnyAmount, prominence: .headline)
         }
         .padding(.vertical, 6)
+        .opacity(rowOpacity)
         #endif
     }
 
@@ -278,9 +340,9 @@ private struct CashFlowActionMenu: View {
 
     var body: some View {
         Menu {
-            Button("确认发生") { confirm(item, "confirm") }
+            Button("编辑") { confirm(item, "edit") }
             if item.direction != "transfer" {
-                Button("结算为正式记录") { confirm(item, "settle") }
+                Button("结算") { confirm(item, "settle") }
             }
             Button("取消", role: .destructive) { confirm(item, "cancel") }
         } label: {
@@ -435,5 +497,279 @@ struct NewCashFlowSheet: View {
             current = next
         }
         return dates
+    }
+}
+
+struct EditCashFlowSheet: View {
+    @Bindable var environment: AppEnvironment
+    let initial: CashFlowItemDTO
+
+    @State private var title: String
+    @State private var amount: String
+    @State private var expectedDate: Date
+    @State private var direction: String
+    @State private var cashFlowType: String
+    @State private var accountId: String?
+    @State private var categoryId: String?
+    @State private var currency: CurrencyCode
+    @State private var exchangeRateId: String?
+    @State private var note: String
+    @State private var errorMessage: String?
+    @State private var submitting = false
+
+    init(environment: AppEnvironment, item: CashFlowItemDTO) {
+        self.environment = environment
+        self.initial = item
+        _title = State(initialValue: item.title)
+        _amount = State(initialValue: "\(item.amount.value)")
+        _expectedDate = State(initialValue: item.expectedDate)
+        _direction = State(initialValue: item.direction)
+        _cashFlowType = State(initialValue: item.cashFlowType)
+        _accountId = State(initialValue: item.accountId)
+        _categoryId = State(initialValue: item.categoryId)
+        _currency = State(initialValue: item.currency)
+        _exchangeRateId = State(initialValue: item.exchangeRateId)
+        _note = State(initialValue: item.note ?? "")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("编辑现金流")
+                .font(.title2.weight(.semibold))
+            Form {
+                TextField("标题", text: $title)
+                TextField("金额", text: $amount)
+                Picker("方向", selection: $direction) {
+                    Text("进账").tag("inflow")
+                    Text("出账").tag("outflow")
+                    Text("转账").tag("transfer")
+                }
+                Picker("类型", selection: $cashFlowType) {
+                    ForEach(
+                        ["salary", "rent_income", "reimbursement", "subscription",
+                         "credit_repayment", "installment", "one_time", "other"],
+                        id: \.self
+                    ) {
+                        Text($0.financeStatusTitle).tag($0)
+                    }
+                }
+                DatePicker("预计日期", selection: $expectedDate, displayedComponents: .date)
+                Picker("币种", selection: $currency) {
+                    ForEach(CurrencyCode.allCases, id: \.self) { code in
+                        Text(code.rawValue).tag(code)
+                    }
+                }
+                if currency != .cny {
+                    Picker(
+                        "汇率",
+                        selection: Binding(get: { exchangeRateId }, set: { exchangeRateId = $0 })
+                    ) {
+                        Text("未指定").tag(Optional<String>.none)
+                        ForEach(
+                            environment.settingsViewModel.rates.filter { $0.fromCurrency == currency }
+                        ) { rate in
+                            Text("\(rate.fromCurrency.rawValue) → CNY @ \(rate.rate.value)")
+                                .tag(Optional(rate.id))
+                        }
+                    }
+                }
+                Picker(
+                    "账户",
+                    selection: Binding(get: { accountId }, set: { accountId = $0 })
+                ) {
+                    Text("不关联").tag(Optional<String>.none)
+                    ForEach(
+                        environment.accountsViewModel.accounts
+                            .filter { $0.currency == currency }
+                    ) { account in
+                        Text(account.name).tag(Optional(account.id))
+                    }
+                }
+                Picker(
+                    "分类",
+                    selection: Binding(get: { categoryId }, set: { categoryId = $0 })
+                ) {
+                    Text("不关联").tag(Optional<String>.none)
+                    ForEach(
+                        environment.entriesViewModel.categories
+                            .filter { $0.type == (direction == "inflow" ? .income : .expense) }
+                    ) { category in
+                        Text(category.name).tag(Optional(category.id))
+                    }
+                }
+                TextField("备注", text: $note)
+            }
+            if let errorMessage {
+                ErrorBanner(message: errorMessage)
+            }
+            HStack {
+                Spacer()
+                Button("取消") {
+                    environment.clearEditCashFlowSheet()
+                }
+                .disabled(submitting)
+                Button("保存") { Task { await submit() } }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!isFormValid || submitting)
+            }
+        }
+        .padding(22)
+        .task {
+            try? await environment.settingsViewModel.refresh()
+            try? await environment.accountsViewModel.refresh()
+            try? await environment.entriesViewModel.refresh()
+        }
+        .onChange(of: currency) { _, newValue in
+            // Drop any account that no longer matches the chosen currency.
+            if let id = accountId,
+               let account = environment.accountsViewModel.accounts.first(where: { $0.id == id }),
+               account.currency != newValue {
+                accountId = nil
+            }
+            if newValue == .cny {
+                exchangeRateId = nil
+            }
+        }
+    }
+
+    private var isFormValid: Bool {
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        guard Decimal(string: amount) != nil else { return false }
+        if currency != .cny && exchangeRateId == nil { return false }
+        return true
+    }
+
+    private func submit() async {
+        guard let decimal = Decimal(string: amount) else { return }
+        if currency != .cny && exchangeRateId == nil {
+            errorMessage = "缺少 \(currency.rawValue) → CNY 汇率，请到设置中添加"
+            return
+        }
+        submitting = true
+        defer { submitting = false }
+
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let request = CashFlowItemUpdateRequest(
+            title: trimmedTitle,
+            direction: direction,
+            cashFlowType: cashFlowType,
+            amount: DecimalValue(decimal),
+            currency: currency,
+            exchangeRateId: exchangeRateId,
+            convertedCnyAmount: nil,
+            expectedDate: expectedDate,
+            accountId: accountId.map(Nullable.value) ?? .null,
+            categoryId: categoryId.map(Nullable.value) ?? .null,
+            recurrenceRule: nil,
+            note: trimmedNote.isEmpty ? nil : trimmedNote
+        )
+
+        do {
+            try await environment.cashFlowViewModel.update(initial.id, request: request)
+            try await environment.dashboardViewModel.refresh()
+            try await environment.accountsViewModel.refresh()
+            try await environment.entriesViewModel.refresh()
+            try await environment.reportsViewModel.refresh()
+            environment.clearEditCashFlowSheet()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+struct SettleCompletionSheet: View {
+    @Bindable var environment: AppEnvironment
+    let item: CashFlowItemDTO
+
+    @State private var accountId: String?
+    @State private var categoryId: String?
+    @State private var errorMessage: String?
+    @State private var submitting = false
+
+    init(environment: AppEnvironment, item: CashFlowItemDTO) {
+        self.environment = environment
+        self.item = item
+        _accountId = State(initialValue: item.accountId)
+        _categoryId = State(initialValue: item.categoryId)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("结算现金流")
+                .font(.title2.weight(.semibold))
+            Text(item.title)
+                .font(.headline)
+            Text("结算前请补齐缺失的账户和分类。")
+                .font(.subheadline)
+                .foregroundStyle(FinanceTokens.Text.secondary)
+            Form {
+                Picker(
+                    "账户",
+                    selection: Binding(get: { accountId }, set: { accountId = $0 })
+                ) {
+                    Text("请选择").tag(Optional<String>.none)
+                    ForEach(
+                        environment.accountsViewModel.accounts
+                            .filter { $0.currency == item.currency }
+                    ) { account in
+                        Text(account.name).tag(Optional(account.id))
+                    }
+                }
+                Picker(
+                    "分类",
+                    selection: Binding(get: { categoryId }, set: { categoryId = $0 })
+                ) {
+                    Text("请选择").tag(Optional<String>.none)
+                    ForEach(
+                        environment.entriesViewModel.categories
+                            .filter { $0.type == (item.direction == "inflow" ? .income : .expense) }
+                    ) { category in
+                        Text(category.name).tag(Optional(category.id))
+                    }
+                }
+            }
+            if let errorMessage {
+                ErrorBanner(message: errorMessage)
+            }
+            HStack {
+                Spacer()
+                Button("取消") {
+                    environment.clearSettleCashFlowSheet()
+                }
+                .disabled(submitting)
+                Button("结算") {
+                    Task { await submit() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(accountId == nil || categoryId == nil || submitting)
+            }
+        }
+        .padding(22)
+        .task {
+            try? await environment.accountsViewModel.refresh()
+            try? await environment.entriesViewModel.refresh()
+        }
+    }
+
+    private func submit() async {
+        guard let accountId, let categoryId else { return }
+        submitting = true
+        defer { submitting = false }
+        do {
+            let patch = CashFlowItemUpdateRequest(
+                accountId: .value(accountId),
+                categoryId: .value(categoryId)
+            )
+            try await environment.cashFlowViewModel.update(item.id, request: patch)
+            guard let refreshed = environment.cashFlowViewModel.items.first(where: { $0.id == item.id }) else {
+                throw APIError.badStatus(500, "结算失败：现金流已不在列表中")
+            }
+            try await runSettle(environment: environment, for: refreshed)
+            try await refreshAll(environment: environment)
+            environment.clearSettleCashFlowSheet()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }

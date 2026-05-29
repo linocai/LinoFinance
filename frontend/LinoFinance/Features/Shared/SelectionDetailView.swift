@@ -16,7 +16,12 @@ struct SelectionDetailView: View {
             case .entry(let entry):
                 EntryDetail(entry: entry, accounts: environment.accountsViewModel.accounts, categories: environment.entriesViewModel.categories)
             case .cashFlow(let item):
-                CashFlowDetail(item: item, accounts: environment.accountsViewModel.accounts, categories: environment.entriesViewModel.categories)
+                CashFlowDetail(
+                    item: item,
+                    environment: environment,
+                    accounts: environment.accountsViewModel.accounts,
+                    categories: environment.entriesViewModel.categories
+                )
             case .reimbursement(let claim):
                 ReimbursementDetail(
                     claim: claim,
@@ -280,6 +285,7 @@ private struct EntryDetail: View {
 
 private struct CashFlowDetail: View {
     let item: CashFlowItemDTO
+    let environment: AppEnvironment
     let accounts: [AccountDTO]
     let categories: [CategoryDTO]
 
@@ -289,6 +295,14 @@ private struct CashFlowDetail: View {
                 StatusTag(status: item.status)
                 StatusTag(status: item.direction)
                 StatusTag(status: item.cashFlowType)
+                Spacer()
+                if item.status == "expected" || item.status == "confirmed" {
+                    Button("编辑") {
+                        environment.beginEditCashFlow(item)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
             }
             DetailLine(title: "预计日期", value: FinanceFormatter.mediumDate(item.expectedDate))
             DetailLine(title: "金额", value: FinanceFormatter.money(item.amount, currency: item.currency))

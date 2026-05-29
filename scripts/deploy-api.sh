@@ -15,7 +15,7 @@
 #      new release.
 #   6. `sudo systemctl restart linofinance-api`.
 #   7. Probe https://lf.linotsai.top/api/v1/health and fail if version
-#      != "1.1.6" or status != "ok".
+#      != "1.1.7" or status != "ok".
 #
 # Dry-run mode (--dry-run): print every command, contact nothing.
 # This script never pushes commits, never tags, never alters the local
@@ -28,7 +28,7 @@ DEPLOY_HOST="${DEPLOY_HOST:-118.178.122.194}"
 DEPLOY_BASE="${DEPLOY_BASE:-/opt/linofinance/app}"
 SERVICE_UNIT="${SERVICE_UNIT:-linofinance-api}"
 HEALTH_URL="${HEALTH_URL:-https://lf.linotsai.top/api/v1/health}"
-EXPECTED_VERSION="${EXPECTED_VERSION:-1.1.6}"
+EXPECTED_VERSION="${EXPECTED_VERSION:-1.1.7}"
 
 DRY_RUN=0
 # Honour `FORCE=1 scripts/deploy-api.sh` (env-var override, per plan).

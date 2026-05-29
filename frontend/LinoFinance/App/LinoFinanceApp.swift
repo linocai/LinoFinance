@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 @main
 struct LinoFinanceApp: App {
@@ -87,9 +90,12 @@ struct LinoFinanceApp: App {
             }
             CommandMenu("窗口") {
                 Button("快速记账") {
+                    // Pull the app forward before opening — otherwise the
+                    // new Window can come up without key-window status
+                    // and TextFields refuse keystrokes.
+                    NSApp.activate(ignoringOtherApps: true)
                     openWindow(id: "command")
                 }
-                .keyboardShortcut("k", modifiers: .command)
 
                 Divider()
 
