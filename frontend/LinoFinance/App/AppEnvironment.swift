@@ -130,6 +130,25 @@ final class AppEnvironment {
     }
     var isAPITokenConfigured: Bool { apiClient.authToken != nil }
 
+    // MARK: - Auth (Sign in with Apple, v1.2)
+
+    /// The Apple-signed-in user, or nil when signed out or using the admin token.
+    var authUser: AuthUserDTO?
+    /// True when the effective token is the env admin token (no Apple identity).
+    var isAdminSession = false
+    /// Active sessions for the current user, for the Settings → 已登录设备 list.
+    var activeSessions: [AuthSessionDTO] = []
+    /// True while `loadCurrentUser()` is in flight (used by the launch splash).
+    var isResolvingAuth = false
+    /// The session id the current device authenticated with, for the "本机" badge.
+    var currentSessionID: String?
+
+    /// True when neither an Apple session nor an admin token is configured —
+    /// the client should show the Sign in with Apple screen.
+    var needsSignIn: Bool {
+        authUser == nil && !isAdminSession && !isAPITokenConfigured
+    }
+
     init(
         baseURL: URL = AppEnvironment.defaultAPIBaseURL(),
         apiToken: String? = AppEnvironment.defaultAPIToken()
@@ -329,7 +348,8 @@ final class AppEnvironment {
     func configureAPI(baseURL: URL, apiToken: String?) async {
         UserDefaults.standard.set(baseURL.absoluteString, forKey: "linofinance.apiBaseURL")
         do {
-            try SecureTokenStore.shared.saveToken(apiToken)
+            // Manual token entry in v1.2 is the admin escape hatch.
+            try SecureTokenStore.shared.saveToken(apiToken, kind: .admin)
             UserDefaults.standard.removeObject(forKey: "linofinance.apiToken")
         } catch {
             lastErrorMessage = error.localizedDescription
@@ -349,6 +369,144 @@ final class AppEnvironment {
             lastErrorMessage = nil
         } catch {
             lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Auth flow
+
+    static var currentPlatform: String {
+        #if os(iOS)
+        return "ios"
+        #else
+        return "macos"
+        #endif
+    }
+
+    static var currentAppVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+    }
+
+    /// Exchange an Apple identity_token for a session token, persist it, and
+    /// reconfigure the API client around it.
+    func signInWithApple(
+        identityToken: String,
+        firstName: String?,
+        lastName: String?,
+        deviceLabel: String
+    ) async throws {
+        let request = AppleSignInRequest(
+            identityToken: identityToken,
+            deviceLabel: deviceLabel,
+            platform: Self.currentPlatform,
+            appVersion: Self.currentAppVersion,
+            firstName: firstName,
+            lastName: lastName
+        )
+        let response = try await apiClient.signInWithApple(request)
+        try SecureTokenStore.shared.saveToken(response.sessionToken, kind: .session)
+        rebuildClients(baseURL: apiClient.baseURL, apiToken: response.sessionToken)
+        authUser = response.user
+        isAdminSession = false
+        lastErrorMessage = nil
+        await refreshSessions()
+        await refreshPrimaryData()
+    }
+
+    /// Save a manually-entered admin token and reconfigure around it.
+    func saveAdminToken(_ token: String) async throws {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        try SecureTokenStore.shared.saveToken(trimmed, kind: .admin)
+        rebuildClients(baseURL: apiClient.baseURL, apiToken: SecureTokenStore.shared.readEffectiveToken())
+        await loadCurrentUser()
+        await refreshPrimaryData()
+    }
+
+    /// Resolve the current identity from /auth/me on launch / after config.
+    func loadCurrentUser() async {
+        let token = SecureTokenStore.shared.readEffectiveToken()
+        guard token != nil else {
+            authUser = nil
+            isAdminSession = false
+            currentSessionID = nil
+            return
+        }
+        isResolvingAuth = true
+        defer { isResolvingAuth = false }
+        do {
+            let me = try await apiClient.fetchMe()
+            if me.admin == true {
+                isAdminSession = true
+                authUser = nil
+                currentSessionID = nil
+            } else if let user = me.user {
+                authUser = user
+                isAdminSession = false
+                currentSessionID = me.session?.id
+            } else {
+                authUser = nil
+                isAdminSession = false
+                currentSessionID = nil
+            }
+        } catch {
+            if Self.isAuthErrorMessage(error.localizedDescription) {
+                // Bad / expired session token — drop it but keep any admin token.
+                try? SecureTokenStore.shared.clear(kind: .session)
+                authUser = nil
+                currentSessionID = nil
+                rebuildClients(baseURL: apiClient.baseURL, apiToken: SecureTokenStore.shared.readEffectiveToken())
+            } else {
+                lastErrorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func refreshSessions() async {
+        guard authUser != nil else {
+            activeSessions = []
+            return
+        }
+        do {
+            activeSessions = try await apiClient.listSessions()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func logout() async {
+        do {
+            try await apiClient.logout()
+        } catch {
+            // Even if the server call fails, clear locally so the user is out.
+            lastErrorMessage = error.localizedDescription
+        }
+        try? SecureTokenStore.shared.clear(kind: .session)
+        authUser = nil
+        isAdminSession = false
+        activeSessions = []
+        currentSessionID = nil
+        rebuildClients(baseURL: apiClient.baseURL, apiToken: SecureTokenStore.shared.readEffectiveToken())
+        #if canImport(CoreSpotlight)
+        await SpotlightIndexer.shared.clear()
+        #endif
+    }
+
+    /// Clear the admin token and return to a signed-out state.
+    func exitAdminMode() async {
+        try? SecureTokenStore.shared.clear(kind: .admin)
+        isAdminSession = false
+        authUser = nil
+        activeSessions = []
+        currentSessionID = nil
+        rebuildClients(baseURL: apiClient.baseURL, apiToken: SecureTokenStore.shared.readEffectiveToken())
+    }
+
+    func revokeSession(_ id: String) async throws {
+        try await apiClient.revokeSession(id)
+        if id == currentSessionID {
+            await logout()
+        } else {
+            await refreshSessions()
         }
     }
 
@@ -407,11 +565,18 @@ final class AppEnvironment {
     }
 
     nonisolated static func defaultAPIToken() -> String? {
+        // One-shot v1.1 → v1.2 keychain migration: move a legacy
+        // linofinance.apiToken into the admin slot. Guarded by a UserDefaults
+        // flag so it runs at most once.
+        if !UserDefaults.standard.bool(forKey: "linofinance.tokenMigrated.v1_2") {
+            SecureTokenStore.shared.migrateLegacyTokenIfNeeded()
+            UserDefaults.standard.set(true, forKey: "linofinance.tokenMigrated.v1_2")
+        }
         let environment = ProcessInfo.processInfo.environment
         if let value = environment["LINOFINANCE_API_TOKEN"], !value.isEmpty {
             return value
         }
-        if let value = SecureTokenStore.shared.readToken(), !value.isEmpty {
+        if let value = SecureTokenStore.shared.readEffectiveToken(), !value.isEmpty {
             return value
         }
         if let value = UserDefaults.standard.string(forKey: "linofinance.apiToken"),

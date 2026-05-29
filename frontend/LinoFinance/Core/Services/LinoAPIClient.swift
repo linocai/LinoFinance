@@ -428,6 +428,38 @@ struct LinoAPIClient {
         try await delete("push/devices/\(id)")
     }
 
+    // MARK: - Auth (Sign in with Apple, v1.2)
+
+    /// Exchanges an Apple identity_token for a LinoFinance session token.
+    /// Deliberately sends NO Authorization header — this is the bootstrap and
+    /// there is no token yet.
+    func signInWithApple(_ request: AppleSignInRequest) async throws -> AppleSignInResponseDTO {
+        var urlRequest = self.request(for: "auth/apple", includeAuthHeader: false)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.httpBody = try encoder.encode(request)
+        return try await send(urlRequest)
+    }
+
+    func fetchMe() async throws -> AuthMeResponseDTO {
+        try await get("auth/me")
+    }
+
+    func logout() async throws {
+        var request = request(for: "auth/logout")
+        request.httpMethod = "POST"
+        _ = try await sendData(request)
+    }
+
+    func listSessions() async throws -> [AuthSessionDTO] {
+        let response: AuthSessionListResponseDTO = try await get("auth/sessions")
+        return response.items
+    }
+
+    func revokeSession(_ id: String) async throws {
+        try await delete("auth/sessions/\(id)")
+    }
+
     func listAuditLogs(
         targetType: String? = nil,
         targetID: String? = nil,
@@ -499,10 +531,11 @@ struct LinoAPIClient {
 
     private func request(
         for path: String,
-        queryItems: [URLQueryItem] = []
+        queryItems: [URLQueryItem] = [],
+        includeAuthHeader: Bool = true
     ) -> URLRequest {
         var request = URLRequest(url: url(for: path, queryItems: queryItems))
-        if let authToken {
+        if includeAuthHeader, let authToken {
             request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         }
         return request
