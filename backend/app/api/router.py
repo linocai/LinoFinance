@@ -6,6 +6,7 @@ from app.api.routes import (
     ai_memos,
     audit_logs,
     attachments,
+    auth,
     cash_flow,
     categories,
     credit_statement_cycles,
@@ -30,6 +31,7 @@ api_router.include_router(ai.router, prefix="/ai", tags=["ai"])
 api_router.include_router(ai_memos.router, prefix="/ai/memos", tags=["ai-memos"])
 api_router.include_router(audit_logs.router, prefix="/audit-logs", tags=["audit-logs"])
 api_router.include_router(attachments.router, prefix="/attachments", tags=["attachments"])
+api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(cash_flow.router, prefix="/cash-flow-items", tags=["cash-flow"])
 api_router.include_router(categories.router, prefix="/categories", tags=["categories"])
 api_router.include_router(

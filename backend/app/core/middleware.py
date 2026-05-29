@@ -12,6 +12,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from app.core.auth_context import AuthContext
 from app.core.config import Settings
 
 LOGGER = logging.getLogger("linofinance.api")
@@ -24,6 +25,8 @@ def is_public_api_path(path: str, settings: Settings) -> bool:
         f"{prefix}/openapi.json",
         f"{prefix}/docs",
         f"{prefix}/redoc",
+        # Sign in with Apple is the bootstrap — there is no token yet.
+        f"{prefix}/auth/apple",
     }
     if path in public_paths:
         return True
@@ -81,15 +84,26 @@ class APIAuthMiddleware(BaseHTTPMiddleware):
         if is_public_api_path(request.url.path, self.settings) or not self.settings.auth_required:
             return await call_next(request)
 
-        expected_token = self.settings.api_auth_token or ""
         actual_token = _extract_token(request)
-        if actual_token is None or not hmac.compare_digest(actual_token, expected_token):
-            return JSONResponse(
-                status_code=401,
-                content={"detail": "Missing or invalid API token"},
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+        if actual_token is None:
+            return _unauthorized()
 
+        # Admin escape hatch — the env token still works for ops / curl /
+        # deploy smoke and bypasses the users table entirely.
+        if self.settings.api_auth_token and hmac.compare_digest(
+            actual_token, self.settings.api_auth_token
+        ):
+            request.state.auth = AuthContext(mode="admin")
+            return await call_next(request)
+
+        # Session-token path — DB-backed Apple session.
+        session = _resolve_session_token(request, actual_token)
+        if session is None:
+            return _unauthorized()
+
+        request.state.auth = AuthContext(
+            mode="user", user=session.user, session=session
+        )
         return await call_next(request)
 
 
@@ -145,6 +159,75 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         response.headers.update(headers)
         return response
+
+
+def _unauthorized() -> JSONResponse:
+    return JSONResponse(
+        status_code=401,
+        content={"detail": "Missing or invalid API token"},
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def _open_db_session(request: Request):
+    """Open a DB session honouring the app's get_db dependency override.
+
+    Tests override ``get_db`` with an in-memory SQLite factory via
+    ``app.dependency_overrides``; the middleware runs outside the dependency
+    system, so it resolves the same factory here. Falls back to the
+    production ``SessionLocal``.
+    """
+    from app.db.session import SessionLocal, get_db
+
+    override = request.app.dependency_overrides.get(get_db)
+    if override is not None:
+        gen = override()
+        return next(gen), gen
+    return SessionLocal(), None
+
+
+def _resolve_session_token(request: Request, token: str):
+    """Resolve an active session for the token, detached for post-request use.
+
+    Returns None for any unresolvable token — including when the session store
+    is unreachable — so a bad token always yields a clean 401 rather than a 500.
+    """
+    from app.services import auth as auth_service
+
+    try:
+        db, gen = _open_db_session(request)
+    except Exception:
+        LOGGER.exception("Failed to open session store for token auth")
+        return None
+
+    try:
+        session = auth_service.get_session_for_token(db, token)
+        if session is None:
+            return None
+        # Touch last_seen_at inline (single indexed update, < 1 ms). The commit
+        # expires attributes; re-fetch with the user eager-loaded afterwards.
+        auth_service.touch_session_last_seen(db, session.id)
+        session = auth_service.get_session_for_token(db, token)
+        if session is None:
+            return None
+        # Force-load relationship, then detach so attributes survive after the
+        # session closes.
+        _ = session.user
+        db.expunge(session)
+        if session.user is not None:
+            db.expunge(session.user)
+        return session
+    except Exception:
+        LOGGER.exception("Session token resolution failed")
+        return None
+    finally:
+        if gen is not None:
+            try:
+                next(gen)
+            except StopIteration:
+                pass
+        else:
+            db.close()
 
 
 def _extract_token(request: Request) -> str | None:
