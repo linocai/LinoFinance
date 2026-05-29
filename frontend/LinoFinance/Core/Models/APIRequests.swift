@@ -261,3 +261,12 @@ struct PushDeviceRegisterRequest: Encodable {
     var apnsToken: String
     var appVersion: String?
 }
+
+struct AppleSignInRequest: Encodable {
+    var identityToken: String
+    var deviceLabel: String
+    var platform: String           // "ios" | "macos"
+    var appVersion: String?
+    var firstName: String?
+    var lastName: String?
+}

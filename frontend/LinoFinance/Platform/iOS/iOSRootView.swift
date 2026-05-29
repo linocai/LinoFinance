@@ -12,8 +12,11 @@ struct iOSRootView: View {
 
     var body: some View {
         Group {
-            if requiresConnectionSetup {
-                connectionSetupStack
+            if environment.isResolvingAuth {
+                ProgressView("正在加载…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if environment.needsSignIn {
+                SignInWithAppleView(environment: environment)
             } else {
                 mainTabs
             }
@@ -23,12 +26,6 @@ struct iOSRootView: View {
         .tint(FinanceTokens.Brand.primary)
         .background(CanvasBackground())
         .privacyActivityMonitor(environment: environment)
-        .onChange(of: requiresConnectionSetup) { _, needsSetup in
-            if needsSetup {
-                selectedTab = .more
-                morePath = [.settings]
-            }
-        }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active:
@@ -40,11 +37,11 @@ struct iOSRootView: View {
             }
         }
         .task {
-            if requiresConnectionSetup {
-                selectedTab = .more
-                morePath = [.settings]
-                try? await environment.settingsViewModel.refresh()
+            await environment.loadCurrentUser()
+            if environment.needsSignIn {
+                // Sign-in screen handles this state; nothing to load.
             } else {
+                await environment.refreshSessions()
                 await environment.refreshPrimaryData()
             }
             await environment.authenticatePrivacyIfNeeded()
@@ -122,30 +119,6 @@ struct iOSRootView: View {
                 .presentationDetents([.large])
         }
         .modifier(NewObjectSheets(environment: environment))
-    }
-
-    private var connectionSetupStack: some View {
-        NavigationStack {
-            SettingsView(environment: environment)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar(.hidden, for: .navigationBar)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(CanvasBackground())
-    }
-
-    private var requiresConnectionSetup: Bool {
-        !environment.isAPITokenConfigured
-            || isAuthError(environment.lastErrorMessage)
-            || isAuthError(environment.dashboardViewModel.errorMessage)
-            || isAuthError(environment.reportsViewModel.errorMessage)
-            || isAuthError(environment.aiViewModel.errorMessage)
-            || isAuthError(environment.settingsViewModel.errorMessage)
-    }
-
-    private func isAuthError(_ message: String?) -> Bool {
-        guard let message else { return false }
-        return message.contains("API 401") || message.localizedCaseInsensitiveContains("invalid API token")
     }
 
     private func openQuickEntry(_ intent: QuickEntryIntent) {

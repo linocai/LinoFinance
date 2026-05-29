@@ -12,6 +12,27 @@ struct MacRootView: View {
 #endif
 
     var body: some View {
+        Group {
+            if environment.isResolvingAuth {
+                ProgressView("正在加载…")
+                    .frame(minWidth: 1180, minHeight: 760)
+                    .background(CanvasBackground())
+            } else if environment.needsSignIn {
+                SignInWithAppleView(environment: environment)
+                    .frame(minWidth: 1180, minHeight: 760)
+            } else {
+                mainLayout
+            }
+        }
+        .task {
+            await environment.loadCurrentUser()
+            if !environment.needsSignIn {
+                await environment.refreshSessions()
+            }
+        }
+    }
+
+    private var mainLayout: some View {
         NavigationSplitView {
             SidebarView(environment: environment)
                 .navigationSplitViewColumnWidth(min: 220, ideal: 230)

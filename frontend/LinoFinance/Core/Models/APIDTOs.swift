@@ -317,6 +317,60 @@ struct PushDeviceDTO: Identifiable, Decodable, Equatable, Hashable {
     let enabled: Bool
 }
 
+// MARK: - Auth (Sign in with Apple, v1.2)
+
+struct AuthUserDTO: Decodable, Equatable {
+    let id: String
+    let appleUserId: String
+    let email: String?
+    let emailVerified: Bool
+    let displayName: String?
+    let isAdmin: Bool
+}
+
+struct AuthSessionDTO: Decodable, Identifiable, Equatable {
+    let id: String
+    let deviceLabel: String
+    let platform: String
+    let appVersion: String?
+    let issuedAt: Date
+    let lastSeenAt: Date
+    let expiresAt: Date
+    var isCurrent: Bool = false
+
+    private enum CodingKeys: String, CodingKey {
+        case id, deviceLabel, platform, appVersion, issuedAt, lastSeenAt, expiresAt, isCurrent
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        deviceLabel = try container.decode(String.self, forKey: .deviceLabel)
+        platform = try container.decode(String.self, forKey: .platform)
+        appVersion = try container.decodeIfPresent(String.self, forKey: .appVersion)
+        issuedAt = try container.decode(Date.self, forKey: .issuedAt)
+        lastSeenAt = try container.decode(Date.self, forKey: .lastSeenAt)
+        expiresAt = try container.decode(Date.self, forKey: .expiresAt)
+        isCurrent = try container.decodeIfPresent(Bool.self, forKey: .isCurrent) ?? false
+    }
+}
+
+struct AppleSignInResponseDTO: Decodable {
+    let sessionToken: String
+    let expiresAt: Date
+    let user: AuthUserDTO
+}
+
+struct AuthMeResponseDTO: Decodable {
+    let user: AuthUserDTO?
+    let session: AuthSessionDTO?
+    let admin: Bool?
+}
+
+struct AuthSessionListResponseDTO: Decodable {
+    let items: [AuthSessionDTO]
+}
+
 struct AuditLogDTO: Identifiable, Decodable, Equatable, Hashable {
     let id: String
     let actor: String
