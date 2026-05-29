@@ -56,10 +56,6 @@ struct SettingsView: View {
                     .textInputAutocapitalization(.never)
                     .keyboardType(.URL)
                     .autocorrectionDisabled()
-                SecureField(environment.apiClient.authToken == nil ? "API Token" : "留空则保留当前 Token", text: $apiToken)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-
                 Button {
                     Task { await saveAPIConfiguration() }
                 } label: {
@@ -67,19 +63,45 @@ struct SettingsView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-
-                Button(role: .destructive) {
-                    Task { await clearToken() }
-                } label: {
-                    Label("清除 Token", systemImage: "key.slash")
-                        .frame(maxWidth: .infinity)
-                }
-                .disabled(environment.apiClient.authToken == nil)
-
                 if let configMessage {
                     Text(configMessage)
                         .font(.caption)
                         .foregroundStyle(FinanceTokens.State.income)
+                }
+            }
+
+            Section("账号") {
+                if environment.isAdminSession {
+                    Text("你正在使用管理员 Token 直连")
+                        .font(.subheadline.weight(.semibold))
+                    Button(role: .destructive) {
+                        Task { await environment.exitAdminMode() }
+                    } label: {
+                        Label("退出管理员模式", systemImage: "key.slash")
+                            .frame(maxWidth: .infinity)
+                    }
+                } else if let user = environment.authUser {
+                    DetailLine(title: "名称", value: user.displayName ?? "未提供")
+                    DetailLine(title: "邮箱", value: user.email ?? "未提供")
+                    DetailLine(title: "Apple ID", value: user.appleUserId)
+                    Button(role: .destructive) {
+                        Task { await environment.logout() }
+                    } label: {
+                        Label("退出登录", systemImage: "rectangle.portrait.and.arrow.right")
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+
+            if environment.authUser != nil {
+                Section("已登录设备") {
+                    AuthSessionsSection(environment: environment)
+                }
+            }
+
+            Section {
+                DisclosureGroup("高级设置 / 管理员 Token") {
+                    AdminTokenEntryView(environment: environment)
                 }
             }
 
@@ -193,6 +215,7 @@ struct SettingsView: View {
         .task {
             syncDrafts()
             try? await environment.settingsViewModel.refresh()
+            await environment.refreshSessions()
         }
     }
 
