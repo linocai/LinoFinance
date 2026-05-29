@@ -3,6 +3,7 @@ from app.models.ai import AIAction, AIActionExecution, AIPlan
 from app.models.ai_memo import AIMemo
 from app.models.audit_log import AuditLog
 from app.models.attachment import Attachment
+from app.models.auth_session import AuthSession
 from app.models.cash_flow import CashFlowItem
 from app.models.category import Category
 from app.models.credit_statement_cycle import CreditStatementCycle
@@ -14,6 +15,7 @@ from app.models.push import PushDevice
 from app.models.reconciliation import AccountAdjustment
 from app.models.reimbursement import ReimbursementClaim
 from app.models.subscription import SubscriptionRule
+from app.models.user import User
 
 __all__ = [
     "Account",
@@ -25,6 +27,7 @@ __all__ = [
     "AIPlan",
     "AuditLog",
     "Attachment",
+    "AuthSession",
     "Category",
     "CashFlowItem",
     "CreditStatementCycle",
@@ -36,4 +39,5 @@ __all__ = [
     "PushDevice",
     "ReimbursementClaim",
     "SubscriptionRule",
+    "User",
 ]
