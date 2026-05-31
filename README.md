@@ -81,10 +81,11 @@ Production API startup requires `LINOFINANCE_API_AUTH_TOKEN`; macOS clients can
 point to a domain API with `LINOFINANCE_API_BASE_URL` and authenticate with
 `LINOFINANCE_API_TOKEN`.
 
-## Confirmed Product Defaults
+## Planning & Product Decisions
 
-- Manual USD/CNY initial rate: `6.8`.
-- AI auto-confirm candidate threshold: `1000 CNY`.
-- Credit card statements use a dedicated `CreditStatementCycle` object.
-- Reports support reimbursement-before and multiple reimbursement-net views.
-- API will eventually be reached through a domain name backed by the cloud server.
+The single source of truth for the active plan, durable product decisions
+(manual USD/CNY rate, AI auto-confirm threshold, credit statement cycles,
+reimbursement views, etc.), and the per-version changelog is
+[PROJECT_PLAN.md](PROJECT_PLAN.md). Repo-specific engineering conventions and
+pitfalls live in [CLAUDE.md](CLAUDE.md). Historical per-version plans are under
+[archive/](archive/).
