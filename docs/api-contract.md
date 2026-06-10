@@ -175,6 +175,10 @@ Response:
 - `confirm` changes an `expected` item to `confirmed`.
 - `cancel` is allowed only before settlement.
 - `settle` requires an explicit formal entry payload and creates a confirmed `FinancialEntry`.
+- `settle` returns `400` for a reimbursement-linked item (`linked_reimbursement_id`
+  is set): those receivables settle only through the claim's `mark-received`
+  action, which generates exactly one income entry. The generic settle path is
+  blocked to prevent a second, double-counted entry (v1.3.0, audit 1.3).
 - Only the settled formal entry affects account balances and reports.
 - Credit statement cycles generate `credit_repayment` cash-flow items.
 - Fully repaid credit statement cycles mark the linked repayment cash flow as `settled`.

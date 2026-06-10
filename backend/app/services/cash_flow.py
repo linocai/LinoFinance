@@ -107,6 +107,14 @@ def settle_cash_flow_item(
     payload: CashFlowSettle,
 ) -> CashFlowSettleRead:
     item = _get_cash_flow_or_raise(db, item_id)
+    if item.linked_reimbursement_id is not None:
+        # Reimbursement-linked receivables must go through mark-received so the
+        # claim state machine generates exactly one income entry (audit 1.3).
+        # The generic settle path would create a second, double-counted entry.
+        raise LedgerValidationError(
+            "Reimbursement-linked cash flow items cannot be settled directly; "
+            "use the reimbursement claim's mark-received action instead."
+        )
     if item.status in {"settled", "cancelled"}:
         raise LedgerValidationError("Only active cash flow items can be settled")
     _validate_settlement_payload(item, payload)

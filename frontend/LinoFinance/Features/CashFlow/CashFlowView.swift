@@ -1,5 +1,16 @@
 import SwiftUI
 
+extension CashFlowItemDTO {
+    /// Whether the generic "结算" (settle) action may be offered in the UI.
+    /// Transfers settle through the credit-repayment flow, and
+    /// reimbursement-linked receivables settle only through the claim's
+    /// mark-received action — the backend rejects a direct settle on either
+    /// (audit 1.3), so the entry point is hidden here too.
+    var canShowSettleAction: Bool {
+        direction != "transfer" && linkedReimbursementId == nil
+    }
+}
+
 struct CashFlowView: View {
     @Bindable var environment: AppEnvironment
     @State private var confirmation: ConfirmAction?
@@ -90,7 +101,7 @@ struct CashFlowView: View {
                     .onTapGesture { environment.inspectorSelection = .cashFlow(item) }
                     .contextMenu {
                         Button("编辑") { confirm(item, operation: "edit") }
-                        if item.direction != "transfer" {
+                        if item.canShowSettleAction {
                             Button("结算") { confirm(item, operation: "settle") }
                         }
                         Button("取消", role: .destructive) { confirm(item, operation: "cancel") }
@@ -100,7 +111,7 @@ struct CashFlowView: View {
                         if item.status == "expected" || item.status == "confirmed" {
                             Button("编辑") { confirm(item, operation: "edit") }
                                 .tint(.blue)
-                            if item.direction != "transfer" {
+                            if item.canShowSettleAction {
                                 Button("结算") { confirm(item, operation: "settle") }
                                     .tint(.green)
                             }
@@ -195,6 +206,12 @@ struct CashFlowView: View {
     private func attemptSettle(_ item: CashFlowItemDTO) async {
         if item.direction == "transfer" {
             environment.cashFlowViewModel.errorMessage = "转账现金流请通过记账里的信用还款流程结算"
+            return
+        }
+        if item.linkedReimbursementId != nil {
+            // The settle entry points are hidden for these, but guard the path
+            // anyway: the backend rejects a direct settle (audit 1.3).
+            environment.cashFlowViewModel.errorMessage = "报销关联现金流请通过报销中心的「标记到账」结算"
             return
         }
         if item.accountId != nil, item.categoryId != nil {
@@ -341,7 +358,7 @@ private struct CashFlowActionMenu: View {
     var body: some View {
         Menu {
             Button("编辑") { confirm(item, "edit") }
-            if item.direction != "transfer" {
+            if item.canShowSettleAction {
                 Button("结算") { confirm(item, "settle") }
             }
             Button("取消", role: .destructive) { confirm(item, "cancel") }

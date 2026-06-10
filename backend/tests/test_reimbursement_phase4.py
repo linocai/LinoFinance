@@ -226,6 +226,134 @@ def test_mark_reimbursement_received_creates_income_entry_and_settles_cash_flow(
     assert cash_flow["linked_entry_id"] == result["entry"]["id"]
 
 
+def test_settle_on_reimbursement_linked_cash_flow_is_rejected(client) -> None:
+    """Settling a claim-linked receivable directly is blocked (audit 1.3)."""
+    account = create_account(client, balance="1000")
+    expense_category = create_category(client)
+    income_category = create_category(client, name="Reimbursement Income", category_type="income")
+    create_reimbursable_entry(client, account, expense_category)
+    claim = client.get("/api/v1/reimbursement-claims").json()[0]
+    cash_flow_id = claim["cash_flow_item_id"]
+
+    settle_response = client.post(
+        f"/api/v1/cash-flow-items/{cash_flow_id}/settle",
+        json={
+            "entry": {
+                "title": "Sneaky settle",
+                "date": "2026-06-09",
+                "category_lines": [
+                    {
+                        "category_id": income_category["id"],
+                        "direction": "income",
+                        "amount": "500",
+                        "currency": "CNY",
+                    }
+                ],
+                "account_movements": [
+                    {
+                        "account_id": account["id"],
+                        "movement_type": "balance_in",
+                        "amount": "500",
+                        "currency": "CNY",
+                    }
+                ],
+            },
+        },
+    )
+
+    assert settle_response.status_code == 400
+    assert "mark-received" in settle_response.json()["detail"]
+    # The item is untouched and no entry was created by the rejected settle.
+    cash_flow = client.get(f"/api/v1/cash-flow-items/{cash_flow_id}").json()
+    assert cash_flow["status"] == "expected"
+    assert cash_flow["linked_entry_id"] is None
+    assert client.get(f"/api/v1/accounts/{account['id']}").json()["current_balance"] == "500.00"
+
+
+def test_blocked_settle_then_mark_received_yields_single_income_entry(client) -> None:
+    """After the settle bypass is blocked, mark-received still produces exactly
+    one income entry — the double-count regression guard (audit 1.3)."""
+    account = create_account(client, balance="1000")
+    expense_category = create_category(client)
+    income_category = create_category(client, name="Reimbursement Income", category_type="income")
+    create_reimbursable_entry(client, account, expense_category)
+    claim = client.get("/api/v1/reimbursement-claims").json()[0]
+    cash_flow_id = claim["cash_flow_item_id"]
+
+    # Bypass attempt is rejected (no entry created).
+    blocked = client.post(
+        f"/api/v1/cash-flow-items/{cash_flow_id}/settle",
+        json={
+            "entry": {
+                "title": "Sneaky settle",
+                "date": "2026-06-09",
+                "category_lines": [
+                    {
+                        "category_id": income_category["id"],
+                        "direction": "income",
+                        "amount": "500",
+                        "currency": "CNY",
+                    }
+                ],
+                "account_movements": [
+                    {
+                        "account_id": account["id"],
+                        "movement_type": "balance_in",
+                        "amount": "500",
+                        "currency": "CNY",
+                    }
+                ],
+            },
+        },
+    )
+    assert blocked.status_code == 400
+
+    entries_before = client.get("/api/v1/entries").json()
+
+    # The sanctioned path generates exactly one income entry.
+    receive = client.post(
+        f"/api/v1/reimbursement-claims/{claim['id']}/mark-received",
+        json={
+            "actual_received_date": "2026-06-09",
+            "received_account_id": account["id"],
+            "entry": {
+                "title": "Company reimbursement",
+                "date": "2026-06-09",
+                "category_lines": [
+                    {
+                        "category_id": income_category["id"],
+                        "direction": "income",
+                        "amount": "500",
+                        "currency": "CNY",
+                    }
+                ],
+                "account_movements": [
+                    {
+                        "account_id": account["id"],
+                        "movement_type": "balance_in",
+                        "amount": "500",
+                        "currency": "CNY",
+                    }
+                ],
+            },
+        },
+    )
+    assert receive.status_code == 200
+    income_entry_id = receive.json()["entry"]["id"]
+
+    entries_after = client.get("/api/v1/entries").json()
+    new_entries = [e for e in entries_after if e["id"] not in {x["id"] for x in entries_before}]
+    assert len(new_entries) == 1
+    assert new_entries[0]["id"] == income_entry_id
+
+    cash_flow = client.get(f"/api/v1/cash-flow-items/{cash_flow_id}").json()
+    assert cash_flow["status"] == "settled"
+    assert cash_flow["linked_entry_id"] == income_entry_id
+    assert receive.json()["reimbursement_claim"]["status"] == "received"
+    # Balance returns to its pre-expense level: -500 (expense) +500 (received).
+    assert client.get(f"/api/v1/accounts/{account['id']}").json()["current_balance"] == "1000.00"
+
+
 def test_void_original_reimbursable_entry_abandons_claim_and_cancels_cash_flow(client) -> None:
     account = create_account(client, balance="1000")
     category = create_category(client)
