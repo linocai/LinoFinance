@@ -5,7 +5,9 @@ extension DateFormatter {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        // 纯日历日(yyyy-MM-dd)必须按本地时区格式化:日期选择器给的是本地零点的
+        // Date,若按 UTC 格式化会在 UTC+8 退回前一天(选 6/2 存成 6/1)。
+        formatter.timeZone = .current
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
