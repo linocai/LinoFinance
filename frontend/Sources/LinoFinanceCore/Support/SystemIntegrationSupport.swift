@@ -87,7 +87,10 @@ public enum MonthWindowResolver {
         calendar: Calendar = Calendar(identifier: .gregorian)
     ) -> MonthDateWindow? {
         var calendar = calendar
-        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? calendar.timeZone
+        // Resolve the month window in the device-local timezone so a UTC-forced
+        // calendar no longer lands a day early for negative-offset zones
+        // (mirrors the Xcode-side LinoAppIntents.monthWindow fix, audit §3.4).
+        calendar.timeZone = .current
         let components = calendar.dateComponents([.year, .month], from: now)
         guard let year = components.year else { return nil }
         let resolvedMonth = month ?? components.month ?? 1
