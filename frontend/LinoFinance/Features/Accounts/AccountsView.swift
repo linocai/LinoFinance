@@ -392,7 +392,7 @@ struct NewAccountSheet: View {
     }
 
     private func submit() async {
-        let amount = Decimal(string: openingAmount.isEmpty ? "0" : openingAmount) ?? 0
+        let amount = parseDecimalAmount(openingAmount.isEmpty ? "0" : openingAmount) ?? 0
         let request = AccountCreateRequest(
             name: name,
             type: accountType,

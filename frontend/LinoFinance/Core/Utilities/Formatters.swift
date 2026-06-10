@@ -22,6 +22,30 @@ extension DateFormatter {
     }()
 }
 
+/// Parse a user-entered amount string into a `Decimal`, or `nil` if it is not a
+/// clean decimal number.
+///
+/// Pipeline (v1.3.0, audit 1.4): trim whitespace → strip English thousands
+/// separators (`,`) → validate the *whole* string against
+/// `^-?[0-9]+(\.[0-9]+)?$` → only then hand off to `Decimal(string:)`.
+///
+/// We deliberately do **not** strip currency symbols or units: `"58元"`,
+/// `"¥100"`, `"1.2.3"`, `""` all return `nil` so the form surfaces an error
+/// rather than silently swallowing characters (e.g. `Decimal(string: "58元")`
+/// returns `58`). The whole-string regex (rather than a round-trip
+/// format-compare) avoids trailing-zero false negatives like `"1.50"` → `"1.5"`.
+func parseDecimalAmount(_ raw: String) -> Decimal? {
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    let stripped = trimmed.replacingOccurrences(of: ",", with: "")
+    guard stripped.range(
+        of: "^-?[0-9]+(\\.[0-9]+)?$",
+        options: .regularExpression
+    ) != nil else {
+        return nil
+    }
+    return Decimal(string: stripped)
+}
+
 enum FinanceFormatter {
     private static let currencyFormatter: NumberFormatter = {
         let formatter = NumberFormatter()

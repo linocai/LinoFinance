@@ -766,7 +766,7 @@ struct NewEntrySheet: View {
 
     private var canSubmit: Bool {
         guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              Decimal(string: amount) != nil else {
+              parseDecimalAmount(amount) != nil else {
             return false
         }
         if mode.usesBalanceAccount && balanceAccountSelection.wrappedValue == nil {
@@ -792,7 +792,7 @@ struct NewEntrySheet: View {
         if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             missing.append("标题")
         }
-        if Decimal(string: amount) == nil {
+        if parseDecimalAmount(amount) == nil {
             missing.append("金额")
         }
         if mode.usesBalanceAccount && balanceAccountSelection.wrappedValue == nil {
@@ -831,7 +831,7 @@ struct NewEntrySheet: View {
     }
 
     private func submit() async {
-        guard let decimalAmount = Decimal(string: amount),
+        guard let decimalAmount = parseDecimalAmount(amount),
               let accountID = selectedAccountID else {
             return
         }

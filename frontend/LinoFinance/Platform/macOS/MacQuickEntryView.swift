@@ -297,7 +297,7 @@ struct MacQuickEntryView: View {
     private func submitForm() async throws {
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanTitle.isEmpty else { throw QuickEntryError.missingTitle }
-        guard let decimal = Decimal(string: amount), decimal > 0 else { throw QuickEntryError.invalidAmount }
+        guard let decimal = parseDecimalAmount(amount), decimal > 0 else { throw QuickEntryError.invalidAmount }
 
         let hasRequiredLinks = accountID != nil && categoryID != nil
         let status: EntryStatus = hasRequiredLinks ? .confirmed : .draft

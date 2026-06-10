@@ -428,7 +428,7 @@ struct NewCashFlowSheet: View {
                 Button("取消") { environment.isShowingNewCashFlowSheet = false }
                 Button("创建") { Task { await submit() } }
                     .buttonStyle(.borderedProminent)
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || Decimal(string: amount) == nil)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || parseDecimalAmount(amount) == nil)
             }
         }
         .padding(22)
@@ -463,7 +463,7 @@ struct NewCashFlowSheet: View {
     }
 
     private func submit() async {
-        guard let decimal = Decimal(string: amount) else { return }
+        guard let decimal = parseDecimalAmount(amount) else { return }
         if cashFlowType == "salary", recurrenceEndDate < expectedDate {
             errorMessage = "工资重复截止日期不能早于首次预计日期"
             return
@@ -651,13 +651,13 @@ struct EditCashFlowSheet: View {
 
     private var isFormValid: Bool {
         guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
-        guard Decimal(string: amount) != nil else { return false }
+        guard parseDecimalAmount(amount) != nil else { return false }
         if currency != .cny && exchangeRateId == nil { return false }
         return true
     }
 
     private func submit() async {
-        guard let decimal = Decimal(string: amount) else { return }
+        guard let decimal = parseDecimalAmount(amount) else { return }
         if currency != .cny && exchangeRateId == nil {
             errorMessage = "缺少 \(currency.rawValue) → CNY 汇率，请到设置中添加"
             return
