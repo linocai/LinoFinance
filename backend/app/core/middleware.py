@@ -114,15 +114,47 @@ class _RateLimitWindow:
 
 
 class _InMemoryRateLimiter:
+    # Hard ceiling on tracked keys so a flood of distinct client IPs cannot grow
+    # the dict without bound (audit 2.1 / decision D5). Stale windows are swept
+    # periodically; if the cap is still hit, the oldest window is evicted.
+    MAX_KEYS = 10000
+    SWEEP_INTERVAL_SECONDS = 60.0
+
     def __init__(self, limit_per_minute: int) -> None:
         self.limit_per_minute = limit_per_minute
         self._windows: dict[str, _RateLimitWindow] = {}
         self._lock = Lock()
+        self._last_sweep_at = 0.0
+
+    def _sweep_expired(self, now: float) -> None:
+        """Drop every window older than 60s. Caller holds the lock."""
+        expired = [
+            key
+            for key, window in self._windows.items()
+            if now - window.started_at >= 60
+        ]
+        for key in expired:
+            del self._windows[key]
+        self._last_sweep_at = now
 
     def hit(self, key: str, now: float) -> tuple[bool, int, int]:
         with self._lock:
+            # Periodic full sweep of expired windows, at most once per interval.
+            if now - self._last_sweep_at >= self.SWEEP_INTERVAL_SECONDS:
+                self._sweep_expired(now)
+
             window = self._windows.get(key)
             if window is None or now - window.started_at >= 60:
+                # Before inserting a brand-new key, enforce the cap. Sweep first;
+                # if still full, evict the window with the oldest start time.
+                if key not in self._windows and len(self._windows) >= self.MAX_KEYS:
+                    self._sweep_expired(now)
+                    if len(self._windows) >= self.MAX_KEYS:
+                        oldest_key = min(
+                            self._windows,
+                            key=lambda k: self._windows[k].started_at,
+                        )
+                        del self._windows[oldest_key]
                 window = _RateLimitWindow(started_at=now, count=0)
                 self._windows[key] = window
 

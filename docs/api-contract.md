@@ -269,7 +269,7 @@ Response:
   original-date anchor.
 - Subscription reports project active weekly/monthly/yearly rules into monthly and annual CNY equivalents.
 - CSV export is V1-only CSV; each dataset endpoint returns `text/csv`.
-- Export datasets include core ledger tables, cash-flow/reimbursement/credit/installment/subscription tables, AI/action/audit tables, and notification rules.
+- Export datasets include core ledger tables, cash-flow/reimbursement/credit/installment/subscription tables, AI/action/audit tables, and notification rules. As of v1.3.0 (audit 2.7) the set also includes `categories`, `currency_rates`, `account_adjustments`, and `attachments` (attachment rows are metadata only — `storage_key`/`checksum_sha256`/etc; the file body is never part of the CSV), so exported `category_id`/`exchange_rate_id` references resolve within the export.
 - CSV amount rows preserve original amount/currency fields and CNY conversion columns where the underlying table has them.
 - `GET /audit-logs` accepts optional `limit` in addition to `target_type` and `target_id`; this is used by inspector surfaces for small recent-audit cards.
 
@@ -285,7 +285,7 @@ Response:
 ## V1.1 Foundation Endpoints
 
 - `GET /search?q=&limit=&types=` returns `{query, limit, items}` with cross-module hits for accounts, entries, cash-flow items, reimbursement claims, AI plans, and notification rules. `types` is a comma-separated filter.
-- `POST /attachments` accepts multipart fields `owner_type`, `owner_id`, optional `uploaded_by`/`note`, and `file`. Supported owners are `entry_category_line`, `reimbursement_claim`, and `ai_action`. Files are stored under `LINOFINANCE_STORAGE_ROOT` with a relative `storage_key`, sha256 checksum, 10 MB per file, and 25 MB total for reimbursement owners.
+- `POST /attachments` accepts multipart fields `owner_type`, `owner_id`, optional `uploaded_by`/`note`, and `file`. Supported owners are `entry_category_line`, `reimbursement_claim`, and `ai_action`. As of v1.3.0 (audit 2.4) the `(owner_type, owner_id)` pair must reference an existing entity or the upload returns `404`. Files are stored under `LINOFINANCE_STORAGE_ROOT` with a relative `storage_key`, sha256 checksum, 10 MB per file, and 25 MB total for reimbursement owners.
 - `GET /attachments?owner_type=&owner_id=` returns undeleted attachments for an owner. `GET /attachments/{id}` streams the stored file. `DELETE /attachments/{id}` soft-deletes metadata and keeps the local file until scheduled cleanup removes files older than 30 days.
 - `GET /reconciliation/accounts` returns expected amount, current amount, delta, and `needs_adjustment` per account using movements, credit cycles, and reconciliation adjustments.
 - `POST /reconciliation/adjustments` creates an account adjustment against an observed `actual_amount`, updates the account's current balance/liability, writes an `account_adjustment.create` audit log, and returns the adjustment row.

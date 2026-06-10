@@ -9,10 +9,28 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.models.ai import AIAction
 from app.models.attachment import Attachment
+from app.models.entry import EntryCategoryLine
+from app.models.reimbursement import ReimbursementClaim
 from app.services.ledger import LedgerNotFoundError, LedgerValidationError
 
 OWNER_TYPES = {"entry_category_line", "reimbursement_claim", "ai_action"}
+
+# Maps each supported owner type to the model whose primary key the owner_id
+# must reference. Used to reject attachments that point at a non-existent
+# entity (audit 2.4); single-ledger semantics, so no per-user ownership.
+_OWNER_MODELS = {
+    "entry_category_line": EntryCategoryLine,
+    "reimbursement_claim": ReimbursementClaim,
+    "ai_action": AIAction,
+}
+
+
+def _require_owner_exists(db: Session, owner_type: str, owner_id: str) -> None:
+    model = _OWNER_MODELS[owner_type]
+    if db.get(model, owner_id) is None:
+        raise LedgerNotFoundError("Attachment owner not found")
 
 
 def create_attachment(
@@ -28,6 +46,7 @@ def create_attachment(
 ) -> Attachment:
     if owner_type not in OWNER_TYPES:
         raise LedgerValidationError("Unsupported attachment owner type")
+    _require_owner_exists(db, owner_type, owner_id)
 
     settings = get_settings()
     size_bytes = len(data)
