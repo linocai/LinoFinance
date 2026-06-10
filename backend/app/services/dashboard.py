@@ -5,6 +5,7 @@ from typing import Dict, List
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.timeutils import app_today, utc_to_app_date
 from app.models.account import Account
 from app.models.cash_flow import CashFlowItem
 from app.models.entry import FinancialEntry
@@ -17,7 +18,7 @@ DAILY_PNL_SOURCE = "investment_daily"
 
 
 def get_dashboard_summary(db: Session) -> DashboardSummary:
-    today = date.today()
+    today = app_today()
 
     balance_total_cny = Decimal("0")
     credit_liability_total_cny = Decimal("0")
@@ -104,8 +105,9 @@ def _pack_investment_by_currency(
 def _today_pnl_by_currency(db: Session, today: date) -> List[CurrencyAmount]:
     # Aggregate daily-pnl adjustments whose adjustment date equals today.
     # We pull all rows with source='investment_daily' for active investment
-    # accounts, then filter by created_at::date == today on the Python side
-    # to stay portable across SQLite (test runner) and PostgreSQL (prod).
+    # accounts, then bucket created_at to the business-timezone calendar date on
+    # the Python side (audit §3.4) — portable across SQLite (test runner) and
+    # PostgreSQL (prod), and correct across the UTC day boundary.
     rows = db.execute(
         select(AccountAdjustment, Account)
         .join(Account, AccountAdjustment.account_id == Account.id)
@@ -118,7 +120,9 @@ def _today_pnl_by_currency(db: Session, today: date) -> List[CurrencyAmount]:
     totals_today: Dict[str, Decimal] = {}
     seen_currencies: set = set()
     for adjustment, _account in rows:
-        created_date = adjustment.created_at.date() if adjustment.created_at else None
+        created_date = (
+            utc_to_app_date(adjustment.created_at) if adjustment.created_at else None
+        )
         if created_date != today:
             continue
         seen_currencies.add(adjustment.currency)

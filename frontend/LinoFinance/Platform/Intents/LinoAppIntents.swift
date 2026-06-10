@@ -379,8 +379,12 @@ struct IntentFinanceService {
     }
 
     private func monthWindow(month: Int?) -> (start: Date, end: Date)? {
+        // Build the month window with the local calendar: the resulting Dates
+        // are formatted as plain calendar days via `linoAPIDate` (local tz), so
+        // a UTC calendar here would shift the month start/end by one day in any
+        // non-UTC offset (audit §3.4 — negative offsets land a day early).
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? calendar.timeZone
+        calendar.timeZone = .current
         let now = Date()
         let components = calendar.dateComponents([.year, .month], from: now)
         guard let year = components.year else { return nil }

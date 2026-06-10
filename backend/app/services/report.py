@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.constants import BASE_CURRENCY
+from app.core.timeutils import app_today
 from app.models.account import Account
 from app.models.cash_flow import CashFlowItem
 from app.models.category import Category
@@ -139,7 +140,7 @@ def cash_flow_pressure(
     db: Session,
     anchor_date: Optional[DateType],
 ) -> CashFlowPressureReport:
-    anchor = anchor_date or DateType.today()
+    anchor = anchor_date or app_today()
     windows = []
     for days in (7, 30, 90):
         end = anchor + timedelta(days=days)
@@ -168,7 +169,7 @@ def daily_net_window(
     anchor_date: Optional[DateType],
     days: int = 30,
 ) -> List[CashFlowDailyNetRow]:
-    anchor = anchor_date or DateType.today()
+    anchor = anchor_date or app_today()
     rows = [
         CashFlowDailyNetRow(
             date=anchor + timedelta(days=offset),
@@ -324,7 +325,7 @@ def reimbursement_report(
 
 
 def subscription_report(db: Session, as_of: Optional[DateType]) -> SubscriptionReport:
-    effective_date = as_of or DateType.today()
+    effective_date = as_of or app_today()
     rules = list(
         db.execute(
             select(SubscriptionRule)
@@ -378,7 +379,7 @@ def _date_range(
     date_from: Optional[DateType],
     date_to: Optional[DateType],
 ) -> Tuple[DateType, DateType]:
-    today = DateType.today()
+    today = app_today()
     start = date_from or DateType(today.year, today.month, 1)
     end = date_to or today
     if start > end:

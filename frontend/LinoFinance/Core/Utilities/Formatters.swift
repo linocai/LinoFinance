@@ -20,6 +20,20 @@ extension DateFormatter {
         formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
         return formatter
     }()
+
+    /// Fallback for UTC-naive datetimes that carry microsecond fractional
+    /// seconds with no timezone designator (audit §3.5) — e.g. the local SQLite
+    /// runner emits `2026-06-10T14:30:00.123456`. The two `ISO8601DateFormatter`
+    /// variants require a timezone, and `linoAPIDateTime` has no fractional
+    /// seconds, so neither matches. Backend naive datetimes are UTC (§3.2).
+    static let linoAPIDateTimeFractional: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
+        return formatter
+    }()
 }
 
 /// Parse a user-entered amount string into a `Decimal`, or `nil` if it is not a

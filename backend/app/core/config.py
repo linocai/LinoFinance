@@ -47,6 +47,10 @@ class Settings(BaseSettings):
         "com.lino.linofinance",
     ]
     apple_dev_shortcut: bool = False
+    # Business timezone used to resolve "today" anchors and to bucket UTC-naive
+    # `created_at` timestamps to a calendar date (audit §3.4/§3.5, D6). Defaults
+    # to Shanghai; override via `LINOFINANCE_APP_TIMEZONE`.
+    app_timezone: str = "Asia/Shanghai"
     # Comma-separated Apple `sub` values that may self-activate even when the
     # users table is non-empty (single-user gate escape hatch — e.g. migrating
     # to a new Apple ID). Empty by default.
