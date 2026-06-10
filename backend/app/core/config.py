@@ -47,6 +47,10 @@ class Settings(BaseSettings):
         "com.lino.linofinance",
     ]
     apple_dev_shortcut: bool = False
+    # Comma-separated Apple `sub` values that may self-activate even when the
+    # users table is non-empty (single-user gate escape hatch — e.g. migrating
+    # to a new Apple ID). Empty by default.
+    apple_sub_allowlist: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -57,6 +61,10 @@ class Settings(BaseSettings):
     @property
     def normalized_environment(self) -> str:
         return self.environment.strip().lower()
+
+    @property
+    def apple_sub_allowlist_set(self) -> set[str]:
+        return {s.strip() for s in self.apple_sub_allowlist.split(",") if s.strip()}
 
     @property
     def is_production(self) -> bool:

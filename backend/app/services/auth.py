@@ -78,6 +78,20 @@ def _upsert_user(
     ).scalar_one_or_none()
 
     if user is None:
+        # Single-user gate (D1): the first user to ever sign in (empty users
+        # table) bootstraps as active. After that, any new Apple `sub` is
+        # recorded as disabled and refused a session — unless it is on the
+        # allowlist (e.g. migrating to a new Apple ID). A disabled new user is
+        # committed *before* raising so the row survives for ops to inspect /
+        # activate; merely flushing would be rolled back when the exception
+        # aborts the request's transaction.
+        settings = get_settings()
+        allowlisted = identity.sub in settings.apple_sub_allowlist_set
+        users_exist = (
+            db.execute(select(User.id).limit(1)).scalar_one_or_none() is not None
+        )
+        should_disable = users_exist and not allowlisted
+
         display_name = _build_display_name(first_name, last_name)
         user = User(
             apple_user_id=identity.sub,
@@ -85,9 +99,12 @@ def _upsert_user(
             email_verified=identity.email_verified,
             display_name=display_name,
             is_admin=False,
-            disabled=False,
+            disabled=should_disable,
         )
         db.add(user)
+        if should_disable:
+            db.commit()
+            raise UserDisabledError("User is disabled")
         db.flush()
         return user
 
@@ -172,6 +189,11 @@ def get_session_for_token(db: Session, token: str) -> Optional[AuthSession]:
     if session.revoked_at is not None:
         return None
     if _is_expired(session.expires_at):
+        return None
+    # Reject sessions belonging to a user that was disabled after the session
+    # was issued (audit 1.2). The user is already eager-loaded via
+    # selectinload, so this costs no extra query.
+    if session.user is None or session.user.disabled:
         return None
     return session
 

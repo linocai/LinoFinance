@@ -13,6 +13,48 @@ Base path: `/api/v1`
 - Responses include `x-request-id`; rate-limited responses return `429` with
   `Retry-After`, `X-RateLimit-Limit`, and `X-RateLimit-Remaining`.
 
+## Auth — Sign in with Apple (single-user gate)
+
+`POST /auth/apple` (public — no token required; this is the bootstrap)
+
+Request:
+
+```json
+{
+  "identity_token": "<Apple identity JWT>",
+  "device_label": "iPhone Air",
+  "platform": "ios",
+  "app_version": "1.3.0",
+  "first_name": null,
+  "last_name": null
+}
+```
+
+Single-user gate (v1.3.0): LinoFinance is a single-user ledger. Access is gated
+by the Apple `sub`:
+
+- The **first** Apple `sub` to ever sign in (empty `users` table) is created
+  active and receives a session — bootstrapping the owner.
+- After that, any **new** `sub` is recorded as `disabled=True` (the row is
+  persisted for ops to inspect) and is refused a session.
+- A `sub` listed in `LINOFINANCE_APPLE_SUB_ALLOWLIST` (comma-separated, may be
+  empty) self-activates even when the table is non-empty — the escape hatch for
+  migrating to a new Apple ID. Look up your own `sub` in the `apple_user_id`
+  field of `GET /auth/me`.
+- A session whose user is later disabled (ops `UPDATE users SET disabled=true`)
+  is rejected on its very next request — every gated route returns `401`.
+
+Responses:
+
+- `200` — `{ "session_token", "expires_at", "user" }`. The plaintext token is
+  returned exactly once.
+- `400` — invalid platform or unverifiable Apple identity token.
+- `403` — `{ "detail": "User is disabled" }`: the `sub` is not the bootstrap
+  user and not allowlisted (or was explicitly disabled).
+
+Activation / disabling is an ops action (no admin API in v1.3.0); see
+`docs/deployment.md` for the psql commands.
+
 ## Health
 
 `GET /health`
