@@ -6,9 +6,9 @@ After=network.target
 Type=simple
 User=linofinance
 Group=linofinance
-WorkingDirectory=/srv/linofinance/backend
+WorkingDirectory=/opt/linofinance/app/current/backend
 EnvironmentFile=/etc/linofinance/api.env
-ExecStart=/srv/linofinance/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+ExecStart=/opt/linofinance/app/current/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=5
 

@@ -29,6 +29,47 @@ LINOFINANCE_AI_API_KEY=
 LINOFINANCE_AI_MODEL=
 ```
 
+### Business timezone (v1.3.0)
+
+```bash
+# Resolves all "today" anchors (dashboard today-pnl, credit-due reminders,
+# report windows) and buckets UTC-naive created_at to a local calendar date.
+# Default is Asia/Shanghai; the timer (below) and this value must agree.
+LINOFINANCE_APP_TIMEZONE=Asia/Shanghai
+```
+
+### Sign in with Apple (v1.2.0 + single-user gate v1.3.0)
+
+```bash
+# Comma-separated list of allowed Apple audiences (client_id / bundle ids).
+LINOFINANCE_APPLE_SIGNIN_AUDIENCES=["com.lino.linofinance.ios"]
+# Non-production only: skips JWKS verification (identity_token used verbatim as
+# sub). Production startup hard-refuses this flag.
+LINOFINANCE_APPLE_DEV_SHORTCUT=false
+# Single-user gate escape hatch: comma-separated Apple `sub`s that self-activate
+# even when the users table is non-empty (e.g. migrating to a new Apple ID).
+# May be empty. Look up your own sub in GET /auth/me -> apple_user_id.
+LINOFINANCE_APPLE_SUB_ALLOWLIST=
+```
+
+### APNs push (v1.2.0)
+
+```bash
+LINOFINANCE_APNS_TOPIC=com.lino.linofinance.ios          # APNs bundle topic
+LINOFINANCE_APNS_KEY_ID=                                 # .p8 key id
+LINOFINANCE_APNS_TEAM_ID=HX73DFL88G                      # Apple team id
+LINOFINANCE_APNS_KEY_PATH=/etc/linofinance/apns_authkey.p8
+LINOFINANCE_APNS_USE_SANDBOX=false                       # production APNs
+LINOFINANCE_APNS_DRY_RUN=false                           # true = build but do not send
+```
+
+### Attachment storage
+
+```bash
+# Root directory for uploaded attachment files (relative storage_key under it).
+LINOFINANCE_STORAGE_ROOT=/opt/linofinance/storage
+```
+
 Production startup refuses to run without `LINOFINANCE_API_AUTH_TOKEN`.
 
 ## Local PostgreSQL
@@ -139,7 +180,43 @@ python scripts/production_migrate.py
 
 Use `--skip-backup` only when a fresh verified backup already exists.
 
+## Single-User Gate Ops (v1.3.0)
+
+LinoFinance is a single-user ledger. The first Apple `sub` to sign in against an
+empty `users` table self-bootstraps as the active owner; every later new `sub`
+is recorded `disabled=true` and refused a session. There is no admin API —
+activation and disabling are psql operations. Connect with:
+
+```bash
+sudo -u postgres psql -d linofinance      # or the linofinance role
+```
+
+Confirm only the owner exists and is active:
+
+```sql
+SELECT id, apple_user_id, disabled, created_at FROM users ORDER BY created_at;
+```
+
+Activate a user (e.g. after migrating to a new Apple ID — prefer the
+`LINOFINANCE_APPLE_SUB_ALLOWLIST` env over a manual flip when possible):
+
+```sql
+UPDATE users SET disabled = false WHERE apple_user_id = '<sub>';
+```
+
+Disable a user — its existing valid sessions are rejected on their **very next
+request** (every gated route returns `401`, no app restart needed):
+
+```sql
+UPDATE users SET disabled = true WHERE apple_user_id = '<sub>';
+```
+
+If the table is empty after a fresh deploy, complete one Apple sign-in **as the
+owner** as soon as possible to claim the bootstrap slot before anyone else.
+
 ## Smoke Test
+
+Admin-token (ops) path:
 
 ```bash
 curl https://finance.example.com/api/v1/health
@@ -149,3 +226,18 @@ curl -H "Authorization: Bearer $LINOFINANCE_API_AUTH_TOKEN" \
 
 Expected: health is public; non-public routes return `401` without the token and
 `200` with the token.
+
+User-mode (Apple session) path: `/health` reports `auth_modes: ["admin",
+"user"]` and the production `version`. A real session token comes from a
+completed Apple sign-in (the plaintext token is returned once by `POST
+/auth/apple`); with it, the same gated routes return `200`:
+
+```bash
+curl https://finance.example.com/api/v1/health   # version + auth_modes
+curl -H "Authorization: Bearer <apple-session-token>" \
+  https://finance.example.com/api/v1/auth/me      # 200 with the owner profile
+```
+
+Expected: a session token for a disabled user returns `401` on every gated
+route; `POST /auth/apple` for a non-bootstrap, non-allowlisted `sub` returns
+`403 {"detail": "User is disabled"}`.

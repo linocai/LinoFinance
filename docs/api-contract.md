@@ -12,6 +12,10 @@ Base path: `/api/v1`
   `LINOFINANCE_ENVIRONMENT=production`.
 - Responses include `x-request-id`; rate-limited responses return `429` with
   `Retry-After`, `X-RateLimit-Limit`, and `X-RateLimit-Remaining`.
+- Rate limiting today is keyed per client and applies to gated routes. `POST
+  /auth/apple` rides the **public** path (it is the unauthenticated bootstrap)
+  and is therefore **not** rate-limited as of v1.3.0. A dedicated limiter for the
+  auth bootstrap is tracked in `PROJECT_PLAN.md` §6 backlog.
 
 ## Auth — Sign in with Apple (single-user gate)
 
@@ -65,14 +69,20 @@ Response:
 {
   "status": "ok",
   "app": "LinoFinance API",
-  "version": "1.1.0",
+  "version": "1.3.0",
   "environment": "local",
   "auth_required": false,
+  "auth_modes": ["admin", "user"],
   "rate_limit_enabled": false,
   "apns_use_sandbox": true,
   "apns_dry_run": false
 }
 ```
+
+`auth_modes` (v1.2.0) is the static list `["admin", "user"]`: the API accepts both
+the admin environment token (`LINOFINANCE_API_AUTH_TOKEN`, ops bypass) and Apple
+session tokens (`auth_sessions`). `version` reflects `app_version` from settings,
+so production `/health` is the canonical "what is deployed" probe.
 
 ## Phase 1 Planned Endpoints
 
@@ -81,6 +91,7 @@ Response:
   - `POST /accounts`
   - `GET /accounts/{account_id}`
   - `PATCH /accounts/{account_id}` (v1.3.0)
+  - `POST /accounts/{account_id}/daily-pnl` (v1.1.6)
   - `GET /categories`
   - `POST /categories`
   - `GET /categories/{category_id}`
@@ -95,6 +106,7 @@ Response:
   - `GET /cash-flow-items`
   - `POST /cash-flow-items`
   - `GET /cash-flow-items/{item_id}`
+  - `PATCH /cash-flow-items/{item_id}` (v1.1.7)
   - `POST /cash-flow-items/{item_id}/confirm`
   - `POST /cash-flow-items/{item_id}/cancel`
   - `POST /cash-flow-items/{item_id}/settle`
@@ -191,6 +203,18 @@ Response:
 - Only the settled formal entry affects account balances and reports.
 - Credit statement cycles generate `credit_repayment` cash-flow items.
 - Fully repaid credit statement cycles mark the linked repayment cash flow as `settled`.
+- `GET /cash-flow-items` hides `cancelled` items by default (v1.1.5); pass
+  `include_cancelled=true` to include them. An explicit `status` filter wins and
+  ignores `include_cancelled`.
+- `POST /cash-flow-items/{item_id}/cancel` is idempotent (v1.1.5): cancelling an
+  already-`cancelled` item returns `200` with the unchanged item rather than
+  erroring. `settled` items cannot be cancelled.
+- `PATCH /cash-flow-items/{item_id}` (v1.1.7) edits a non-terminal item using
+  `model_fields_set` three-state semantics (absent = unchanged, explicit `null` =
+  clear). Only `expected` / `confirmed` items are editable; `settled` and
+  `cancelled` are locked. When the patched currency is non-CNY the request must
+  carry a valid `exchange_rate_id`; the backend recomputes `converted_cny_amount`
+  from the resolved rate. Zero migration.
 
 ## Reimbursement Rules Implemented
 
@@ -237,6 +261,18 @@ Response:
 
 - Reports are backend-computed read models over confirmed ledger records and active future cash flows.
 - Report date filters use inclusive `date_from` / `date_to` boundaries.
+- `GET /dashboard/summary` (revamped v1.1.6) returns the four dashboard cards plus
+  entry counts: `disposable_30d_by_currency` (future-month disposable),
+  `investment_total_cny` / `investment_total_by_currency` (investment accounts),
+  `net_worth_cny` (= `balance_total_cny` − `credit_liability_total_cny` +
+  investments), `cash_flow_30d_by_currency` (next-30-day net cash flow), and
+  `today_pnl_by_currency`, alongside `draft_entry_count` / `confirmed_entry_count`
+  / `voided_entry_count`. All CNY totals quantize to the product money scale.
+- `POST /accounts/{account_id}/daily-pnl` (v1.1.6) records an investment account's
+  newly observed balance; the backend computes the delta from the prior balance,
+  writes an `account_adjustment` (`source='investment_daily'`) plus an audit log,
+  and updates the account balance. The recorded delta is what feeds
+  `today_pnl_by_currency`.
 - `GET /dashboard/summary` `today_pnl_by_currency` is the sum of `investment_daily`
   `AccountAdjustment` deltas whose adjustment day equals "today" in the business timezone
   (`LINOFINANCE_APP_TIMEZONE`, default Asia/Shanghai; v1.3.0, audit 2.3/2.17). It is a
