@@ -1,0 +1,11 @@
+[Unit]
+Description=LinoFinance scheduled jobs (credit-due reminders + attachment cleanup)
+After=network.target linofinance-api.service
+
+[Service]
+Type=oneshot
+User=linofinance
+Group=linofinance
+WorkingDirectory=/srv/linofinance/backend
+EnvironmentFile=/etc/linofinance/api.env
+ExecStart=/srv/linofinance/backend/.venv/bin/python scripts/run_scheduled_jobs.py

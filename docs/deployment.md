@@ -55,6 +55,38 @@ sudo systemctl enable --now linofinance-api
 sudo systemctl status linofinance-api
 ```
 
+## Scheduled Jobs (定时任务)
+
+Credit-due reminders (T-5/3/1/0) and soft-deleted attachment cleanup run via
+`scripts/run_scheduled_jobs.py`, driven by a systemd timer. Use
+`deploy/systemd/linofinance-jobs.service` (a `oneshot` unit sharing the same
+`User`/`Group`/`EnvironmentFile=/etc/linofinance/api.env` as the API) and
+`deploy/systemd/linofinance-jobs.timer`:
+
+```bash
+sudo cp deploy/systemd/linofinance-jobs.service /etc/systemd/system/
+sudo cp deploy/systemd/linofinance-jobs.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now linofinance-jobs.timer
+systemctl list-timers linofinance-jobs.timer        # confirm next run
+sudo systemctl start linofinance-jobs.service       # run once now (optional)
+journalctl -u linofinance-jobs.service --since today
+```
+
+The timer fires daily at `09:00` in the app business timezone
+(`OnCalendar=*-*-* 09:00:00 Asia/Shanghai`; the trailing timezone token needs
+systemd >= 252 — on older systemd remove it and run the host in
+`Asia/Shanghai`). The reminder window anchors on `app_today()` derived from
+`LINOFINANCE_APP_TIMEZONE`, so keep both aligned.
+
+**Fact (audit 2.8):** if `linofinance-jobs.timer` is not installed and enabled,
+nothing ever calls `dispatch_due_credit_reminders`, so the T-5 / T-3 / T-1 /
+T-0 credit repayment reminders never fire. The `credit_statement_generated`
+push (fired inline when a cycle is created) still works without the timer; only
+the day-relative due reminders depend on it. A default `credit_repayment` /
+`system` `NotificationRule` is seeded by the v1.3.0 data migration so the
+matcher has an active rule out of the box.
+
 ## HTTPS Reverse Proxy
 
 Use `deploy/nginx/linofinance.conf.example` as the nginx starting point. Replace
