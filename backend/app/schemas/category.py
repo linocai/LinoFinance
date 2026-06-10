@@ -11,6 +11,20 @@ class CategoryCreate(BaseModel):
     display_order: int = 0
 
 
+class CategoryUpdate(BaseModel):
+    """Patch a subset of editable category fields (audit 2.5).
+
+    Immutable fields (``type`` / ``parent_id``) are intentionally absent;
+    unknown fields are rejected so attempts to mutate them fail loudly.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    is_active: Optional[bool] = None
+    display_order: Optional[int] = None
+
+
 class CategoryRead(BaseModel):
     id: str
     name: str

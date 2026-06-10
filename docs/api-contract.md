@@ -80,12 +80,15 @@ Response:
   - `GET /accounts`
   - `POST /accounts`
   - `GET /accounts/{account_id}`
+  - `PATCH /accounts/{account_id}` (v1.3.0)
   - `GET /categories`
   - `POST /categories`
   - `GET /categories/{category_id}`
+  - `PATCH /categories/{category_id}` (v1.3.0)
   - `GET /currency-rates`
   - `POST /currency-rates`
   - `GET /currency-rates/{currency_rate_id}`
+  - `PATCH /currency-rates/{currency_rate_id}` (v1.3.0)
   - `GET /credit-statement-cycles`
   - `POST /credit-statement-cycles`
   - `GET /credit-statement-cycles/{cycle_id}`
@@ -289,3 +292,10 @@ Response:
 - `GET /ai/memos?period=YYYY-MM` lists non-archived AI memo records. `POST /ai/memos/generate?tone=warm|terse|playful|professional` creates or updates the active memo for a period from report aggregates and the configured AI provider. The response includes additive `created_at` / `updated_at` timestamps and stores full stats JSON for overview, top categories, subscriptions, credit liabilities, reimbursements, and anomalies. `PATCH /ai/memos/{id}` updates summary/status. `DELETE /ai/memos/{id}` archives the memo.
 - `POST /push/devices` idempotently registers an iOS/macOS APNs device by `(platform, apns_token)`. `DELETE /push/devices/{id}` disables the device. APNs delivery sends only to enabled devices when an active `system` notification rule matches the event payload. `LINOFINANCE_APNS_USE_SANDBOX` and `LINOFINANCE_APNS_DRY_RUN` control APNs environment and dry-run delivery; `/health` exposes both.
 - `NotificationRule.rule_type` includes `ai_plan` for high-risk AI plans waiting for confirmation.
+
+## V1.3.0 Master-Data Management (audit 2.5)
+
+- `PATCH /accounts/{account_id}` patches a subset of editable fields: `name`, `include_in_net_worth`, `status`, `display_order`, `credit_limit`, `statement_day`, `due_day`, `minimum_payment`, `notes`. Uses `model_fields_set` three-state semantics (field absent = unchanged; explicit `null` = clear nullable field). Immutable fields (`type`, `currency`, `current_balance`, `current_liability`) are absent from the request schema (`extra="forbid"`), so any attempt to set them returns `422`; balances change only through reconciliation adjustments. Unknown account `id` returns `404`.
+- `PATCH /categories/{category_id}` patches `name`, `is_active`, `display_order`. Immutable fields (`type`, `parent_id`) are forbidden (`422`). Unknown `id` returns `404`.
+- `PATCH /currency-rates/{currency_rate_id}` patches only `rate` (`> 0`). It is rejected with `409` when the rate is already referenced by any entry category line, account movement, cash flow item, or reimbursement claim, preserving the "historical rates are never rewritten" rule. `from_currency`, `to_currency`, `date`, `source` are forbidden (`422`). Unknown `id` returns `404`.
+- `currency_rates` now carries a unique constraint on `(from_currency, to_currency, date)`. `POST /currency-rates` returns `409` on a duplicate key. The v1.3.0 migration de-duplicates any pre-existing rows for the same key before adding the constraint, keeping the row with the most recent `created_at`.
