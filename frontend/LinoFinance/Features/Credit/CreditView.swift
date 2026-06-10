@@ -573,8 +573,8 @@ struct NewStatementCycleSheet: View {
             statementDate: statementDate,
             dueDate: dueDate,
             currency: account.currency,
-            statementAmount: DecimalValue(Decimal(string: statementAmount) ?? 0),
-            minimumPayment: DecimalValue(Decimal(string: minimumPayment) ?? 0),
+            statementAmount: DecimalValue(parseDecimalAmount(statementAmount) ?? 0),
+            minimumPayment: DecimalValue(parseDecimalAmount(minimumPayment) ?? 0),
             note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note
         )
         do {
@@ -624,7 +624,7 @@ struct NewInstallmentPlanSheet: View {
                 Button("取消") { environment.isShowingNewInstallmentSheet = false }
                 Button("创建") { Task { await submit() } }
                     .buttonStyle(.borderedProminent)
-                    .disabled(entrySelection.wrappedValue == nil || accountSelection.wrappedValue == nil || Decimal(string: totalAmount) == nil)
+                    .disabled(entrySelection.wrappedValue == nil || accountSelection.wrappedValue == nil || parseDecimalAmount(totalAmount) == nil)
             }
         }
         .padding(22)
@@ -645,8 +645,8 @@ struct NewInstallmentPlanSheet: View {
     private func submit() async {
         guard let entryId = entrySelection.wrappedValue,
               let account = environment.accountsViewModel.accounts.first(where: { $0.id == accountSelection.wrappedValue }),
-              let total = Decimal(string: totalAmount) else { return }
-        let payment = Decimal(string: paymentAmount)
+              let total = parseDecimalAmount(totalAmount) else { return }
+        let payment = parseDecimalAmount(paymentAmount)
         let request = InstallmentPlanCreateRequest(
             linkedEntryId: entryId,
             creditAccountId: account.id,
@@ -710,7 +710,7 @@ struct NewSubscriptionSheet: View {
                 Button("取消") { environment.isShowingNewSubscriptionSheet = false }
                 Button("创建") { Task { await submit() } }
                     .buttonStyle(.borderedProminent)
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || Decimal(string: amount) == nil)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || parseDecimalAmount(amount) == nil)
             }
         }
         .padding(22)
@@ -729,7 +729,7 @@ struct NewSubscriptionSheet: View {
     }
 
     private func submit() async {
-        guard let decimal = Decimal(string: amount) else { return }
+        guard let decimal = parseDecimalAmount(amount) else { return }
         let request = SubscriptionRuleCreateRequest(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             amount: DecimalValue(decimal),

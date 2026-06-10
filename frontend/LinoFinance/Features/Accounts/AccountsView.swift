@@ -399,10 +399,10 @@ struct NewAccountSheet: View {
             currency: currency,
             currentBalance: accountType == .credit ? DecimalValue(0) : DecimalValue(amount),
             currentLiability: accountType == .credit ? DecimalValue(amount) : DecimalValue(0),
-            creditLimit: Decimal(string: creditLimit).map(DecimalValue.init),
+            creditLimit: parseDecimalAmount(creditLimit).map(DecimalValue.init),
             statementDay: Int(statementDay),
             dueDay: Int(dueDay),
-            minimumPayment: Decimal(string: minimumPayment).map(DecimalValue.init),
+            minimumPayment: parseDecimalAmount(minimumPayment).map(DecimalValue.init),
             notes: notes.isEmpty ? nil : notes
         )
         do {
