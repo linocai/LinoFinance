@@ -21,6 +21,7 @@ def create_statement_cycle(
     account = _get_credit_account(db, payload.credit_account_id)
     data = payload.normalized_dump()
     _validate_cycle_payload(account, data)
+    _validate_no_cycle_overlap(db, data)
 
     cycle = CreditStatementCycle(**data)
     cycle.statement_amount = quantize_money(cycle.statement_amount)
@@ -85,6 +86,34 @@ def _validate_cycle_payload(account: Account, data: dict) -> None:
         raise LedgerValidationError("Due date cannot be before statement date")
     if data["paid_amount"] > data["statement_amount"]:
         raise LedgerValidationError("Paid amount cannot exceed statement amount")
+
+
+def _validate_no_cycle_overlap(db: Session, data: dict) -> None:
+    """Reject a new cycle whose [start, end] interval overlaps an existing
+    cycle for the same credit account (audit 2.6).
+
+    Consumption auto-assignment (ledger picks `cycle_start_date desc limit 1`)
+    silently mis-attributes charges when cycles overlap, so overlaps must be
+    blocked at creation time. Two inclusive intervals overlap iff
+    ``new_start <= other_end AND other_start <= new_end``. Voided cycles do not
+    reserve their interval.
+    """
+    new_start = data["cycle_start_date"]
+    new_end = data["cycle_end_date"]
+    overlap = db.execute(
+        select(CreditStatementCycle).where(
+            CreditStatementCycle.credit_account_id == data["credit_account_id"],
+            CreditStatementCycle.status != "voided",
+            CreditStatementCycle.cycle_start_date <= new_end,
+            CreditStatementCycle.cycle_end_date >= new_start,
+        )
+    ).scalars().first()
+    if overlap is not None:
+        raise LedgerValidationError(
+            "Statement cycle date range overlaps an existing cycle "
+            f"({overlap.cycle_start_date} to {overlap.cycle_end_date}) "
+            "for this credit account"
+        )
 
 
 def _refresh_cycle_status(cycle: CreditStatementCycle) -> None:

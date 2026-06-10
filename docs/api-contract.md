@@ -166,6 +166,12 @@ Response:
 - Voiding confirmed credit charges or repayments rolls back both account balances and cycle amounts.
 - Credit repayment entries should use `transfer_out` for the balance account side and `credit_repayment` for the credit account side.
 - Credit statement cycles create/update linked repayment cash-flow items when statement amount changes.
+- `POST /credit-statement-cycles` rejects a cycle whose `[cycle_start_date, cycle_end_date]`
+  interval overlaps an existing (non-`voided`) cycle for the same credit account, returning
+  `400` (v1.3.0, audit 2.6). Two inclusive intervals overlap iff
+  `new_start <= other_end AND other_start <= new_end`. This keeps the credit-charge
+  auto-assignment (which picks the most recent cycle by `cycle_start_date`) unambiguous;
+  the auto-assignment logic itself is unchanged.
 
 ## Cash Flow Rules Implemented
 
@@ -228,13 +234,36 @@ Response:
 
 - Reports are backend-computed read models over confirmed ledger records and active future cash flows.
 - Report date filters use inclusive `date_from` / `date_to` boundaries.
+- `GET /dashboard/summary` `today_pnl_by_currency` is the sum of `investment_daily`
+  `AccountAdjustment` deltas whose adjustment day equals "today" in the business timezone
+  (`LINOFINANCE_APP_TIMEZONE`, default Asia/Shanghai; v1.3.0, audit 2.3/2.17). It is a
+  **source-filtered delta accumulation**, not a "last balance − first balance": multiple
+  daily-pnl quick-records on the same investment account/day net to the same first-to-last
+  difference, while reconciliation adjustments and transfer movements are excluded entirely. A
+  currency that had at least one daily-pnl row today appears with amount `0` rather than being
+  omitted. "Today" and the per-day bucketing of UTC-naive `created_at` both resolve in the
+  business timezone, so records near the UTC day boundary land on the correct local day.
 - Monthly overview includes income, expense, reimbursement offsets, future cash-flow pressure, and active credit liability in CNY.
+- Monthly overview `personal_net_expense_cny = expense_cny - expected_reimbursement_cny` is a
+  **full-expense口径**: it nets against *all* expenses in the window, not only the reimbursable
+  ones. The reimbursement report's `personal_net` view (= `expected_net` = `gross - expected`)
+  uses the **reimbursable-only gross口径**. These two "personal net" figures are intentionally
+  different track and can diverge whenever non-reimbursable expenses exist in the window
+  (v1.3.0, audit 2.2 double-track note).
 - Category expense reports group confirmed expense category lines and include original-currency totals plus CNY totals.
 - Cash-flow pressure reports summarize active `expected`, `confirmed`, and `partial` cash flows for 7/30/90 day windows.
 - Cash-flow pressure responses include additive `daily_net_cny` rows for the next 30 days: `{date, inflow_cny, outflow_cny, net_cny}`.
 - Transfer-direction future cash flows, such as credit repayment and installments, count as outflow pressure.
 - Credit liability trend reports summarize statement cycles by statement date and include remaining original-currency and CNY amounts.
 - Reimbursement reports support `pre_reimbursement`, `expected_net`, `approved_net`, `received_net`, and `personal_net` views.
+- All five reimbursement views — including the `received_offset` accumulator — anchor on the
+  claim's **original expense date** (the linked entry's date), not on the cash-received date
+  (v1.3.0, audit 2.2). A claim contributes to a report window iff its original expense date
+  falls in `[date_from, date_to]`; gross, expected, approved, and received offsets are then all
+  measured against that same window. This eliminates the prior cross-month mismatch where an
+  expense in month M received in month M+1 produced a spurious negative net in M+1 (zero gross
+  minus a dangling received offset). The monthly-overview reimbursement offsets follow the same
+  original-date anchor.
 - Subscription reports project active weekly/monthly/yearly rules into monthly and annual CNY equivalents.
 - CSV export is V1-only CSV; each dataset endpoint returns `text/csv`.
 - Export datasets include core ledger tables, cash-flow/reimbursement/credit/installment/subscription tables, AI/action/audit tables, and notification rules.

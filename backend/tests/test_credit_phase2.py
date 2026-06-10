@@ -332,3 +332,59 @@ def test_void_credit_repayment_rolls_cycle_and_balances_back(client) -> None:
     assert updated_cycle["statement_amount"] == "200"
     assert updated_cycle["paid_amount"] == "0"
     assert updated_cycle["remaining_amount"] == "200"
+
+
+def _post_cycle(client, account_id, start, end, statement, due):
+    return client.post(
+        "/api/v1/credit-statement-cycles",
+        json={
+            "credit_account_id": account_id,
+            "cycle_start_date": start,
+            "cycle_end_date": end,
+            "statement_date": statement,
+            "due_date": due,
+            "currency": "USD",
+        },
+    )
+
+
+def test_overlapping_statement_cycle_is_rejected(client) -> None:
+    # P5 / audit 2.6: a new cycle whose [start, end] interval overlaps an
+    # existing cycle for the same credit account must be rejected, so the
+    # consumption auto-assignment (cycle_start_date desc) never mis-attributes.
+    account = create_account(client)
+    first = _post_cycle(client, account["id"], "2026-05-01", "2026-05-31", "2026-06-01", "2026-06-20")
+    assert first.status_code == 201
+
+    # Overlaps the first cycle (2026-05-15 falls inside 2026-05-01..2026-05-31).
+    overlap = _post_cycle(client, account["id"], "2026-05-15", "2026-06-15", "2026-06-16", "2026-07-05")
+    assert overlap.status_code == 400
+    assert "overlap" in overlap.json()["detail"].lower()
+
+
+def test_adjacent_non_overlapping_statement_cycles_are_allowed(client) -> None:
+    # Same account, back-to-back non-overlapping windows must both succeed.
+    account = create_account(client)
+    first = _post_cycle(client, account["id"], "2026-05-01", "2026-05-31", "2026-06-01", "2026-06-20")
+    assert first.status_code == 201
+
+    second = _post_cycle(client, account["id"], "2026-06-01", "2026-06-30", "2026-07-01", "2026-07-20")
+    assert second.status_code == 201
+
+    cycles = client.get(
+        f"/api/v1/credit-statement-cycles?credit_account_id={account['id']}"
+    ).json()
+    assert len(cycles) == 2
+
+
+def test_overlap_check_scoped_to_same_account(client) -> None:
+    # A cycle on a different credit account with the same dates is fine.
+    account_a = create_account(client, name="Card A")
+    account_b = create_account(client, name="Card B")
+    first = _post_cycle(client, account_a["id"], "2026-05-01", "2026-05-31", "2026-06-01", "2026-06-20")
+    assert first.status_code == 201
+
+    same_dates_other_account = _post_cycle(
+        client, account_b["id"], "2026-05-01", "2026-05-31", "2026-06-01", "2026-06-20"
+    )
+    assert same_dates_other_account.status_code == 201

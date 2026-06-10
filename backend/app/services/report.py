@@ -262,13 +262,16 @@ def reimbursement_report(
     for claim in claims:
         amount_cny = quantize_money(claim.converted_cny_amount or Decimal("0"))
         original_date = _claim_original_entry_date(db, claim)
-        received_date = _claim_received_date(db, claim)
+        # All five reimbursement views anchor on the ORIGINAL expense date
+        # (audit 2.2). Previously `received` was anchored to the received date,
+        # so a May expense received in June produced a June report whose gross
+        # excluded the original expense yet still subtracted `received` —
+        # yielding a spurious negative net. Unify on `original_in_range`.
         original_in_range = original_date is not None and start <= original_date <= end
-        received_in_range = received_date is not None and start <= received_date <= end
-        if not original_in_range and not received_in_range:
+        if not original_in_range:
             continue
 
-        if original_in_range and claim.status != "abandoned":
+        if claim.status != "abandoned":
             gross = quantize_money(gross + amount_cny)
             currency_totals[claim.currency][0] = quantize_money(
                 currency_totals[claim.currency][0] + claim.amount
@@ -276,11 +279,11 @@ def reimbursement_report(
             currency_totals[claim.currency][1] = quantize_money(
                 currency_totals[claim.currency][1] + amount_cny
             )
-        if original_in_range and claim.status in EXPECTED_REIMBURSEMENT_STATUSES:
+        if claim.status in EXPECTED_REIMBURSEMENT_STATUSES:
             expected = quantize_money(expected + amount_cny)
-        if original_in_range and claim.status in APPROVED_REIMBURSEMENT_STATUSES:
+        if claim.status in APPROVED_REIMBURSEMENT_STATUSES:
             approved = quantize_money(approved + amount_cny)
-        if received_in_range and claim.status in RECEIVED_REIMBURSEMENT_STATUSES:
+        if claim.status in RECEIVED_REIMBURSEMENT_STATUSES:
             received = quantize_money(received + amount_cny)
         status_amount, status_count = status_totals[claim.status]
         status_totals[claim.status] = (
@@ -452,29 +455,20 @@ def _reimbursement_offsets(
     for claim in claims:
         amount = quantize_money(claim.converted_cny_amount or Decimal("0"))
         original_date = _claim_original_entry_date(db, claim)
-        received_date = _claim_received_date(db, claim)
+        # Anchor all offsets on the original expense date (audit 2.2) so the
+        # monthly overview stays consistent with the reimbursement report.
         original_in_range = original_date is not None and start <= original_date <= end
-        received_in_range = received_date is not None and start <= received_date <= end
         if original_in_range and claim.status in EXPECTED_REIMBURSEMENT_STATUSES:
             expected = quantize_money(expected + amount)
         if original_in_range and claim.status in APPROVED_REIMBURSEMENT_STATUSES:
             approved = quantize_money(approved + amount)
-        if received_in_range and claim.status in RECEIVED_REIMBURSEMENT_STATUSES:
+        if original_in_range and claim.status in RECEIVED_REIMBURSEMENT_STATUSES:
             received = quantize_money(received + amount)
     return expected, approved, received
 
 
 def _claim_original_entry_date(db: Session, claim: ReimbursementClaim) -> Optional[DateType]:
     entry = db.get(FinancialEntry, claim.linked_entry_id)
-    return None if entry is None else entry.date
-
-
-def _claim_received_date(db: Session, claim: ReimbursementClaim) -> Optional[DateType]:
-    if claim.actual_received_date is not None:
-        return claim.actual_received_date
-    if claim.received_entry_id is None:
-        return None
-    entry = db.get(FinancialEntry, claim.received_entry_id)
     return None if entry is None else entry.date
 
 
