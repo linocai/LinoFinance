@@ -52,7 +52,7 @@ struct DesignSystemShowcaseView: View {
                         .gradientForeground(FinanceTokens.heroNumberGradient)
                     HStack(spacing: 10) {
                         MetricChip(title: "本月收入", value: "+ 18,420", tint: FinanceTokens.State.income)
-                        MetricChip(title: "本月支出", value: "− 9,860", tint: FinanceTokens.State.expense)
+                        MetricChip(title: "本月支出", value: "- 9,860", tint: FinanceTokens.State.expense)
                         MetricChip(title: "信用负债", value: "12,300", tint: FinanceTokens.State.credit)
                     }
                 }
@@ -113,7 +113,7 @@ struct DesignSystemShowcaseView: View {
             HStack(spacing: 10) {
                 MetricChip(title: "净资产", value: "¥128,640", tint: FinanceTokens.Brand.primary)
                 MetricChip(title: "本月入账", value: "+ 18,420", tint: FinanceTokens.State.income)
-                MetricChip(title: "本月支出", value: "− 9,860", tint: FinanceTokens.State.expense)
+                MetricChip(title: "本月支出", value: "- 9,860", tint: FinanceTokens.State.expense)
                 MetricChip(title: "AI 待确认", value: "3", tint: FinanceTokens.State.ai)
             }
         }

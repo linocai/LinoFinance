@@ -87,7 +87,7 @@ enum FinanceFormatter {
 
     static func signedMoney(_ value: DecimalValue, currency: CurrencyCode = .cny) -> String {
         if value.value < 0 {
-            return "−\(money(DecimalValue(absDecimal(value.value)), currency: currency))"
+            return "-\(money(DecimalValue(absDecimal(value.value)), currency: currency))"
         }
         return money(value, currency: currency)
     }

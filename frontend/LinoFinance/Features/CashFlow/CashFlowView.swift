@@ -507,11 +507,13 @@ struct NewCashFlowSheet: View {
     private func monthlyDates(from startDate: Date, through endDate: Date) -> [Date] {
         var dates: [Date] = []
         let calendar = Calendar.current
-        var current = startDate
-        while current <= endDate, dates.count < 120 {
+        var index = 0
+        // Always offset from the original startDate so day-of-month never drifts
+        // (e.g. Jan 31 must yield Feb 28 then Mar 31, not get stuck at the 28th).
+        while index < 120, let current = calendar.date(byAdding: .month, value: index, to: startDate) {
+            if current > endDate { break }
             dates.append(current)
-            guard let next = calendar.date(byAdding: .month, value: 1, to: current) else { break }
-            current = next
+            index += 1
         }
         return dates
     }
@@ -597,7 +599,7 @@ struct EditCashFlowSheet: View {
                     Text("不关联").tag(Optional<String>.none)
                     ForEach(
                         environment.accountsViewModel.accounts
-                            .filter { $0.currency == currency }
+                            .filter { $0.type == .balance && $0.currency == currency }
                     ) { account in
                         Text(account.name).tag(Optional(account.id))
                     }
@@ -728,7 +730,7 @@ struct SettleCompletionSheet: View {
                     Text("请选择").tag(Optional<String>.none)
                     ForEach(
                         environment.accountsViewModel.accounts
-                            .filter { $0.currency == item.currency }
+                            .filter { $0.type == .balance && $0.currency == item.currency }
                     ) { account in
                         Text(account.name).tag(Optional(account.id))
                     }

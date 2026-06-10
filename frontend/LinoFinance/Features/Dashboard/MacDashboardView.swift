@@ -131,7 +131,7 @@ struct MacDashboardView: View {
         //   • 投资  → 紫 (ai)：独立资产池，自带"未来感"
         //   • 净资产 → 蓝 (brand.primary)：核心品牌色给到全局指标
         //   • 现金流 → 橙 (credit)：方向中性时的提醒色；金额本身的正负
-        //              由 trend 行（已有 +/− 着色）承担
+        //              由 trend 行（已有 +/- 着色）承担
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 4), spacing: 14) {
             KPICard(
                 title: "未来一月可支配",
@@ -196,15 +196,23 @@ struct MacDashboardView: View {
             return .init(text: "今日 无数据", tint: FinanceTokens.Text.secondary)
         }
         let segments = rows.map { row -> String in
+            // Format the absolute value and prepend an explicit ASCII sign.
+            // Formatting the signed value through the .currency NumberFormatter
+            // can place the minus before the symbol (locale-dependent), and the
+            // old `dropFirst(symbol.count)` then stripped the sign — making a
+            // loss render as a gain (audit 2.10).
+            let magnitude = row.amount.value < 0 ? row.amount.value * Decimal(-1) : row.amount.value
             let sign: String
             if row.amount.value > 0 {
                 sign = "+"
             } else if row.amount.value < 0 {
-                sign = ""
+                sign = "-"
             } else {
                 sign = ""
             }
-            return "\(row.currency.symbol) \(sign)\(FinanceFormatter.money(row.amount, currency: row.currency).dropFirst(row.currency.symbol.count))"
+            let body = FinanceFormatter.money(DecimalValue(magnitude), currency: row.currency)
+                .dropFirst(row.currency.symbol.count)
+            return "\(row.currency.symbol) \(sign)\(body)"
         }
         let totalCny = rows.first(where: { $0.currency == .cny })?.amount.value ?? 0
         let tint: Color
