@@ -232,12 +232,43 @@ final class AppEnvironment {
 #endif
             lastErrorMessage = nil
         } catch {
-            lastErrorMessage = error.localizedDescription
+            if Self.isUnauthorized(error) {
+                handleUnauthorized()
 #if canImport(CoreSpotlight)
-            if Self.isAuthErrorMessage(error.localizedDescription) {
                 await SpotlightIndexer.shared.clear()
-            }
 #endif
+            } else {
+                lastErrorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    /// Centralized 401 recovery (audit 2.12). Distinguishes the two keychain
+    /// slots so a stale token no longer forces the user to kill and relaunch
+    /// the app:
+    /// - **Session slot** (an Apple session token is present): clear the session
+    ///   token, drop the cached user, and rebuild clients on the remaining
+    ///   effective token. With no session and no admin token, `needsSignIn`
+    ///   flips true and the Sign in with Apple screen takes over.
+    /// - **Admin slot** (manual admin token, no session token): keep the token
+    ///   — only surface a banner. The admin/ops bypass token is long-lived and
+    ///   a transient 401 must not silently wipe it.
+    private func handleUnauthorized() {
+        let hasSessionToken = SecureTokenStore.shared.readToken(kind: .session) != nil
+        if hasSessionToken {
+            try? SecureTokenStore.shared.clear(kind: .session)
+            authUser = nil
+            isAdminSession = false
+            currentSessionID = nil
+            activeSessions = []
+            rebuildClients(
+                baseURL: apiClient.baseURL,
+                apiToken: SecureTokenStore.shared.readEffectiveToken()
+            )
+            lastErrorMessage = nil
+        } else {
+            // Admin-token mode: keep the token, just inform the user.
+            lastErrorMessage = "管理员 Token 鉴权失败（401）。请在设置中检查 Token 是否仍然有效。"
         }
     }
 
@@ -461,7 +492,7 @@ final class AppEnvironment {
                 currentSessionID = nil
             }
         } catch {
-            if Self.isAuthErrorMessage(error.localizedDescription) {
+            if Self.isUnauthorized(error) {
                 // Bad / expired session token — drop it but keep any admin token.
                 try? SecureTokenStore.shared.clear(kind: .session)
                 authUser = nil
@@ -636,8 +667,15 @@ final class AppEnvironment {
         return UserDefaults.standard.integer(forKey: key)
     }
 
-    nonisolated static func isAuthErrorMessage(_ message: String) -> Bool {
-        message.contains("API 401") || message.localizedCaseInsensitiveContains("invalid API token")
+    /// True when the error is an HTTP 401 from the API. Matches on the typed
+    /// `APIError.badStatus` status code rather than the localized message text
+    /// (audit 2.11): the old `"API 401"` substring match broke as soon as the
+    /// error copy was localized or reworded.
+    nonisolated static func isUnauthorized(_ error: Error) -> Bool {
+        if case APIError.badStatus(401, _) = error {
+            return true
+        }
+        return false
     }
 }
 

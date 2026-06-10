@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.category import Category
-from app.schemas.category import CategoryCreate, CategoryRead
+from app.schemas.category import CategoryCreate, CategoryRead, CategoryUpdate
 
 router = APIRouter()
 
@@ -31,5 +31,23 @@ def get_category(category_id: str, db: Session = Depends(get_db)) -> Category:
     category = db.get(Category, category_id)
     if category is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
+    return category
+
+
+@router.patch("/{category_id}", response_model=CategoryRead)
+def update_category(
+    category_id: str,
+    payload: CategoryUpdate,
+    db: Session = Depends(get_db),
+) -> Category:
+    category = db.get(Category, category_id)
+    if category is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
+    # ``type`` / ``parent_id`` are absent from CategoryUpdate (extra="forbid"),
+    # so they cannot be patched.
+    for field in payload.model_fields_set:
+        setattr(category, field, getattr(payload, field))
+    db.commit()
+    db.refresh(category)
     return category
 

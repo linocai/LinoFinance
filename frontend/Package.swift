@@ -10,17 +10,12 @@ let package = Package(
     products: [
         .library(name: "LinoFinanceCore", targets: ["LinoFinanceCore"]),
         .library(name: "LinoFinanceDesignSystem", targets: ["LinoFinanceDesignSystem"]),
-        .library(name: "LinoFinanceFeatures", targets: ["LinoFinanceFeatures"]),
     ],
     targets: [
         .target(name: "LinoFinanceCore"),
         .target(
             name: "LinoFinanceDesignSystem",
             dependencies: ["LinoFinanceCore"]
-        ),
-        .target(
-            name: "LinoFinanceFeatures",
-            dependencies: ["LinoFinanceCore", "LinoFinanceDesignSystem"]
         ),
         .testTarget(
             name: "LinoFinanceCoreTests",

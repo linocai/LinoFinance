@@ -86,15 +86,58 @@ def test_search_requires_token_when_auth_enabled(monkeypatch) -> None:
     assert response.status_code == 401
 
 
+def _create_entry_category_line_id(client) -> str:
+    """Create a real entry and return its first category line id.
+
+    Attachment uploads now validate that the owner entity exists (audit 2.4),
+    so tests must point at a real ``entry_category_line``.
+    """
+    account = client.post(
+        "/api/v1/accounts",
+        json={"name": "Attach Wallet", "type": "balance", "currency": "CNY", "current_balance": "500"},
+    ).json()
+    category = client.post(
+        "/api/v1/categories",
+        json={"name": "Attach Dining", "type": "expense"},
+    ).json()
+    entry = client.post(
+        "/api/v1/entries",
+        json={
+            "title": "Attachable expense",
+            "date": "2026-05-20",
+            "status": "confirmed",
+            "category_lines": [
+                {
+                    "category_id": category["id"],
+                    "direction": "expense",
+                    "amount": "20",
+                    "currency": "CNY",
+                }
+            ],
+            "account_movements": [
+                {
+                    "account_id": account["id"],
+                    "movement_type": "balance_out",
+                    "amount": "20",
+                    "currency": "CNY",
+                }
+            ],
+        },
+    ).json()
+    return entry["category_lines"][0]["id"]
+
+
 def test_attachments_upload_download_and_reject_large_file(client, monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("LINOFINANCE_STORAGE_ROOT", str(tmp_path))
     get_settings.cache_clear()
+
+    line_id = _create_entry_category_line_id(client)
 
     upload = client.post(
         "/api/v1/attachments",
         data={
             "owner_type": "entry_category_line",
-            "owner_id": "line-1",
+            "owner_id": line_id,
             "uploaded_by": "test",
         },
         files={"file": ("invoice.txt", b"hello invoice", "text/plain")},
@@ -109,14 +152,14 @@ def test_attachments_upload_download_and_reject_large_file(client, monkeypatch, 
 
     owner_list = client.get(
         "/api/v1/attachments",
-        params={"owner_type": "entry_category_line", "owner_id": "line-1"},
+        params={"owner_type": "entry_category_line", "owner_id": line_id},
     )
     assert owner_list.status_code == 200
     assert [item["id"] for item in owner_list.json()] == [attachment["id"]]
 
     too_large = client.post(
         "/api/v1/attachments",
-        data={"owner_type": "entry_category_line", "owner_id": "line-1"},
+        data={"owner_type": "entry_category_line", "owner_id": line_id},
         files={"file": ("large.bin", b"x" * (10 * 1024 * 1024 + 1), "application/octet-stream")},
     )
     assert too_large.status_code == 413
@@ -130,7 +173,7 @@ def test_attachments_upload_download_and_reject_large_file(client, monkeypatch, 
     assert (
         client.get(
             "/api/v1/attachments",
-            params={"owner_type": "entry_category_line", "owner_id": "line-1"},
+            params={"owner_type": "entry_category_line", "owner_id": line_id},
         ).json()
         == []
     )

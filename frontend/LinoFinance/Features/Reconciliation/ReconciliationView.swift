@@ -250,7 +250,7 @@ private struct AdjustmentSheet: View {
     }
 
     private var parsedAmount: Decimal? {
-        Decimal(string: amountText.trimmingCharacters(in: .whitespacesAndNewlines))
+        parseDecimalAmount(amountText)
     }
 
     private func submit() async {

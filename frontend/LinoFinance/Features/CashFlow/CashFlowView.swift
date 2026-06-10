@@ -1,5 +1,16 @@
 import SwiftUI
 
+extension CashFlowItemDTO {
+    /// Whether the generic "结算" (settle) action may be offered in the UI.
+    /// Transfers settle through the credit-repayment flow, and
+    /// reimbursement-linked receivables settle only through the claim's
+    /// mark-received action — the backend rejects a direct settle on either
+    /// (audit 1.3), so the entry point is hidden here too.
+    var canShowSettleAction: Bool {
+        direction != "transfer" && linkedReimbursementId == nil
+    }
+}
+
 struct CashFlowView: View {
     @Bindable var environment: AppEnvironment
     @State private var confirmation: ConfirmAction?
@@ -90,7 +101,7 @@ struct CashFlowView: View {
                     .onTapGesture { environment.inspectorSelection = .cashFlow(item) }
                     .contextMenu {
                         Button("编辑") { confirm(item, operation: "edit") }
-                        if item.direction != "transfer" {
+                        if item.canShowSettleAction {
                             Button("结算") { confirm(item, operation: "settle") }
                         }
                         Button("取消", role: .destructive) { confirm(item, operation: "cancel") }
@@ -100,7 +111,7 @@ struct CashFlowView: View {
                         if item.status == "expected" || item.status == "confirmed" {
                             Button("编辑") { confirm(item, operation: "edit") }
                                 .tint(.blue)
-                            if item.direction != "transfer" {
+                            if item.canShowSettleAction {
                                 Button("结算") { confirm(item, operation: "settle") }
                                     .tint(.green)
                             }
@@ -195,6 +206,12 @@ struct CashFlowView: View {
     private func attemptSettle(_ item: CashFlowItemDTO) async {
         if item.direction == "transfer" {
             environment.cashFlowViewModel.errorMessage = "转账现金流请通过记账里的信用还款流程结算"
+            return
+        }
+        if item.linkedReimbursementId != nil {
+            // The settle entry points are hidden for these, but guard the path
+            // anyway: the backend rejects a direct settle (audit 1.3).
+            environment.cashFlowViewModel.errorMessage = "报销关联现金流请通过报销中心的「标记到账」结算"
             return
         }
         if item.accountId != nil, item.categoryId != nil {
@@ -341,7 +358,7 @@ private struct CashFlowActionMenu: View {
     var body: some View {
         Menu {
             Button("编辑") { confirm(item, "edit") }
-            if item.direction != "transfer" {
+            if item.canShowSettleAction {
                 Button("结算") { confirm(item, "settle") }
             }
             Button("取消", role: .destructive) { confirm(item, "cancel") }
@@ -411,7 +428,7 @@ struct NewCashFlowSheet: View {
                 Button("取消") { environment.isShowingNewCashFlowSheet = false }
                 Button("创建") { Task { await submit() } }
                     .buttonStyle(.borderedProminent)
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || Decimal(string: amount) == nil)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || parseDecimalAmount(amount) == nil)
             }
         }
         .padding(22)
@@ -446,7 +463,7 @@ struct NewCashFlowSheet: View {
     }
 
     private func submit() async {
-        guard let decimal = Decimal(string: amount) else { return }
+        guard let decimal = parseDecimalAmount(amount) else { return }
         if cashFlowType == "salary", recurrenceEndDate < expectedDate {
             errorMessage = "工资重复截止日期不能早于首次预计日期"
             return
@@ -490,11 +507,13 @@ struct NewCashFlowSheet: View {
     private func monthlyDates(from startDate: Date, through endDate: Date) -> [Date] {
         var dates: [Date] = []
         let calendar = Calendar.current
-        var current = startDate
-        while current <= endDate, dates.count < 120 {
+        var index = 0
+        // Always offset from the original startDate so day-of-month never drifts
+        // (e.g. Jan 31 must yield Feb 28 then Mar 31, not get stuck at the 28th).
+        while index < 120, let current = calendar.date(byAdding: .month, value: index, to: startDate) {
+            if current > endDate { break }
             dates.append(current)
-            guard let next = calendar.date(byAdding: .month, value: 1, to: current) else { break }
-            current = next
+            index += 1
         }
         return dates
     }
@@ -580,7 +599,7 @@ struct EditCashFlowSheet: View {
                     Text("不关联").tag(Optional<String>.none)
                     ForEach(
                         environment.accountsViewModel.accounts
-                            .filter { $0.currency == currency }
+                            .filter { $0.type == .balance && $0.currency == currency }
                     ) { account in
                         Text(account.name).tag(Optional(account.id))
                     }
@@ -634,13 +653,13 @@ struct EditCashFlowSheet: View {
 
     private var isFormValid: Bool {
         guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
-        guard Decimal(string: amount) != nil else { return false }
+        guard parseDecimalAmount(amount) != nil else { return false }
         if currency != .cny && exchangeRateId == nil { return false }
         return true
     }
 
     private func submit() async {
-        guard let decimal = Decimal(string: amount) else { return }
+        guard let decimal = parseDecimalAmount(amount) else { return }
         if currency != .cny && exchangeRateId == nil {
             errorMessage = "缺少 \(currency.rawValue) → CNY 汇率，请到设置中添加"
             return
@@ -711,7 +730,7 @@ struct SettleCompletionSheet: View {
                     Text("请选择").tag(Optional<String>.none)
                     ForEach(
                         environment.accountsViewModel.accounts
-                            .filter { $0.currency == item.currency }
+                            .filter { $0.type == .balance && $0.currency == item.currency }
                     ) { account in
                         Text(account.name).tag(Optional(account.id))
                     }

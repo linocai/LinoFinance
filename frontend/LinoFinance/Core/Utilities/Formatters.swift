@@ -20,6 +20,44 @@ extension DateFormatter {
         formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
         return formatter
     }()
+
+    /// Fallback for UTC-naive datetimes that carry microsecond fractional
+    /// seconds with no timezone designator (audit §3.5) — e.g. the local SQLite
+    /// runner emits `2026-06-10T14:30:00.123456`. The two `ISO8601DateFormatter`
+    /// variants require a timezone, and `linoAPIDateTime` has no fractional
+    /// seconds, so neither matches. Backend naive datetimes are UTC (§3.2).
+    static let linoAPIDateTimeFractional: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
+        return formatter
+    }()
+}
+
+/// Parse a user-entered amount string into a `Decimal`, or `nil` if it is not a
+/// clean decimal number.
+///
+/// Pipeline (v1.3.0, audit 1.4): trim whitespace → strip English thousands
+/// separators (`,`) → validate the *whole* string against
+/// `^-?[0-9]+(\.[0-9]+)?$` → only then hand off to `Decimal(string:)`.
+///
+/// We deliberately do **not** strip currency symbols or units: `"58元"`,
+/// `"¥100"`, `"1.2.3"`, `""` all return `nil` so the form surfaces an error
+/// rather than silently swallowing characters (e.g. `Decimal(string: "58元")`
+/// returns `58`). The whole-string regex (rather than a round-trip
+/// format-compare) avoids trailing-zero false negatives like `"1.50"` → `"1.5"`.
+func parseDecimalAmount(_ raw: String) -> Decimal? {
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    let stripped = trimmed.replacingOccurrences(of: ",", with: "")
+    guard stripped.range(
+        of: "^-?[0-9]+(\\.[0-9]+)?$",
+        options: .regularExpression
+    ) != nil else {
+        return nil
+    }
+    return Decimal(string: stripped)
 }
 
 enum FinanceFormatter {
@@ -49,7 +87,7 @@ enum FinanceFormatter {
 
     static func signedMoney(_ value: DecimalValue, currency: CurrencyCode = .cny) -> String {
         if value.value < 0 {
-            return "−\(money(DecimalValue(absDecimal(value.value)), currency: currency))"
+            return "-\(money(DecimalValue(absDecimal(value.value)), currency: currency))"
         }
         return money(value, currency: currency)
     }

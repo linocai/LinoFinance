@@ -499,7 +499,7 @@ struct SettingsView: View {
     }
 
     private func createRate() async {
-        guard let decimal = Decimal(string: usdRate) else {
+        guard let decimal = parseDecimalAmount(usdRate) else {
             errorMessage = "请输入合法汇率"
             return
         }

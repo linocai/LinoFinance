@@ -3,14 +3,16 @@
 LinoFinance is a personal dual-currency finance control center with iOS/macOS
 clients and a cloud API backend.
 
-v1.1 has shipped. Historical planning and design docs are under [archive/](archive/). For day-to-day operations see [docs/deployment.md](docs/deployment.md).
+Historical planning and design docs are under [archive/](archive/). For day-to-day operations see [docs/deployment.md](docs/deployment.md). The current shipped version is tracked in [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Current Architecture
 
 - Backend: FastAPI, SQLAlchemy, Alembic, PostgreSQL.
 - Frontend: SwiftUI shared Swift package plus a real Xcode macOS App target.
 - Storage: cloud database is the primary source of truth.
-- Client local storage: cache, offline drafts, and retry queue only.
+- Client model: online-only — every read/write goes to the cloud API; there is
+  no local cache, offline-draft queue, or retry queue. Offline capability is in
+  the backlog (see [PROJECT_PLAN.md](PROJECT_PLAN.md) §6).
 - V1 export: CSV.
 
 ## Backend Quick Start

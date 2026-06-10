@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.account import Account
-from app.schemas.account import AccountCreate, AccountRead
+from app.schemas.account import AccountCreate, AccountRead, AccountUpdate
 from app.schemas.investment import DailyPnLCreate, DailyPnLRead
 from app.services.investment import record_daily_pnl
 from app.services.ledger import (
@@ -43,6 +43,25 @@ def get_account(account_id: str, db: Session = Depends(get_db)) -> Account:
     account = db.get(Account, account_id)
     if account is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    return account
+
+
+@router.patch("/{account_id}", response_model=AccountRead)
+def update_account(
+    account_id: str,
+    payload: AccountUpdate,
+    db: Session = Depends(get_db),
+) -> Account:
+    account = db.get(Account, account_id)
+    if account is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    # ``type`` / ``currency`` / ``current_balance`` / ``current_liability`` are
+    # absent from AccountUpdate (extra="forbid"), so they cannot be patched —
+    # balances change through reconciliation adjustments only.
+    for field in payload.model_fields_set:
+        setattr(account, field, getattr(payload, field))
+    db.commit()
+    db.refresh(account)
     return account
 
 

@@ -29,6 +29,11 @@ struct LinoAPIClient {
             if let date = DateFormatter.linoAPIDateTime.date(from: value) {
                 return date
             }
+            // UTC-naive datetime with microsecond fraction, no tz (audit §3.5,
+            // local SQLite runner): keep last so well-formed ISO8601 wins first.
+            if let date = DateFormatter.linoAPIDateTimeFractional.date(from: value) {
+                return date
+            }
             throw DecodingError.dataCorruptedError(
                 in: container,
                 debugDescription: "Invalid date string: \(value)"

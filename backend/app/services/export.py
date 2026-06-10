@@ -10,12 +10,16 @@ from sqlalchemy.orm import Session
 
 from app.models.account import Account
 from app.models.ai import AIAction, AIActionExecution, AIPlan
+from app.models.attachment import Attachment
 from app.models.audit_log import AuditLog
 from app.models.cash_flow import CashFlowItem
+from app.models.category import Category
 from app.models.credit_statement_cycle import CreditStatementCycle
+from app.models.currency_rate import CurrencyRate
 from app.models.entry import AccountMovement, EntryCategoryLine, FinancialEntry
 from app.models.installment import InstallmentPlan
 from app.models.notification import NotificationRule
+from app.models.reconciliation import AccountAdjustment
 from app.models.reimbursement import ReimbursementClaim
 from app.models.subscription import SubscriptionRule
 from app.schemas.entry import format_decimal
@@ -28,11 +32,17 @@ DATASET_MODELS: Dict[str, Type] = {
     "entry_category_lines": EntryCategoryLine,
     "account_movements": AccountMovement,
     "accounts": Account,
+    "categories": Category,
+    "currency_rates": CurrencyRate,
+    "account_adjustments": AccountAdjustment,
     "cash_flow_items": CashFlowItem,
     "reimbursement_claims": ReimbursementClaim,
     "credit_statement_cycles": CreditStatementCycle,
     "installment_plans": InstallmentPlan,
     "subscription_rules": SubscriptionRule,
+    # Metadata only — the attachment blob lives on disk under STORAGE_ROOT and
+    # is intentionally not part of the CSV export.
+    "attachments": Attachment,
     "audit_logs": AuditLog,
     "ai_plans": AIPlan,
     "ai_actions": AIAction,

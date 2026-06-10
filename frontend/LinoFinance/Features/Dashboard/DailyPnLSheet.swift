@@ -27,8 +27,7 @@ struct DailyPnLSheet: View {
     }
 
     private var parsedNewBalance: Decimal? {
-        let trimmed = newBalanceText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : Decimal(string: trimmed)
+        parseDecimalAmount(newBalanceText)
     }
 
     private var deltaPreview: String? {

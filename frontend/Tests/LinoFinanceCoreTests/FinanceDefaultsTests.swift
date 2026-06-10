@@ -141,7 +141,10 @@ private extension DateFormatter {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        // MonthWindowResolver now resolves in the device-local timezone
+        // (audit §3.4 fix); construct and render the test dates in the same
+        // local zone so the whole-month boundary assertions stay consistent.
+        formatter.timeZone = .current
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()

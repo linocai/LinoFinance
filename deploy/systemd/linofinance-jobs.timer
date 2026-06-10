@@ -1,0 +1,14 @@
+[Unit]
+Description=Run LinoFinance scheduled jobs daily
+
+[Timer]
+# 09:00 in the app's business timezone. The trailing timezone token is honoured
+# by systemd >= 252; on older systemd drop it and instead run the host in (or
+# set the unit's TZ to) Asia/Shanghai. The credit-due reminder anchors its
+# T-5/3/1/0 window on app_today() from LINOFINANCE_APP_TIMEZONE, so keep this
+# OnCalendar aligned with that timezone.
+OnCalendar=*-*-* 09:00:00 Asia/Shanghai
+Persistent=true
+
+[Install]
+WantedBy=timers.target

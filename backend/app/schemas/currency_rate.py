@@ -27,6 +27,19 @@ class CurrencyRateCreate(BaseModel):
         return data
 
 
+class CurrencyRateUpdate(BaseModel):
+    """Patch only the ``rate`` of a currency rate (audit 2.5).
+
+    Allowed only when the rate is not yet referenced by any entry line,
+    movement, cash flow item, or reimbursement claim (history is never
+    rewritten). ``from_currency`` / ``to_currency`` / ``date`` are immutable.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    rate: Decimal = Field(gt=0)
+
+
 class CurrencyRateRead(BaseModel):
     id: str
     from_currency: str

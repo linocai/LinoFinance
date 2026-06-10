@@ -25,6 +25,28 @@ class AccountCreate(BaseModel):
         return data
 
 
+class AccountUpdate(BaseModel):
+    """Patch a subset of editable account fields (audit 2.5).
+
+    Immutable fields (``type`` / ``currency`` / ``current_balance`` /
+    ``current_liability``) are intentionally absent from this schema; balance
+    changes flow through reconciliation adjustments. Uses ``model_fields_set``
+    in the service to distinguish "field absent" from "field set to null".
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    include_in_net_worth: Optional[bool] = None
+    status: Optional[str] = None
+    display_order: Optional[int] = None
+    credit_limit: Optional[Decimal] = None
+    statement_day: Optional[int] = Field(default=None, ge=1, le=31)
+    due_day: Optional[int] = Field(default=None, ge=1, le=31)
+    minimum_payment: Optional[Decimal] = None
+    notes: Optional[str] = None
+
+
 class AccountRead(BaseModel):
     id: str
     name: str

@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "LinoFinance API"
-    app_version: str = "1.2.0"
+    app_version: str = "1.3.0"
     environment: str = "local"
     api_v1_prefix: str = "/api/v1"
     database_url: str = (
@@ -47,6 +47,14 @@ class Settings(BaseSettings):
         "com.lino.linofinance",
     ]
     apple_dev_shortcut: bool = False
+    # Business timezone used to resolve "today" anchors and to bucket UTC-naive
+    # `created_at` timestamps to a calendar date (audit §3.4/§3.5, D6). Defaults
+    # to Shanghai; override via `LINOFINANCE_APP_TIMEZONE`.
+    app_timezone: str = "Asia/Shanghai"
+    # Comma-separated Apple `sub` values that may self-activate even when the
+    # users table is non-empty (single-user gate escape hatch — e.g. migrating
+    # to a new Apple ID). Empty by default.
+    apple_sub_allowlist: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -57,6 +65,10 @@ class Settings(BaseSettings):
     @property
     def normalized_environment(self) -> str:
         return self.environment.strip().lower()
+
+    @property
+    def apple_sub_allowlist_set(self) -> set[str]:
+        return {s.strip() for s in self.apple_sub_allowlist.split(",") if s.strip()}
 
     @property
     def is_production(self) -> bool:

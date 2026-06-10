@@ -30,8 +30,7 @@ struct DailyPnLSidebarPanel: View {
     private var canSubmit: Bool {
         guard !isSubmitting else { return false }
         guard selectedAccount != nil else { return false }
-        let trimmed = newBalanceText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmed.isEmpty && Decimal(string: trimmed) != nil
+        return parseDecimalAmount(newBalanceText) != nil
     }
 
     var body: some View {
@@ -87,8 +86,7 @@ struct DailyPnLSidebarPanel: View {
     @MainActor
     private func submit() async {
         guard let account = selectedAccount else { return }
-        let trimmed = newBalanceText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let amount = Decimal(string: trimmed) else { return }
+        guard let amount = parseDecimalAmount(newBalanceText) else { return }
         isSubmitting = true
         defer { isSubmitting = false }
         do {

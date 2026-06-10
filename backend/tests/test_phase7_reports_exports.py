@@ -132,7 +132,12 @@ def test_monthly_category_and_reimbursement_reports(client) -> None:
     assert reimbursement_body["selected_net_expense_cny"] == "0"
 
 
-def test_reimbursement_reports_use_original_and_received_dates_separately(client) -> None:
+def test_reimbursement_reports_anchor_all_views_on_original_expense_date(client) -> None:
+    # P5 / audit 2.2: all five reimbursement views (and the monthly-overview
+    # offsets) anchor on the ORIGINAL expense date. Here the expense is in May
+    # but the cash is received in June. Pre-fix, the June report subtracted a
+    # `received` offset against a zero gross and produced a spurious -200 net;
+    # now the entire claim lives in the May window and June shows no offset.
     checking = create_account(client, "Checking", "balance", balance="1000")
     travel = create_category(client, "Travel")
     reimbursement_income = create_category(client, "Reimbursement Income", "income")
@@ -197,6 +202,8 @@ def test_reimbursement_reports_use_original_and_received_dates_separately(client
     )
     assert receive_response.status_code == 200
 
+    # May window: the original expense (5/16) anchors gross AND every offset —
+    # including `received`, even though the cash landed on 6/11.
     may_report = client.get(
         "/api/v1/reports/reimbursements",
         params={
@@ -208,9 +215,11 @@ def test_reimbursement_reports_use_original_and_received_dates_separately(client
     assert may_report["gross_reimbursable_expense_cny"] == "200"
     assert may_report["expected_offset_cny"] == "200"
     assert may_report["approved_offset_cny"] == "200"
-    assert may_report["received_offset_cny"] == "0"
-    assert may_report["received_net_expense_cny"] == "200"
+    assert may_report["received_offset_cny"] == "200"
+    assert may_report["received_net_expense_cny"] == "0"
 
+    # June window: the original expense is out of range, so the whole claim is
+    # excluded — no spurious negative net from a dangling `received` offset.
     june_report = client.get(
         "/api/v1/reports/reimbursements",
         params={
@@ -221,16 +230,22 @@ def test_reimbursement_reports_use_original_and_received_dates_separately(client
     ).json()
     assert june_report["gross_reimbursable_expense_cny"] == "0"
     assert june_report["expected_offset_cny"] == "0"
-    assert june_report["received_offset_cny"] == "200"
-    assert june_report["received_net_expense_cny"] == "-200"
+    assert june_report["approved_offset_cny"] == "0"
+    assert june_report["received_offset_cny"] == "0"
+    assert june_report["received_net_expense_cny"] == "0"
 
+    # Monthly overview offsets follow the same original-date anchor. Entry totals
+    # (income/expense) still follow each entry's own date.
     may_overview = client.get(
         "/api/v1/reports/monthly-overview",
         params={"date_from": "2026-05-01", "date_to": "2026-05-31"},
     ).json()
+    assert may_overview["income_cny"] == "0"
     assert may_overview["expense_cny"] == "200"
     assert may_overview["expected_reimbursement_cny"] == "200"
-    assert may_overview["received_reimbursement_cny"] == "0"
+    assert may_overview["approved_reimbursement_cny"] == "200"
+    assert may_overview["received_reimbursement_cny"] == "200"
+    # personal_net_expense_cny keeps its full-expense口径 (expense - expected).
     assert may_overview["personal_net_expense_cny"] == "0"
 
     june_overview = client.get(
@@ -240,7 +255,7 @@ def test_reimbursement_reports_use_original_and_received_dates_separately(client
     assert june_overview["income_cny"] == "200"
     assert june_overview["expense_cny"] == "0"
     assert june_overview["expected_reimbursement_cny"] == "0"
-    assert june_overview["received_reimbursement_cny"] == "200"
+    assert june_overview["received_reimbursement_cny"] == "0"
 
 
 def test_cash_flow_pressure_and_subscription_report(client) -> None:

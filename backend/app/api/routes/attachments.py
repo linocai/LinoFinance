@@ -45,6 +45,8 @@ async def upload_attachment(
             uploaded_by=uploaded_by,
             note=note,
         )
+    except LedgerNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except LedgerValidationError as exc:
         status_code = status.HTTP_413_CONTENT_TOO_LARGE if "exceeds" in str(exc) else 400
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc

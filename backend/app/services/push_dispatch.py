@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.timeutils import app_today
 from app.models.account import Account
 from app.models.ai import AIPlan
 from app.models.audit_log import AuditLog
@@ -165,7 +166,7 @@ def dispatch_due_credit_reminders(
     db: Session,
     anchor_date: Optional[DateType] = None,
 ) -> list[PushDispatchResult]:
-    anchor = anchor_date or DateType.today()
+    anchor = anchor_date or app_today()
     target_dates = {anchor + timedelta(days=days) for days in CREDIT_REMINDER_DAYS}
     statement = (
         select(CreditStatementCycle, Account)

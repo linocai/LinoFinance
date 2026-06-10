@@ -143,6 +143,67 @@ def test_sign_in_with_apple_disabled_user(client, db_factory) -> None:
     assert response.json()["detail"] == "User is disabled"
 
 
+def test_first_user_bootstraps_active(client, db_factory) -> None:
+    """Single-user gate: the first sub on an empty table activates (audit 1.1)."""
+    response = _sign_in(client, sub="owner-sub")
+    assert response.status_code == 200, response.json()
+    with db_factory() as db:
+        user = db.query(User).one()
+        assert user.apple_user_id == "owner-sub"
+        assert user.disabled is False
+
+
+def test_second_new_sub_is_disabled_and_refused(client, db_factory) -> None:
+    """After bootstrap, a new sub is recorded disabled and refused (audit 1.1)."""
+    assert _sign_in(client, sub="owner-sub").status_code == 200
+
+    response = _sign_in(client, sub="intruder-sub")
+    assert response.status_code == 403
+    assert response.json()["detail"] == "User is disabled"
+
+    # The disabled row is persisted (committed before raising) so ops can see it.
+    with db_factory() as db:
+        intruder = db.query(User).filter_by(apple_user_id="intruder-sub").one()
+        assert intruder.disabled is True
+        assert db.query(AuthSession).count() == 1  # only the owner has a session
+
+
+def test_allowlisted_new_sub_activates(client, db_factory, monkeypatch) -> None:
+    """A sub on the allowlist self-activates even on a non-empty table (audit 1.1)."""
+    assert _sign_in(client, sub="owner-sub").status_code == 200
+
+    monkeypatch.setenv("LINOFINANCE_APPLE_SUB_ALLOWLIST", "new-device-sub, other-sub")
+    get_settings.cache_clear()
+
+    response = _sign_in(client, sub="new-device-sub")
+    assert response.status_code == 200, response.json()
+    with db_factory() as db:
+        user = db.query(User).filter_by(apple_user_id="new-device-sub").one()
+        assert user.disabled is False
+
+
+def test_existing_session_dies_when_user_disabled(client, db_factory) -> None:
+    """A live session is rejected the moment its user is disabled (audit 1.2)."""
+    token = _sign_in(client, sub="owner-sub").json()["session_token"]
+    # Sanity: the session works before disabling.
+    assert client.get("/api/v1/dashboard/summary", headers=_auth(token)).status_code == 200
+
+    with db_factory() as db:
+        user = db.query(User).filter_by(apple_user_id="owner-sub").one()
+        user.disabled = True
+        db.commit()
+
+    # Any gated route now returns a clean 401, not a 500.
+    assert client.get("/api/v1/dashboard/summary", headers=_auth(token)).status_code == 401
+    assert client.get("/api/v1/auth/me", headers=_auth(token)).status_code == 401
+
+
+def test_admin_env_token_unaffected_by_gate(client) -> None:
+    """The admin env token bypasses the users table entirely (audit 1.1/1.2)."""
+    response = client.get("/api/v1/dashboard/summary", headers=_auth(ADMIN_TOKEN))
+    assert response.status_code == 200
+
+
 def test_me_returns_user_for_session_token(client) -> None:
     token = _sign_in(client).json()["session_token"]
     me = client.get("/api/v1/auth/me", headers=_auth(token))

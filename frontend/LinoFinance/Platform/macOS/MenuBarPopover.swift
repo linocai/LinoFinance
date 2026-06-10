@@ -117,7 +117,14 @@ struct MenuBarPopover: View {
         if let v = environment.settingsViewModel.health?.version, !v.isEmpty {
             return "v\(v)"
         }
-        return "v1.1.7"
+        // Fall back to the bundle's marketing version so the label tracks the
+        // shipped build instead of a hardcoded literal that goes stale.
+        let bundleVersion = Bundle.main
+            .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        if let bundleVersion, !bundleVersion.isEmpty {
+            return "v\(bundleVersion)"
+        }
+        return "v?"
     }
 
     private var nextCreditDueText: String {

@@ -2,7 +2,7 @@ from datetime import date as DateType
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import Date, Numeric, String, Text
+from sqlalchemy import Date, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -11,6 +11,14 @@ from app.models.mixins import IDTimestampMixin
 
 class CurrencyRate(IDTimestampMixin, Base):
     __tablename__ = "currency_rates"
+    __table_args__ = (
+        UniqueConstraint(
+            "from_currency",
+            "to_currency",
+            "date",
+            name="currency_rates_from_to_date_uq",
+        ),
+    )
 
     from_currency: Mapped[str] = mapped_column(String(3), nullable=False)
     to_currency: Mapped[str] = mapped_column(String(3), nullable=False)
