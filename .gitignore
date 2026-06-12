@@ -39,3 +39,7 @@ DerivedData/
 .derivedData*/
 *.xcuserstate
 xcuserdata/
+
+# Local-only planning docs (untracked per owner decision 2026-06-12)
+/PROJECT_PLAN.md
+/archive/

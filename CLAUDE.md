@@ -2,6 +2,7 @@
 
 > 本文件只放**本项目专属**的工程经验与坑。通用的跨项目原则（含 Apple 工程通用坑）在全局 `~/.claude/CLAUDE.md`，不在此重复。
 > 计划唯一权威是 [PROJECT_PLAN.md](PROJECT_PLAN.md)（上半生效 plan / 下半变更日志）。**不要再新建 state / audit / plan_v2 类文件**；`.planning/` 已退役（仅留 `screenshots/`），历史 plan 全文在 `archive/`。
+> **`PROJECT_PLAN.md` 与 `archive/` 已于 2026-06-12 由用户决定改为本地不跟踪**（写入 `.gitignore` 并 `git rm --cached` 摘出索引）。它们仍是计划的唯一权威，但只存在于本地工作区，不进 git 历史 / 远端；别再尝试把它们 `git add` / commit 回版本控制。
 
 ## 工作流
 
@@ -20,7 +21,7 @@
 ```bash
 # 后端
 cd backend && source .venv/bin/activate
-.venv/bin/pytest            # 当前 113 通过
+.venv/bin/pytest            # 当前 155 通过（main = v1.3.0，已发布部署）
 .venv/bin/ruff check .
 .venv/bin/alembic upgrade head
 python scripts/run_local_sqlite.py     # 本地 SQLite API，端口 6868
