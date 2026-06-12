@@ -1,15 +1,17 @@
 #if os(macOS)
 import SwiftUI
 
-/// macOS Dashboard 整页重建 —— 对齐 HTML `v1.1前端升级预览.html` C 节。
-/// 自上而下 4 个块：
-///   1. Header (h2 "总览" + subtitle + Segmented 时间段)
-///   2. KPI 4-col grid (净资产 / 余额合计 / 信用负债 / 未来净额)
-///   3. CashflowChartCard (Swift Charts 堆叠柱 + 净额折线)
-///   4. AccountPanoramaCard (账户全景列表)
+/// macOS 总览页 —— v1.4.0 P3 重构。
+/// 自上而下：
+///   1. Header（只剩日期，无副标题、无区间切换）
+///   2. 四张全宽横幅卡（纵向堆叠，spacing 14）：
+///      可支配 / 投资（含今日盈亏快录）/ 净资产（含公式 chips）/ 未来 30 天净流入
+///   3. AccountPanoramaCard（账户全景列表）
+///
+/// 旧的 SegmentedSwitcher 时间段、现金流图表卡、KPICard 四宫格均已移除。
+/// 总览页不再拉 reports / ai 的现金流数据（sidebar「现金流」独立页不受影响）。
 struct MacDashboardView: View {
     @Bindable var environment: AppEnvironment
-    @State private var cashflowMode: CashflowChartCard.Mode = .stacked
     @State private var accountFilter: AccountPanoramaFilter = .all
 
     var body: some View {
@@ -18,8 +20,7 @@ struct MacDashboardView: View {
                 header
 
                 if let summary = environment.dashboardViewModel.summary {
-                    kpiGrid(summary: summary)
-                    cashflowCard
+                    bannerStack(summary: summary)
                     accountPanorama
                 } else if environment.dashboardViewModel.isLoading {
                     EmptyState(title: "正在等待总览数据", message: "API 正在计算账户与记录摘要。", systemImage: "network")
@@ -35,7 +36,7 @@ struct MacDashboardView: View {
                     .padding(.top, 60)
                 }
 
-                if let message = environment.dashboardViewModel.errorMessage ?? environment.reportsViewModel.errorMessage ?? environment.aiViewModel.errorMessage {
+                if let message = environment.dashboardViewModel.errorMessage {
                     ErrorBanner(message: message)
                 }
             }
@@ -48,63 +49,28 @@ struct MacDashboardView: View {
         .task {
             await refreshAll()
         }
-        .onChange(of: environment.dateRange) { _, _ in
-            Task { try? await reloadCashflow() }
-        }
     }
 
     // MARK: - Refresh
 
     @MainActor
     private func refreshAll() async {
-        let (from, to) = cashflowRange(for: environment.dateRange)
         try? await environment.dashboardViewModel.refresh()
-        try? await environment.reportsViewModel.refresh(cashFlowFrom: from, cashFlowTo: to)
-        try? await environment.aiViewModel.refresh()
         try? await environment.accountsViewModel.refresh()
         try? await environment.settingsViewModel.refresh()
-    }
-
-    @MainActor
-    private func reloadCashflow() async {
-        let (from, to) = cashflowRange(for: environment.dateRange)
-        try? await environment.reportsViewModel.refresh(cashFlowFrom: from, cashFlowTo: to)
-    }
-
-    /// 将 DateRangeChoice 映射成未来 cashflow 起止日期。
-    /// week → 今天 ~ 今天+7；month → 今天 ~ 月底；quarter → 今天 ~ 今天+90。
-    private func cashflowRange(for choice: DateRangeChoice) -> (Date?, Date?) {
-        let now = Date()
-        let calendar = Calendar.current
-        switch choice {
-        case .week:
-            let to = calendar.date(byAdding: .day, value: 7, to: now)
-            return (now, to)
-        case .month:
-            let interval = calendar.dateInterval(of: .month, for: now)
-            return (now, interval?.end)
-        case .quarter:
-            let to = calendar.date(byAdding: .day, value: 90, to: now)
-            return (now, to)
-        }
     }
 
     // MARK: - Header
 
     private var header: some View {
-        HStack(alignment: .lastTextBaseline, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("总览")
-                    .font(FinanceTypography.titleXL)
-                    .titleTracking()
-                    .foregroundStyle(FinanceTokens.Text.primary)
-                Text("API 驱动的财务控制台 · \(todayChinese)")
-                    .font(.system(size: 13))
-                    .foregroundStyle(FinanceTokens.Text.secondary)
-            }
-            Spacer(minLength: 12)
-            SegmentedSwitcher(options: DateRangeChoice.allCases, selection: $environment.dateRange) { $0.title }
-                .frame(maxWidth: 280)
+        VStack(alignment: .leading, spacing: 6) {
+            Text("总览")
+                .font(FinanceTypography.titleXL)
+                .titleTracking()
+                .foregroundStyle(FinanceTokens.Text.primary)
+            Text(todayChinese)
+                .font(.system(size: 13))
+                .foregroundStyle(FinanceTokens.Text.secondary)
         }
     }
 
@@ -115,92 +81,160 @@ struct MacDashboardView: View {
         return f.string(from: Date())
     }
 
-    // MARK: - KPI Grid
+    // MARK: - Banner stack
 
     @ViewBuilder
-    private func kpiGrid(summary: DashboardSummaryDTO) -> some View {
+    private func bannerStack(summary: DashboardSummaryDTO) -> some View {
         let investmentAccountCount = environment.accountsViewModel.accounts.investmentAccounts.count
-        let disposableLines = currencyLines(summary.disposable30dByCurrency)
-        let investmentLines = currencyLines(summary.investmentTotalByCurrency)
-        let cashflow30dLines = currencyLines(summary.cashFlow30dByCurrency)
-        let cashflowCnyAmount = currencyAmount(summary.cashFlow30dByCurrency, currency: .cny)
 
-        // Four cards, four distinct tints — values render in `tint` so the
-        // grid reads at a glance:
-        //   • 可支配 → 绿 (income)：常态最关心，正向
-        //   • 投资  → 紫 (ai)：独立资产池，自带"未来感"
-        //   • 净资产 → 蓝 (brand.primary)：核心品牌色给到全局指标
-        //   • 现金流 → 橙 (credit)：方向中性时的提醒色；金额本身的正负
-        //              由 trend 行（已有 +/- 着色）承担
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 4), spacing: 14) {
-            KPICard(
-                title: "未来一月可支配",
-                valueLines: disposableLines,
-                systemImage: "wallet.bifold",
-                tint: FinanceTokens.State.income,
-                tag: .init(text: "30 天滚动", style: .draft),
-                trend: nil
-            )
-            KPICard(
-                title: "投资账户",
-                valueLines: investmentLines,
-                systemImage: "chart.line.uptrend.xyaxis.circle",
-                tint: FinanceTokens.State.ai,
-                tag: .init(text: "\(investmentAccountCount) 账户", style: .draft),
-                trend: investmentTrendSpec(summary.todayPnlByCurrency)
-            )
-            KPICard(
-                title: "净资产",
-                value: FinanceFormatter.money(summary.netWorthCny),
-                systemImage: "chart.pie",
-                tint: FinanceTokens.Brand.primary,
-                tag: .init(text: "CNY 计", style: .draft),
-                trend: .init(text: "已确认 \(summary.confirmedEntryCount) · 草稿 \(summary.draftEntryCount)", tint: FinanceTokens.Text.secondary)
-            )
-            KPICard(
-                title: "未来 30 天",
-                valueLines: cashflow30dLines,
-                systemImage: "calendar.badge.clock",
-                tint: FinanceTokens.State.credit,
-                tag: .init(text: "30 天", style: .draft),
-                trend: cashflowTrendSpec(cashflowCnyAmount)
-            )
+        VStack(spacing: 14) {
+            disposableCard(summary)
+            investmentCard(summary, accountCount: investmentAccountCount)
+            netWorthCard(summary)
+            cashFlowCard(summary)
         }
     }
 
-    private func currencyLines(_ rows: [CurrencyAmountDTO]?) -> [String] {
+    // 卡1 · 未来一月可支配 —— CNY（绿）/ USD（固定 USD 绿）双币等大异色。
+    private func disposableCard(_ summary: DashboardSummaryDTO) -> some View {
+        OverviewBannerCard(
+            title: "未来一月可支配",
+            systemImage: "wallet.bifold",
+            tint: FinanceTokens.State.income,
+            tag: .init(text: "30 天滚动", style: .draft),
+            center: {
+                DualCurrencyValue(
+                    lines: currencyLines(summary.disposable30dByCurrency),
+                    cnyTint: FinanceTokens.State.income
+                )
+            },
+            trailing: { EmptyView() }
+        )
+    }
+
+    // 卡2 · 投资账户 —— 总额（紫）+ 今日盈亏行；右侧嵌今日盈亏快录表单。
+    private func investmentCard(_ summary: DashboardSummaryDTO, accountCount: Int) -> some View {
+        OverviewBannerCard(
+            title: "投资账户",
+            systemImage: "chart.line.uptrend.xyaxis.circle",
+            tint: FinanceTokens.State.ai,
+            tag: .init(text: "\(accountCount) 账户", style: .draft),
+            center: {
+                VStack(alignment: .leading, spacing: 8) {
+                    DualCurrencyValue(
+                        lines: currencyLines(summary.investmentTotalByCurrency),
+                        cnyTint: FinanceTokens.State.ai
+                    )
+                    if let trend = investmentTrendSpec(summary.todayPnlByCurrency) {
+                        Text(trend.text)
+                            .font(.system(size: 13, weight: .medium).monospacedDigit())
+                            .foregroundStyle(trend.tint)
+                    }
+                }
+            },
+            trailing: {
+                if accountCount > 0 {
+                    DailyPnLQuickForm(environment: environment)
+                } else {
+                    EmptyView()
+                }
+            }
+        )
+    }
+
+    // 卡3 · 净资产 —— CNY/USD 等大 + 每币种一行公式 chips。
+    private func netWorthCard(_ summary: DashboardSummaryDTO) -> some View {
+        OverviewBannerCard(
+            title: "净资产",
+            systemImage: "chart.pie",
+            tint: FinanceTokens.Brand.primary,
+            tag: .init(text: "余额 + 投资 − 信用", style: .draft),
+            center: {
+                DualCurrencyValue(
+                    lines: netWorthLines(summary),
+                    cnyTint: FinanceTokens.Brand.primary
+                )
+            },
+            trailing: {
+                netWorthFormula(summary)
+            }
+        )
+    }
+
+    // 卡4 · 未来 30 天净流入 —— CNY/USD 等大，数字按正负 income/expense 着色。
+    private func cashFlowCard(_ summary: DashboardSummaryDTO) -> some View {
+        OverviewBannerCard(
+            title: "未来 30 天净流入",
+            systemImage: "calendar.badge.clock",
+            tint: FinanceTokens.State.credit,
+            tag: .init(text: "30 天", style: .draft),
+            center: {
+                DualCurrencyValue(
+                    lines: signedCurrencyLines(summary.cashFlow30dByCurrency),
+                    cnyTint: FinanceTokens.State.credit
+                )
+            },
+            trailing: {
+                Text("含工资 · 订阅 · 信用卡还款 · 报销到账")
+                    .font(FinanceTypography.caption)
+                    .foregroundStyle(FinanceTokens.Text.tertiary)
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: 200, alignment: .trailing)
+            }
+        )
+    }
+
+    // MARK: - Value helpers
+
+    /// 把 by-currency 行映射成 DualCurrencyValue 行（默认配色：CNY 走卡 tint，USD 走中性次色）。
+    private func currencyLines(_ rows: [CurrencyAmountDTO]?) -> [DualCurrencyValue.CurrencyLine] {
         guard let rows, !rows.isEmpty else { return [] }
         return rows.map { row in
-            FinanceFormatter.money(row.amount, currency: row.currency)
+            DualCurrencyValue.CurrencyLine(
+                currency: row.currency,
+                text: FinanceFormatter.money(row.amount, currency: row.currency)
+            )
         }
     }
 
-    private func currencyAmount(_ rows: [CurrencyAmountDTO]?, currency: CurrencyCode) -> DecimalValue? {
-        rows?.first(where: { $0.currency == currency })?.amount
+    /// 卡3 净资产行：优先用 P2 的 `net_worth_by_currency`；后端未部署该字段（旧 prod）时
+    /// 回退到标量 `net_worth_cny`，避免卡片空白。
+    private func netWorthLines(_ summary: DashboardSummaryDTO) -> [DualCurrencyValue.CurrencyLine] {
+        let lines = currencyLines(summary.netWorthByCurrency)
+        if !lines.isEmpty { return lines }
+        return [DualCurrencyValue.CurrencyLine(
+            currency: .cny,
+            text: FinanceFormatter.money(summary.netWorthCny, currency: .cny)
+        )]
     }
 
-    private func cashflowTrendSpec(_ cnyAmount: DecimalValue?) -> KPICard.TrendSpec? {
-        guard let cnyAmount else { return nil }
-        let value = cnyAmount.value
-        if value > 0 {
-            return .init(text: "本月净流入", tint: FinanceTokens.State.income)
-        } else if value < 0 {
-            return .init(text: "本月净流出", tint: FinanceTokens.State.expense)
-        } else {
-            return .init(text: "本月持平", tint: FinanceTokens.Text.secondary)
+    /// 卡4 专用：数字本身按正负着色（income / expense），覆盖默认双色规则。
+    private func signedCurrencyLines(_ rows: [CurrencyAmountDTO]?) -> [DualCurrencyValue.CurrencyLine] {
+        guard let rows, !rows.isEmpty else { return [] }
+        return rows.map { row in
+            let tint: Color
+            if row.amount.value > 0 {
+                tint = FinanceTokens.State.income
+            } else if row.amount.value < 0 {
+                tint = FinanceTokens.State.expense
+            } else {
+                tint = FinanceTokens.Text.secondary
+            }
+            return DualCurrencyValue.CurrencyLine(
+                currency: row.currency,
+                text: FinanceFormatter.signedMoney(row.amount, currency: row.currency),
+                overrideTint: tint
+            )
         }
     }
 
-    private func investmentTrendSpec(_ rows: [CurrencyAmountDTO]?) -> KPICard.TrendSpec? {
+    /// 今日盈亏 trend 行 —— 沿用 v1.1.6 逻辑：绝对值格式化 + 显式 ASCII 正负号
+    /// （避免负号被 locale 当币符砍掉，audit 2.10）。
+    private func investmentTrendSpec(_ rows: [CurrencyAmountDTO]?) -> (text: String, tint: Color)? {
         guard let rows, !rows.isEmpty else {
-            return .init(text: "今日 无数据", tint: FinanceTokens.Text.secondary)
+            return ("今日 无数据", FinanceTokens.Text.secondary)
         }
         let segments = rows.map { row -> String in
-            // Format the absolute value and prepend an explicit ASCII sign.
-            // Formatting the signed value through the .currency NumberFormatter
-            // can place the minus before the symbol (locale-dependent), and the
-            // old `dropFirst(symbol.count)` then stripped the sign — making a
-            // loss render as a gain (audit 2.10).
             let magnitude = row.amount.value < 0 ? row.amount.value * Decimal(-1) : row.amount.value
             let sign: String
             if row.amount.value > 0 {
@@ -223,98 +257,66 @@ struct MacDashboardView: View {
         } else {
             tint = FinanceTokens.Text.secondary
         }
-        return .init(text: "今日 " + segments.joined(separator: " · "), tint: tint)
+        return ("今日 " + segments.joined(separator: " · "), tint)
     }
 
-    // MARK: - Cashflow card
+    // MARK: - Net-worth formula
 
-    private var cashflowCard: some View {
-        CashflowChartCard(
-            buckets: cashflowBuckets,
-            mode: $cashflowMode,
-            title: "现金流 · \(rangeTitle)",
-            subtitle: "含工资 · 订阅 · 信用卡还款 · 报销到账"
-        )
-    }
-
-    private var rangeTitle: String {
-        switch environment.dateRange {
-        case .week: "未来 7 天"
-        case .month: "本月"
-        case .quarter: "未来 90 天"
-        }
-    }
-
-    /// 把 dailyNetCny 按周分桶。
-    /// daily 非空 → 先按当前 dateRange 客户端裁剪（后端如果已经裁过这是 no-op），
-    /// 然后按周分桶（最多 12 桶）。
-    /// daily 为空且 windows[] 非空时，回落到用 windows 构 3 个桶（7/30/90 天）。
-    private var cashflowBuckets: [CashflowChartCard.Bucket] {
-        let bundle = environment.reportsViewModel.bundle
-        let allDaily = bundle?.cashFlow.dailyNetCny ?? []
-        let (from, to) = cashflowRange(for: environment.dateRange)
-        let daily = allDaily.filter { row in
-            (from.map { row.date >= $0 } ?? true) && (to.map { row.date <= $0 } ?? true)
-        }
-        guard !daily.isEmpty else {
-            return windowsFallback(bundle?.cashFlow.windows ?? [])
-        }
-        let calendar = Calendar(identifier: .gregorian)
-        let sorted = daily.sorted { $0.date < $1.date }
-        if sorted.count <= 12 {
-            return sorted.map { row in
-                CashflowChartCard.Bucket(
-                    id: "\(row.date.timeIntervalSince1970)",
-                    label: shortMonthDay(row.date),
-                    inflow: NSDecimalNumber(decimal: row.inflowCny.value).doubleValue,
-                    outflow: NSDecimalNumber(decimal: row.outflowCny.value).doubleValue,
-                    net: NSDecimalNumber(decimal: row.netCny.value).doubleValue
-                )
+    /// 按币种各一行公式 chips：`余额 + 投资 − 信用 = 净值`。
+    /// 数据完全来自 P2 的四组 by-currency 字段，前端不自行加减（施工总原则 1）。
+    /// 迭代 netWorthByCurrency 的币种集合（CNY 恒含，USD 非零才含）。
+    private func netWorthFormula(_ summary: DashboardSummaryDTO) -> some View {
+        let currencies = (summary.netWorthByCurrency ?? []).map { $0.currency }
+        return VStack(alignment: .trailing, spacing: 8) {
+            ForEach(currencies, id: \.self) { currency in
+                formulaRow(currency: currency, summary: summary)
             }
         }
-        // 7 天一桶
-        var grouped: [(weekStart: Date, inflow: Decimal, outflow: Decimal, net: Decimal)] = []
-        for row in sorted {
-            let weekStart = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: row.date)) ?? row.date
-            if let lastIdx = grouped.indices.last, grouped[lastIdx].weekStart == weekStart {
-                grouped[lastIdx].inflow += row.inflowCny.value
-                grouped[lastIdx].outflow += row.outflowCny.value
-                grouped[lastIdx].net += row.netCny.value
-            } else {
-                grouped.append((weekStart, row.inflowCny.value, row.outflowCny.value, row.netCny.value))
-            }
-        }
-        let tail = Array(grouped.suffix(12))
-        return tail.map { g in
-            CashflowChartCard.Bucket(
-                id: "\(g.weekStart.timeIntervalSince1970)",
-                label: shortMonthDay(g.weekStart),
-                inflow: NSDecimalNumber(decimal: g.inflow).doubleValue,
-                outflow: NSDecimalNumber(decimal: g.outflow).doubleValue,
-                net: NSDecimalNumber(decimal: g.net).doubleValue
+        .frame(width: 360)
+    }
+
+    private func formulaRow(currency: CurrencyCode, summary: DashboardSummaryDTO) -> some View {
+        let balance = amount(summary.balanceTotalByCurrency, currency)
+        let invest = amount(summary.investmentTotalByCurrency, currency)
+        let credit = amount(summary.creditLiabilityByCurrency, currency)
+        let net = amount(summary.netWorthByCurrency, currency)
+        return HStack(spacing: 6) {
+            MetricChip(
+                title: "\(currency.rawValue) 余额",
+                value: FinanceFormatter.money(balance, currency: currency),
+                tint: FinanceTokens.State.income
+            )
+            operatorGlyph("+")
+            MetricChip(
+                title: "投资",
+                value: FinanceFormatter.money(invest, currency: currency),
+                tint: FinanceTokens.State.ai
+            )
+            operatorGlyph("−")
+            MetricChip(
+                title: "信用",
+                value: FinanceFormatter.money(credit, currency: currency),
+                tint: FinanceTokens.State.credit
+            )
+            operatorGlyph("=")
+            MetricChip(
+                title: "净值",
+                value: FinanceFormatter.money(net, currency: currency),
+                tint: FinanceTokens.Brand.primary
             )
         }
     }
 
-    private func shortMonthDay(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "M/d"
-        return f.string(from: date)
+    private func operatorGlyph(_ glyph: String) -> some View {
+        Text(glyph)
+            .font(.system(size: 14, weight: .semibold).monospacedDigit())
+            .foregroundStyle(FinanceTokens.Text.tertiary)
     }
 
-    /// daily 缺失时的兜底：用 7/30/90 天三个 window 构 3 个桶。
-    private func windowsFallback(_ windows: [CashFlowPressureWindowDTO]) -> [CashflowChartCard.Bucket] {
-        let sorted = windows.sorted { $0.days < $1.days }
-        return sorted.map { w in
-            CashflowChartCard.Bucket(
-                id: "win-\(w.days)",
-                label: "\(w.days) 天",
-                inflow: NSDecimalNumber(decimal: w.expectedInflowCny.value).doubleValue,
-                outflow: NSDecimalNumber(decimal: w.expectedOutflowCny.value).doubleValue,
-                net: NSDecimalNumber(decimal: w.netCny.value).doubleValue
-            )
-        }
+    /// 取某币种在某 by-currency 数组中的金额；缺失按 0 处理（仅用于公式展示对齐，
+    /// 不参与净值计算——净值直接取后端 netWorthByCurrency）。
+    private func amount(_ rows: [CurrencyAmountDTO]?, _ currency: CurrencyCode) -> DecimalValue {
+        rows?.first(where: { $0.currency == currency })?.amount ?? DecimalValue(0)
     }
 
     // MARK: - Account panorama
@@ -361,7 +363,7 @@ struct MacDashboardView: View {
         let convertedCNY = convertedCNY(for: account)
         let secondaryText: String? = {
             guard let convertedCNY else { return nil }
-            return "约 \(FinanceFormatter.money(convertedCNY, currency: .cny, approximate: true))"
+            return FinanceFormatter.money(convertedCNY, currency: .cny, approximate: true)
         }()
         let subtitle: String = {
             if isCredit {

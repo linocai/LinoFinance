@@ -1,9 +1,10 @@
 #if os(macOS)
 import SwiftUI
 
-/// macOS sidebar 今日盈亏快速录入面板。
-/// 用户输入投资账户的"当前余额"，由后端算 delta；前端不做加减法。
-struct DailyPnLSidebarPanel: View {
+/// 投资卡内嵌的今日盈亏快录表单 —— v1.4.0 P3，从 `DailyPnLSidebarPanel` 迁入。
+/// 用户输入投资账户的"当前余额"，由后端算 delta；前端不做加减法（施工总原则 1）。
+/// 横排紧凑布局，挂在投资横幅卡右侧辅助区。
+struct DailyPnLQuickForm: View {
     @Bindable var environment: AppEnvironment
     @State private var selectedAccountID: String?
     @State private var newBalanceText: String = ""
@@ -34,7 +35,12 @@ struct DailyPnLSidebarPanel: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .trailing, spacing: 8) {
+            Text("今日盈亏快录")
+                .font(FinanceTypography.pillLabel)
+                .foregroundStyle(FinanceTokens.Text.tertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
             if investmentAccounts.count > 1 {
                 Picker("账户", selection: Binding(
                     get: { selectedAccountID ?? investmentAccounts.first?.id ?? "" },
@@ -46,22 +52,25 @@ struct DailyPnLSidebarPanel: View {
                 }
                 .pickerStyle(.menu)
                 .labelsHidden()
+                .frame(maxWidth: .infinity)
             } else if let only = investmentAccounts.first {
                 Text("\(only.name) · \(only.currency.rawValue)")
                     .font(.caption)
                     .foregroundStyle(FinanceTokens.Text.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            TextField(placeholderText, text: $newBalanceText)
-                .textFieldStyle(.roundedBorder)
-                .font(.system(size: 13).monospacedDigit())
+            HStack(spacing: 8) {
+                TextField(placeholderText, text: $newBalanceText)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 13).monospacedDigit())
+                    .frame(width: 130)
 
-            TextField("备注（可选）", text: $note)
-                .textFieldStyle(.roundedBorder)
-                .font(.system(size: 12))
+                TextField("备注", text: $note)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12))
+                    .frame(width: 96)
 
-            HStack(spacing: 6) {
-                Spacer()
                 Button {
                     Task { await submit() }
                 } label: {
@@ -77,9 +86,12 @@ struct DailyPnLSidebarPanel: View {
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(feedbackTint)
                     .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(10)
+        .frame(maxWidth: 340)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(12)
         .glassBackground(radius: FinanceTokens.Radius.md, strength: .regular, elevation: nil)
     }
 

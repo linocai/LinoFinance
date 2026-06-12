@@ -131,7 +131,7 @@ struct AccountsView: View {
     private func balanceAccountRow(_ account: AccountDTO) -> some View {
         let convertedCNY = convertedCNY(for: account)
         let primary = FinanceFormatter.money(account.currentBalance, currency: account.currency)
-        let secondary = convertedCNY.map { "约 \(FinanceFormatter.money($0, currency: .cny, approximate: true))" }
+        let secondary = convertedCNY.map { FinanceFormatter.money($0, currency: .cny, approximate: true) }
         return AccountListRow(
             systemImage: balanceIcon(for: account.currency),
             iconTint: balanceTint(for: account.currency),
@@ -146,7 +146,7 @@ struct AccountsView: View {
     private func investmentAccountRow(_ account: AccountDTO) -> some View {
         let convertedCNY = convertedCNY(for: account)
         let primary = FinanceFormatter.money(account.currentBalance, currency: account.currency)
-        let secondary = convertedCNY.map { "约 \(FinanceFormatter.money($0, currency: .cny, approximate: true))" }
+        let secondary = convertedCNY.map { FinanceFormatter.money($0, currency: .cny, approximate: true) }
         let subtitle = "投资账户 · " + (account.notes ?? account.status.financeStatusTitle)
         return AccountListRow(
             systemImage: "chart.line.uptrend.xyaxis.circle",

@@ -201,18 +201,7 @@ private struct SidebarView: View {
             VStack(alignment: .leading, spacing: 22) {
                 sidebarGroup(title: "主控台", modules: Self.consoleModules)
                 sidebarGroup(title: "分析 · AI", modules: Self.analyticsModules)
-                if !environment.accountsViewModel.accounts.investmentAccounts.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("今日盈亏".uppercased())
-                            .font(FinanceTypography.sectionKicker)
-                            .tracking(0.8)
-                            .foregroundStyle(FinanceTokens.Text.tertiary)
-                            .padding(.horizontal, 12)
-                            .padding(.bottom, 4)
-                        DailyPnLSidebarPanel(environment: environment)
-                            .padding(.horizontal, 6)
-                    }
-                }
+                // 今日盈亏快录已迁入总览页投资卡（v1.4.0 P3）；sidebar 组移除。
             }
             .padding(.horizontal, 10)
             .padding(.top, 14)

@@ -35,6 +35,13 @@ struct DashboardSummaryDTO: Decodable, Equatable {
     let disposable30dByCurrency: [CurrencyAmountDTO]?
     let cashFlow30dByCurrency: [CurrencyAmountDTO]?
 
+    // New in v1.4.0 P2 — per-currency net-worth breakdown (CNY always present,
+    // other currencies only when non-zero). Optional so an older backend that
+    // does not emit them still decodes.
+    let balanceTotalByCurrency: [CurrencyAmountDTO]?
+    let creditLiabilityByCurrency: [CurrencyAmountDTO]?
+    let netWorthByCurrency: [CurrencyAmountDTO]?
+
     // The global decoder uses .convertFromSnakeCase, which first transforms
     // the JSON key and *then* matches it against CodingKeys raw values.
     // For digit+letter segments the transformer capitalises the letter
@@ -55,6 +62,11 @@ struct DashboardSummaryDTO: Decodable, Equatable {
         case todayPnlByCurrency
         case disposable30dByCurrency = "disposable30DByCurrency"
         case cashFlow30dByCurrency = "cashFlow30DByCurrency"
+        // All-letter snake_case keys map cleanly through .convertFromSnakeCase,
+        // so the CodingKeys raw values are the default camelCase names.
+        case balanceTotalByCurrency
+        case creditLiabilityByCurrency
+        case netWorthByCurrency
     }
 }
 
