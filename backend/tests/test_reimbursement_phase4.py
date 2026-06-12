@@ -111,21 +111,45 @@ def test_confirmed_reimbursable_entry_creates_claim_and_future_cash_flow(client)
     assert cash_flow["linked_reimbursement_id"] == claim["id"]
 
 
-def test_draft_reimbursable_entry_creates_claim_only_after_confirm(client) -> None:
+def test_draft_reimbursable_entry_is_rejected(client) -> None:
+    # v1.4.0: draft status is removed, so a reimbursable entry can no longer be
+    # parked as a draft. Sending status=draft is rejected (422) and creates
+    # neither a claim nor any balance change.
     account = create_account(client, balance="1000")
     category = create_category(client)
-    entry = create_reimbursable_entry(client, account, category, status="draft")
 
+    response = client.post(
+        "/api/v1/entries",
+        json={
+            "title": "Client trip",
+            "date": "2026-05-16",
+            "status": "draft",
+            "category_lines": [
+                {
+                    "category_id": category["id"],
+                    "direction": "expense",
+                    "amount": "500",
+                    "currency": "CNY",
+                    "reimbursable_flag": True,
+                    "reimbursement_payer": "company",
+                    "reimbursement_expected_date": "2026-06-10",
+                    "reimbursement_status": "submitted",
+                }
+            ],
+            "account_movements": [
+                {
+                    "account_id": account["id"],
+                    "movement_type": "balance_out",
+                    "amount": "500",
+                    "currency": "CNY",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 422
     assert client.get("/api/v1/reimbursement-claims").json() == []
     assert client.get(f"/api/v1/accounts/{account['id']}").json()["current_balance"] == "1000.00"
-
-    confirm_response = client.post(f"/api/v1/entries/{entry['id']}/confirm")
-
-    assert confirm_response.status_code == 200
-    assert client.get(f"/api/v1/accounts/{account['id']}").json()["current_balance"] == "500.00"
-    claims = client.get("/api/v1/reimbursement-claims").json()
-    assert len(claims) == 1
-    assert claims[0]["linked_entry_id"] == entry["id"]
 
 
 def test_confirmed_reimbursable_entry_requires_expected_date(client) -> None:

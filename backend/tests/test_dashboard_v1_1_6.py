@@ -115,3 +115,86 @@ def test_dashboard_by_currency_split(client) -> None:
 def test_dashboard_today_pnl_empty_when_no_adjustments(client) -> None:
     summary = client.get("/api/v1/dashboard/summary").json()
     assert summary["today_pnl_by_currency"] == []
+
+
+def _by_ccy(rows):
+    return {row["currency"]: Decimal(row["amount"]) for row in rows}
+
+
+def _usd_rate(client, rate="7"):
+    response = client.post(
+        "/api/v1/currency-rates",
+        json={
+            "from_currency": "USD",
+            "to_currency": "CNY",
+            "rate": rate,
+            "date": date.today().isoformat(),
+            "source": "manual",
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def test_dashboard_net_worth_by_currency_mixed_accounts(client) -> None:
+    # v1.4.0 P2: per-currency net-worth breakdown in original currency.
+    _usd_rate(client)
+    # CNY: balance 1000, investment 500, credit 300  -> net 1200
+    _create_account(client, "CNYWallet", "balance", "CNY", "1000")
+    _create_account(client, "CNYFunds", "investment", "CNY", "500")
+    _create_credit_account(client, "CNYCard", "CNY", "300")
+    # USD: balance 100, investment 40, credit 30      -> net 110
+    _create_account(client, "USDWallet", "balance", "USD", "100")
+    _create_account(client, "USDFunds", "investment", "USD", "40")
+    _create_credit_account(client, "USDCard", "USD", "30")
+
+    summary = client.get("/api/v1/dashboard/summary").json()
+
+    balance = _by_ccy(summary["balance_total_by_currency"])
+    credit = _by_ccy(summary["credit_liability_by_currency"])
+    net = _by_ccy(summary["net_worth_by_currency"])
+
+    assert balance == {"CNY": Decimal("1000"), "USD": Decimal("100")}
+    assert credit == {"CNY": Decimal("300"), "USD": Decimal("30")}
+    # net = balance + investment - credit, per currency, no FX conversion.
+    assert net == {"CNY": Decimal("1200"), "USD": Decimal("110")}
+
+
+def test_dashboard_net_worth_by_currency_cny_only(client) -> None:
+    # No USD account: USD must not appear, CNY is always present.
+    _create_account(client, "CNYWallet", "balance", "CNY", "800")
+    _create_credit_account(client, "CNYCard", "CNY", "200")
+
+    summary = client.get("/api/v1/dashboard/summary").json()
+
+    balance = _by_ccy(summary["balance_total_by_currency"])
+    credit = _by_ccy(summary["credit_liability_by_currency"])
+    net = _by_ccy(summary["net_worth_by_currency"])
+
+    assert balance == {"CNY": Decimal("800")}
+    assert credit == {"CNY": Decimal("200")}
+    assert net == {"CNY": Decimal("600")}
+    assert "USD" not in balance and "USD" not in credit and "USD" not in net
+
+
+def test_dashboard_net_worth_by_currency_omits_zero_usd_net(client) -> None:
+    # USD balance exactly offsets USD credit -> USD net is 0, so the USD net row
+    # is omitted (`_pack_with_cny_floor` "non-zero only"); CNY stays present.
+    # USD balance still appears (it is non-zero) and so does USD credit.
+    _usd_rate(client)
+    _create_account(client, "CNYWallet", "balance", "CNY", "1000")
+    _create_account(client, "USDWallet", "balance", "USD", "50")
+    _create_credit_account(client, "USDCard", "USD", "50")
+
+    summary = client.get("/api/v1/dashboard/summary").json()
+
+    balance = _by_ccy(summary["balance_total_by_currency"])
+    credit = _by_ccy(summary["credit_liability_by_currency"])
+    net = _by_ccy(summary["net_worth_by_currency"])
+
+    # Non-zero USD balance/credit still surface.
+    assert balance == {"CNY": Decimal("1000"), "USD": Decimal("50")}
+    assert credit == {"CNY": Decimal("0"), "USD": Decimal("50")}
+    # USD net = 50 - 50 = 0 -> omitted; CNY net = 1000 always present.
+    assert net == {"CNY": Decimal("1000")}
+    assert "USD" not in net

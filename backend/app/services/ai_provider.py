@@ -42,7 +42,7 @@ Required payload shapes:
 - CreateEntry (most common: a single past expense/income):
   {{"title": string,
    "date": "YYYY-MM-DD",
-   "status": "confirmed|draft" (use "draft" if account_id or category_id is missing),
+   "status": "confirmed",
    "category_lines": [
      {{"direction": "expense|income",
        "amount": decimal string,

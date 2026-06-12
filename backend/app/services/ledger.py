@@ -86,26 +86,6 @@ def get_entry(db: Session, entry_id: str) -> EntryRead:
     return EntryRead.from_models(entry, lines, movements)
 
 
-def confirm_entry(db: Session, entry_id: str) -> EntryRead:
-    entry = db.get(FinancialEntry, entry_id)
-    if entry is None:
-        raise LedgerNotFoundError("Entry not found")
-    if entry.status == "confirmed":
-        return get_entry(db, entry_id)
-    if entry.status != "draft":
-        raise LedgerValidationError("Only draft entries can be confirmed")
-
-    lines, movements = _load_entry_parts(db, entry_id)
-    _validate_confirmable(entry, lines, movements)
-    generated_statement_cycle_ids = _apply_movements(db, movements, sign=Decimal("1"))
-    entry.status = "confirmed"
-    _create_reimbursement_claims_for_entry(db, entry, lines)
-
-    db.commit()
-    _dispatch_generated_statement_cycles(db, generated_statement_cycle_ids)
-    return get_entry(db, entry_id)
-
-
 def void_entry(db: Session, entry_id: str, commit: bool = True) -> EntryRead:
     entry = db.get(FinancialEntry, entry_id)
     if entry is None:

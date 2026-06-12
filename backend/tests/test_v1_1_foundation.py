@@ -45,7 +45,7 @@ def test_search_finds_account_and_entry(client) -> None:
         json={
             "title": "Office chair",
             "date": "2026-05-20",
-            "status": "draft",
+            "status": "confirmed",
             "category_lines": [
                 {
                     "category_id": category["id"],

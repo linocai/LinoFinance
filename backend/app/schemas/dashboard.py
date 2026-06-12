@@ -31,6 +31,13 @@ class DashboardSummary(BaseModel):
     disposable_30d_by_currency: List[CurrencyAmount] = []
     cash_flow_30d_by_currency: List[CurrencyAmount] = []
 
+    # new in v1.4.0 — additive per-currency net-worth breakdown.
+    # CNY always present; other currencies only when non-zero. net per currency
+    # = balance + investment − credit liability (original currency, no FX).
+    balance_total_by_currency: List[CurrencyAmount] = []
+    credit_liability_by_currency: List[CurrencyAmount] = []
+    net_worth_by_currency: List[CurrencyAmount] = []
+
     @field_serializer(
         "balance_total_cny",
         "credit_liability_total_cny",

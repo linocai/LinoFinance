@@ -51,7 +51,7 @@ class EntryCreate(BaseModel):
     date: DateType
     start_date: Optional[DateType] = None
     end_date: Optional[DateType] = None
-    status: str = Field(default="draft", pattern="^(draft|confirmed)$")
+    status: str = Field(default="confirmed", pattern="^confirmed$")
     note: Optional[str] = None
     created_by: str = Field(default="user", pattern="^(user|ai|system)$")
     category_lines: List[EntryCategoryLineCreate] = Field(default_factory=list)

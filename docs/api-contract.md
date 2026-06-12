@@ -156,16 +156,19 @@ so production `/health` is the canonical "what is deployed" probe.
   - `GET /exports/csv/{dataset}`
   - `GET /entries`
   - `POST /entries`
-  - `POST /entries/{entry_id}/confirm`
   - `POST /entries/{entry_id}/void`
   - `GET /dashboard/summary`
 - Planned next:
   - Expand `GET /dashboard/summary` into richer report cards after Phase 1 entries settle.
-  - Add entry update/edit endpoints after basic create/confirm/void semantics are stable.
+  - Add entry update/edit endpoints after basic create/void semantics are stable.
 
 ## Entry Rules Implemented
 
-- `draft` entries can be incomplete and do not affect account balances.
+- The `draft` entry status is removed (v1.4.0). `POST /entries` accepts only
+  `status: "confirmed"` (the default when omitted); sending `draft` returns
+  `422`. The `POST /entries/{entry_id}/confirm` route is removed (`404`); entries
+  are confirmed at creation time. `/void` semantics are unchanged. A one-time
+  data migration parks any legacy `status='draft'` row in `voided`.
 - `confirmed` entries must include account movements.
 - Confirmed non-transfer entries must include category lines.
 - Expense category totals must match `balance_out + credit_charge` movement totals in CNY.
@@ -220,7 +223,6 @@ so production `/health` is the canonical "what is deployed" probe.
 
 - Confirmed reimbursable entry category lines auto-create reimbursement claims.
 - Reimbursable lines require `reimbursement_expected_date` before an entry can be confirmed.
-- Draft reimbursable entries do not create claims until confirmation.
 - Each claim creates a linked `reimbursement` cash-flow inflow.
 - Submitted/reimbursable claims keep the linked cash flow `expected`.
 - Approved/waiting-received claims mark the linked cash flow `confirmed`.
@@ -266,8 +268,20 @@ so production `/health` is the canonical "what is deployed" probe.
   `investment_total_cny` / `investment_total_by_currency` (investment accounts),
   `net_worth_cny` (= `balance_total_cny` − `credit_liability_total_cny` +
   investments), `cash_flow_30d_by_currency` (next-30-day net cash flow), and
-  `today_pnl_by_currency`, alongside `draft_entry_count` / `confirmed_entry_count`
-  / `voided_entry_count`. All CNY totals quantize to the product money scale.
+  `today_pnl_by_currency`, alongside `confirmed_entry_count` / `voided_entry_count`.
+  `draft_entry_count` is **deprecated (v1.4.0)** and pinned to `0` — the field is
+  retained only so already-installed iOS 1.3 clients (whose DTO declares it a
+  non-optional `let`) keep decoding the response. All CNY totals quantize to the
+  product money scale.
+- `GET /dashboard/summary` (additive v1.4.0) also returns a per-currency net-worth
+  breakdown: `balance_total_by_currency`, `credit_liability_by_currency`, and
+  `net_worth_by_currency` (each `[{currency, amount}]`). Amounts are in original
+  currency with **no FX conversion**; per currency
+  `net = balance + investment − credit liability`, mirroring the CNY formula. CNY
+  is always present; other currencies appear only when the amount is non-zero
+  (same `_pack_with_cny_floor` rule as the other by-currency lists), so a USD
+  net worth of exactly 0 omits the USD row from `net_worth_by_currency` even when
+  USD balance/credit rows are non-zero.
 - `POST /accounts/{account_id}/daily-pnl` (v1.1.6) records an investment account's
   newly observed balance; the backend computes the delta from the prior balance,
   writes an `account_adjustment` (`source='investment_daily'`) plus an audit log,

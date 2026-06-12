@@ -33,17 +33,6 @@ def get_entry(entry_id: str, db: Session = Depends(get_db)) -> EntryRead:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
-@router.post("/{entry_id}/confirm", response_model=EntryRead)
-def confirm_entry(entry_id: str, db: Session = Depends(get_db)) -> EntryRead:
-    try:
-        return ledger.confirm_entry(db, entry_id)
-    except LedgerNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except LedgerValidationError as exc:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-
-
 @router.post("/{entry_id}/void", response_model=EntryRead)
 def void_entry(entry_id: str, db: Session = Depends(get_db)) -> EntryRead:
     try:

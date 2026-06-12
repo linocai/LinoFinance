@@ -58,7 +58,9 @@ def create_statement_cycle(client, credit_account_id, currency="USD"):
     return response.json()
 
 
-def test_draft_entry_does_not_change_balance_until_confirmed(client) -> None:
+def test_create_entry_rejects_draft_status(client) -> None:
+    # v1.4.0: the draft status is removed; the create API only accepts
+    # `confirmed` and pydantic rejects `draft` with a 422 before any DB work.
     account = create_account(client, balance="1000")
     category = create_category(client)
 
@@ -87,16 +89,79 @@ def test_draft_entry_does_not_change_balance_until_confirmed(client) -> None:
         },
     )
 
-    assert response.status_code == 201
-    entry = response.json()
-    assert entry["status"] == "draft"
+    assert response.status_code == 422
+    # No entry was created and the balance is untouched.
+    assert client.get("/api/v1/entries").json() == []
     assert client.get(f"/api/v1/accounts/{account['id']}").json()["current_balance"] == "1000.00"
 
-    confirm_response = client.post(f"/api/v1/entries/{entry['id']}/confirm")
 
-    assert confirm_response.status_code == 200
-    assert confirm_response.json()["status"] == "confirmed"
+def test_entry_defaults_to_confirmed_when_status_omitted(client) -> None:
+    # v1.4.0: omitting status falls back to `confirmed`, which immediately
+    # affects the balance.
+    account = create_account(client, balance="1000")
+    category = create_category(client)
+
+    response = client.post(
+        "/api/v1/entries",
+        json={
+            "title": "Lunch",
+            "date": "2026-05-16",
+            "category_lines": [
+                {
+                    "category_id": category["id"],
+                    "direction": "expense",
+                    "amount": "120",
+                    "currency": "CNY",
+                }
+            ],
+            "account_movements": [
+                {
+                    "account_id": account["id"],
+                    "movement_type": "balance_out",
+                    "amount": "120",
+                    "currency": "CNY",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "confirmed"
     assert client.get(f"/api/v1/accounts/{account['id']}").json()["current_balance"] == "880.00"
+
+
+def test_confirm_entry_route_is_removed(client) -> None:
+    # v1.4.0: the /entries/{id}/confirm route no longer exists, so any POST to
+    # it 404s (entries are confirmed at creation time).
+    account = create_account(client, balance="1000")
+    category = create_category(client)
+    entry = client.post(
+        "/api/v1/entries",
+        json={
+            "title": "Lunch",
+            "date": "2026-05-16",
+            "status": "confirmed",
+            "category_lines": [
+                {
+                    "category_id": category["id"],
+                    "direction": "expense",
+                    "amount": "120",
+                    "currency": "CNY",
+                }
+            ],
+            "account_movements": [
+                {
+                    "account_id": account["id"],
+                    "movement_type": "balance_out",
+                    "amount": "120",
+                    "currency": "CNY",
+                }
+            ],
+        },
+    ).json()
+
+    confirm_response = client.post(f"/api/v1/entries/{entry['id']}/confirm")
+    assert confirm_response.status_code == 404
 
 
 def test_confirmed_entry_changes_balance_immediately(client) -> None:
@@ -387,14 +452,6 @@ def test_dashboard_summary_uses_backend_balances_and_status_counts(client) -> No
     client.post(
         "/api/v1/entries",
         json={
-            "title": "Draft lunch",
-            "date": "2026-05-16",
-            "status": "draft",
-        },
-    )
-    client.post(
-        "/api/v1/entries",
-        json={
             "title": "Card dinner",
             "date": "2026-05-16",
             "status": "confirmed",
@@ -424,6 +481,7 @@ def test_dashboard_summary_uses_backend_balances_and_status_counts(client) -> No
     assert Decimal(summary["balance_total_cny"]) == Decimal("1000")
     assert Decimal(summary["credit_liability_total_cny"]) == Decimal("340")
     assert Decimal(summary["net_worth_cny"]) == Decimal("660")
-    assert summary["draft_entry_count"] == 1
+    # v1.4.0: draft status removed; draft_entry_count is deprecated and pinned 0.
+    assert summary["draft_entry_count"] == 0
     assert summary["confirmed_entry_count"] == 1
     assert summary["voided_entry_count"] == 0
