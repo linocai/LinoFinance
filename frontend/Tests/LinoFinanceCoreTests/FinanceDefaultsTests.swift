@@ -91,7 +91,9 @@ final class FinanceDefaultsTests: XCTestCase {
         XCTAssertEqual(dataset.filename, "entries.csv")
     }
 
-    func testIntentRecordResolverCreatesDraftWhenLinksAreMissing() {
+    func testIntentRecordResolverReportsIncompleteWhenLinksAreMissing() {
+        // 草稿移除（v1.4.0 P5）：缺字段不再产 draft，而是标 incomplete，
+        // 由调用方返回失败文案、不建单。
         let resolution = IntentRecordResolver.resolve(
             accountName: "招商",
             categoryName: "咖啡",
@@ -99,7 +101,7 @@ final class FinanceDefaultsTests: XCTestCase {
             categories: []
         )
 
-        XCTAssertEqual(resolution.status, .draft)
+        XCTAssertEqual(resolution.status, .incomplete)
         XCTAssertEqual(resolution.accountID, "a1")
         XCTAssertNil(resolution.categoryID)
         XCTAssertEqual(resolution.missingFields, ["category"])

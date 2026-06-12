@@ -45,11 +45,6 @@ final class EntriesViewModel {
         try await refresh()
     }
 
-    func confirmEntry(_ id: String) async throws {
-        _ = try await repository.confirmEntry(id)
-        try await refresh()
-    }
-
     func voidEntry(_ id: String) async throws {
         _ = try await repository.voidEntry(id)
         try await refresh()

@@ -36,12 +36,14 @@ enum QuickEntryError: LocalizedError {
     case emptyText
     case missingTitle
     case invalidAmount
+    case missingLinks
 
     var errorDescription: String? {
         switch self {
         case .emptyText: "请输入或粘贴一段文本。"
         case .missingTitle: "请输入标题。"
         case .invalidAmount: "请输入有效金额。"
+        case .missingLinks: "请选择账户和分类后再提交。"
         }
     }
 }

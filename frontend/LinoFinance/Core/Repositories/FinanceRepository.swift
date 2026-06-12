@@ -39,10 +39,6 @@ struct FinanceRepository {
         try await apiClient.createEntry(request)
     }
 
-    func confirmEntry(_ id: String) async throws -> EntryDTO {
-        try await apiClient.confirmEntry(id)
-    }
-
     func voidEntry(_ id: String) async throws -> EntryDTO {
         try await apiClient.voidEntry(id)
     }

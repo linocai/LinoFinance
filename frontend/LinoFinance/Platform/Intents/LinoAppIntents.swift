@@ -241,51 +241,46 @@ struct IntentFinanceService {
             if account == nil { missing.append("账户") }
             if category == nil { missing.append("分类") }
 
+            // 草稿移除（v1.4.0 P5）：缺账户/分类不再降级建草稿，直接返回失败
+            // 文案、不建单。记录一律 confirmed。
+            guard let account, let category else {
+                return "没记成：缺少\(missing.joined(separator: "、"))。请在指令里说清，或打开 LinoFinance 手动补齐。"
+            }
+
             let decimal = Decimal(amount)
             let decimalValue = DecimalValue(decimal)
-            let status: EntryStatus = missing.isEmpty ? .confirmed : .draft
-            let note = missing.isEmpty
-                ? "由 Siri/Shortcuts 创建。"
-                : "由 Siri/Shortcuts 创建；缺少\(missing.joined(separator: "、"))，已保存为草稿。"
 
             let request = EntryCreateRequest(
                 title: cleanTitle,
                 date: Date(),
-                status: status,
-                note: note,
+                status: .confirmed,
+                note: "由 Siri/Shortcuts 创建。",
                 createdBy: "app_intent",
-                categoryLines: category.map {
-                    [
-                        EntryCategoryLineCreateRequest(
-                            categoryId: $0.id,
-                            direction: direction.categoryDirection,
-                            amount: decimalValue,
-                            currency: currency,
-                            exchangeRateId: nil,
-                            convertedCnyAmount: currency == .cny ? decimalValue : nil
-                        )
-                    ]
-                } ?? [],
-                accountMovements: account.map {
-                    [
-                        AccountMovementCreateRequest(
-                            accountId: $0.id,
-                            statementCycleId: nil,
-                            movementType: direction.movementType,
-                            amount: decimalValue,
-                            currency: currency,
-                            exchangeRateId: nil,
-                            convertedCnyAmount: currency == .cny ? decimalValue : nil
-                        )
-                    ]
-                } ?? []
+                categoryLines: [
+                    EntryCategoryLineCreateRequest(
+                        categoryId: category.id,
+                        direction: direction.categoryDirection,
+                        amount: decimalValue,
+                        currency: currency,
+                        exchangeRateId: nil,
+                        convertedCnyAmount: currency == .cny ? decimalValue : nil
+                    )
+                ],
+                accountMovements: [
+                    AccountMovementCreateRequest(
+                        accountId: account.id,
+                        statementCycleId: nil,
+                        movementType: direction.movementType,
+                        amount: decimalValue,
+                        currency: currency,
+                        exchangeRateId: nil,
+                        convertedCnyAmount: currency == .cny ? decimalValue : nil
+                    )
+                ]
             )
 
-            let entry = try await repository.createEntry(request)
-            if status == .confirmed {
-                return "已记录\(direction.title)：\(cleanTitle)，\(FinanceFormatter.money(decimalValue, currency: currency))。"
-            }
-            return "已保存草稿：\(cleanTitle)。缺少\(missing.joined(separator: "、"))，打开 LinoFinance 后补齐即可。记录 ID：\(entry.id)。"
+            _ = try await repository.createEntry(request)
+            return "已记录\(direction.title)：\(cleanTitle)，\(FinanceFormatter.money(decimalValue, currency: currency))。"
         } catch IntentFinanceError.missingToken {
             return "还没有配置 LinoFinance API Token，请先在 app 设置里登录或配置 Token。"
         } catch {

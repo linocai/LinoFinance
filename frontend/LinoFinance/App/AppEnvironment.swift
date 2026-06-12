@@ -38,8 +38,11 @@ final class AppEnvironment {
     var dailyPnLTargetAccountID: String?
     var isSearchFocused = false
     var searchText = ""
-    var displayCurrency: CurrencyCode = .cny
-    var dateRange: DateRangeChoice = .month
+#if DEBUG
+    // DEBUG-only DesignSystem Showcase 触发位（v1.4.0 P4：从 MacRootView 本地
+    // @State 提升到 environment，让 LinoFinanceApp 的 #if DEBUG CommandMenu 可唤起）。
+    var isShowingDesignShowcase = false
+#endif
     var lastErrorMessage: String?
     var appearance: FinanceAppearance = AppEnvironment.defaultAppearance() {
         didSet {
@@ -676,22 +679,6 @@ final class AppEnvironment {
             return true
         }
         return false
-    }
-}
-
-enum DateRangeChoice: String, CaseIterable, Identifiable {
-    case week
-    case month
-    case quarter
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .week: "7 天"
-        case .month: "本月"
-        case .quarter: "90 天"
-        }
     }
 }
 

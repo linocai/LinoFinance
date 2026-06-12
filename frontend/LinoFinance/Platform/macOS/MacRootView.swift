@@ -5,11 +5,7 @@ import SwiftUI
 
 struct MacRootView: View {
     @Bindable var environment: AppEnvironment
-    @Environment(\.openWindow) private var openWindow
     @FocusState private var isSearchFocused: Bool
-#if DEBUG
-    @State private var isShowingDesignShowcase = false
-#endif
 
     var body: some View {
         Group {
@@ -43,65 +39,12 @@ struct MacRootView: View {
             InspectorView(environment: environment)
                 .navigationSplitViewColumnWidth(min: 300, ideal: 320)
         }
-        .toolbar {
-            // HTML C 节标题栏右侧 5 个 icon-only button：币种 / 时间 / 搜索⌘K / 新建⌘N / AI ✦
-            ToolbarItemGroup {
-                Menu {
-                    ForEach(CurrencyCode.allCases, id: \.self) { currency in
-                        Button(currency.rawValue) { environment.displayCurrency = currency }
-                    }
-                } label: {
-                    Image(systemName: "globe")
-                }
-                .menuStyle(.borderlessButton)
-                .help("币种：\(environment.displayCurrency.rawValue)")
-
-                Menu {
-                    ForEach(DateRangeChoice.allCases) { range in
-                        Button(range.title) { environment.dateRange = range }
-                    }
-                } label: {
-                    Image(systemName: "calendar")
-                }
-                .menuStyle(.borderlessButton)
-                .help("时间范围：\(environment.dateRange.title)")
-
-                Button {
-                    NSApp.activate(ignoringOtherApps: true)
-                    openWindow(id: "command")
-                } label: {
-                    Image(systemName: "wand.and.stars")
-                }
-                .help("快速记账")
-
-                Button {
-                    environment.beginNewEntry()
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .keyboardShortcut("n", modifiers: [.command])
-                .help("新建 ⌘N")
-
-                Button {
-                    environment.beginAI()
-                } label: {
-                    Image(systemName: "sparkles")
-                        .foregroundStyle(FinanceTokens.State.ai)
-                }
-                .help("AI 工作台")
-
+        // 工具栏 5 按钮（币种 / 区间 / 快速记账 / ＋记一笔 / AI）已删（v1.4.0 P4）。
+        // 入口收敛到：sidebar 底部大加号、⌘N/⌘⇧N、菜单「窗口→快速记账」、
+        // MenuBarExtra、AI 菜单 ⌘⇧A。DEBUG showcase 迁入 LinoFinanceApp 的
+        // #if DEBUG CommandMenu，经 environment.isShowingDesignShowcase 触发。
 #if DEBUG
-                Button {
-                    isShowingDesignShowcase = true
-                } label: {
-                    Image(systemName: "paintpalette")
-                }
-                .help("DesignSystem Showcase（仅 DEBUG）")
-#endif
-            }
-        }
-#if DEBUG
-        .sheet(isPresented: $isShowingDesignShowcase) {
+        .sheet(isPresented: $environment.isShowingDesignShowcase) {
             NavigationStack {
                 DesignSystemShowcaseView()
             }
@@ -211,8 +154,27 @@ private struct SidebarView: View {
         .background(FinanceTokens.Surface.deepGlass)
         .navigationTitle("LinoFinance")
         .safeAreaInset(edge: .bottom) {
-            ConnectionFooter(environment: environment)
-                .padding(12)
+            VStack(spacing: 10) {
+                // 主控台下部巨大加号——v1.4.0 P4 取代被删的 toolbar ＋ 按钮，
+                // 作为新建记录的醒目主入口。
+                Button {
+                    environment.beginNewEntry()
+                } label: {
+                    Label("记一笔", systemImage: "plus.circle.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .tint(FinanceTokens.Brand.primary)
+                // ⌘N 由 LinoFinanceApp 的 CommandGroup(.newItem) 全局拥有，
+                // 这里不再重复绑定，避免快捷键歧义；按钮纯作可见主入口。
+                .help("记一笔 ⌘N")
+
+                ConnectionFooter(environment: environment)
+            }
+            .padding(12)
         }
     }
 

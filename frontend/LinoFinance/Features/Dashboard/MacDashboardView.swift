@@ -150,14 +150,16 @@ struct MacDashboardView: View {
             tint: FinanceTokens.Brand.primary,
             tag: .init(text: "余额 + 投资 − 信用", style: .draft),
             center: {
-                DualCurrencyValue(
-                    lines: netWorthLines(summary),
-                    cnyTint: FinanceTokens.Brand.primary
-                )
+                VStack(alignment: .leading, spacing: 14) {
+                    DualCurrencyValue(
+                        lines: netWorthLines(summary),
+                        cnyTint: FinanceTokens.Brand.primary
+                    )
+                    // 分项数字逐项列在大数字下方（来自 P2 by-currency；部署后显示真实值）。
+                    netWorthBreakdown(summary)
+                }
             },
-            trailing: {
-                netWorthFormula(summary)
-            }
+            trailing: { EmptyView() }
         )
     }
 
@@ -265,14 +267,13 @@ struct MacDashboardView: View {
     /// 按币种各一行公式 chips：`余额 + 投资 − 信用 = 净值`。
     /// 数据完全来自 P2 的四组 by-currency 字段，前端不自行加减（施工总原则 1）。
     /// 迭代 netWorthByCurrency 的币种集合（CNY 恒含，USD 非零才含）。
-    private func netWorthFormula(_ summary: DashboardSummaryDTO) -> some View {
+    private func netWorthBreakdown(_ summary: DashboardSummaryDTO) -> some View {
         let currencies = (summary.netWorthByCurrency ?? []).map { $0.currency }
-        return VStack(alignment: .trailing, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 8) {
             ForEach(currencies, id: \.self) { currency in
                 formulaRow(currency: currency, summary: summary)
             }
         }
-        .frame(width: 360)
     }
 
     private func formulaRow(currency: CurrencyCode, summary: DashboardSummaryDTO) -> some View {

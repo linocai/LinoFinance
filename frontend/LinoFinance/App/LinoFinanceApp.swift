@@ -43,7 +43,7 @@ struct LinoFinanceApp: App {
                 }
                 .keyboardShortcut("2", modifiers: .command)
 
-                Button("记账") {
+                Button("流水") {
                     environment.selectedModule = .entries
                 }
                 .keyboardShortcut("3", modifiers: .command)
@@ -115,6 +115,15 @@ struct LinoFinanceApp: App {
                     openWindow(id: "module", value: FinanceModule.credit)
                 }
             }
+#if DEBUG
+            // DesignSystem Showcase 调色板入口——v1.4.0 P4 从被删的 toolbar
+            // DEBUG 按钮迁来，仅 DEBUG 构建可见。
+            CommandMenu("调试") {
+                Button("DesignSystem Showcase") {
+                    environment.isShowingDesignShowcase = true
+                }
+            }
+#endif
         }
 
         WindowGroup("模块", id: "module", for: FinanceModule.self) { module in

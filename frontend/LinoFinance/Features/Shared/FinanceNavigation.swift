@@ -20,7 +20,7 @@ enum FinanceModule: String, CaseIterable, Identifiable, Hashable, Codable {
         switch self {
         case .dashboard: "总览"
         case .accounts: "账户"
-        case .entries: "记账"
+        case .entries: "流水"
         case .cashFlow: "现金流"
         case .reimbursements: "报销中心"
         case .credit: "信用 · 账单"

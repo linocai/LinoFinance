@@ -86,7 +86,7 @@ extension iOSTab {
     var title: String {
         switch self {
         case .dashboard: "总览"
-        case .entries: "记账"
+        case .entries: "流水"
         case .cashFlow: "现金流"
         case .credit: "信用"
         case .more: "更多"

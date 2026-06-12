@@ -1,13 +1,13 @@
 import SwiftUI
 
+/// 流水页过滤器（v1.4.0 P5）：草稿状态已移除，收为 2 态。
+/// `.active` 默认隐藏已作废，只显示 confirmed 正式流水；`.voided` 查回收站。
 enum EntryStatusFilter: String, CaseIterable, Identifiable {
-    case all, draft, confirmed, voided
+    case active, voided
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .all: "全部"
-        case .draft: "草稿"
-        case .confirmed: "已确认"
+        case .active: "流水"
         case .voided: "已作废"
         }
     }
@@ -17,14 +17,17 @@ enum EntryStatusFilter: String, CaseIterable, Identifiable {
 /// SectionHeader + SegmentedSwitcher + HeroSummary（本月支出/收入）+ 按日期分组卡片。
 struct EntriesView: View {
     @Bindable var environment: AppEnvironment
-    @State private var statusFilter: EntryStatusFilter = .all
+    @State private var statusFilter: EntryStatusFilter = .active
     @State private var confirmation: ConfirmAction?
 
     private var filteredEntries: [EntryDTO] {
         let entries: [EntryDTO]
         switch statusFilter {
-        case .all: entries = environment.entriesViewModel.entries
-        default: entries = environment.entriesViewModel.entries.filter { $0.status.rawValue == statusFilter.rawValue }
+        case .active:
+            // 默认流水：隐藏已作废（含历史 draft→voided 迁移行）。
+            entries = environment.entriesViewModel.entries.filter { $0.status != .voided }
+        case .voided:
+            entries = environment.entriesViewModel.entries.filter { $0.status == .voided }
         }
         let trimmed = environment.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return entries }
@@ -38,8 +41,7 @@ struct EntriesView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 SectionHeader(
-                    kicker: "Entries",
-                    title: "记账",
+                    title: "流水",
                     description: "单笔记录、分类拆分和账户流水"
                 ) {
                     Button {
@@ -177,12 +179,31 @@ struct EntriesView: View {
 
     @ViewBuilder
     private func entriesSectionCard(group: DateGroup) -> some View {
+        // 当日「支出 ¥X · 收入 ¥Y」小汇总：仅 confirmed、CNY 折算口径，
+        // 复用 EntriesHeroCard.totals 的 line 聚合逻辑（v1.4.0 P5）。
+        let daily = EntryTotals.compute(
+            entries: group.entries,
+            categories: environment.entriesViewModel.categories
+        )
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
+            HStack(spacing: 10) {
                 Text(group.title)
                     .font(FinanceTypography.headline)
                     .foregroundStyle(FinanceTokens.Text.primary)
                 Spacer()
+                if daily.expense > 0 || daily.income > 0 {
+                    HStack(spacing: 8) {
+                        if daily.expense > 0 {
+                            Text("支出 \(FinanceFormatter.money(DecimalValue(daily.expense), currency: .cny))")
+                                .foregroundStyle(FinanceTokens.State.expense)
+                        }
+                        if daily.income > 0 {
+                            Text("收入 \(FinanceFormatter.money(DecimalValue(daily.income), currency: .cny))")
+                                .foregroundStyle(FinanceTokens.State.income)
+                        }
+                    }
+                    .font(.system(size: 11.5, weight: .medium).monospacedDigit())
+                }
                 Text("\(group.entries.count) 条")
                     .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(FinanceTokens.Text.secondary)
@@ -196,7 +217,7 @@ struct EntriesView: View {
                         entry: entry,
                         accounts: environment.accountsViewModel.accounts,
                         categories: environment.entriesViewModel.categories,
-                        confirm: confirm
+                        delete: deleteEntry
                     )
                     .onTapGesture { environment.inspectorSelection = .entry(entry) }
                 }
@@ -217,20 +238,18 @@ struct EntriesView: View {
         }
     }
 
-    private func confirm(_ entry: EntryDTO, operation: String) {
+    /// 删除（= 软删 void）。草稿确认流程已随 draft 状态移除（v1.4.0 P5）；
+    /// 弹窗写明删除会回滚余额影响、可在「已作废」过滤中找回。
+    private func deleteEntry(_ entry: EntryDTO) {
         confirmation = ConfirmAction(
-            title: operation == "confirm" ? "确认草稿记录？" : "作废记录？",
-            message: operation == "confirm" ? "确认后会正式影响账户余额。" : "作废会回滚已确认记录对余额、账单和报销的影响。",
-            confirmTitle: operation == "confirm" ? "确认" : "作废",
-            role: operation == "confirm" ? nil : .destructive
+            title: "删除记录？",
+            message: "删除会回滚这条记录对余额、账单和报销的影响，可在『已作废』过滤中找回。",
+            confirmTitle: "删除",
+            role: .destructive
         ) {
             Task {
                 do {
-                    if operation == "confirm" {
-                        try await environment.entriesViewModel.confirmEntry(entry.id)
-                    } else {
-                        try await environment.entriesViewModel.voidEntry(entry.id)
-                    }
+                    try await environment.entriesViewModel.voidEntry(entry.id)
                     // Defensive double-refresh so monthlyEntries reflects the
                     // post-write state even if a sibling write races.
                     try await environment.entriesViewModel.refresh()
@@ -247,6 +266,31 @@ struct EntriesView: View {
     }
 }
 
+// MARK: - Shared expense/income aggregation
+
+/// 流水的「支出 / 收入」聚合（CNY 折算口径，仅 confirmed）。
+/// 月度 Hero 卡与每日分组汇总共用，保证口径一字不差（v1.4.0 P5）。
+enum EntryTotals {
+    static func compute(
+        entries: [EntryDTO],
+        categories: [CategoryDTO]
+    ) -> (expense: Decimal, income: Decimal) {
+        let categoryByID = Dictionary(categories.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var expense: Decimal = 0
+        var income: Decimal = 0
+        for entry in entries where entry.status == .confirmed {
+            for line in entry.categoryLines {
+                let cny = line.convertedCnyAmount?.value ?? line.amount.value
+                if let cat = categoryByID[line.categoryId] {
+                    if cat.type == .expense { expense += cny }
+                    if cat.type == .income { income += cny }
+                }
+            }
+        }
+        return (expense, income)
+    }
+}
+
 // MARK: - Hero summary card
 
 private struct EntriesHeroCard: View {
@@ -258,18 +302,7 @@ private struct EntriesHeroCard: View {
     }
 
     private var totals: (expense: Decimal, income: Decimal) {
-        var expense: Decimal = 0
-        var income: Decimal = 0
-        for entry in entries {
-            for line in entry.categoryLines {
-                let cny = line.convertedCnyAmount?.value ?? line.amount.value
-                if let cat = categoryById(line.categoryId) {
-                    if cat.type == .expense { expense += cny }
-                    if cat.type == .income { income += cny }
-                }
-            }
-        }
-        return (expense, income)
+        EntryTotals.compute(entries: entries, categories: categories)
     }
 
     private struct CategoryStat: Identifiable {
@@ -407,7 +440,7 @@ private struct EntryListRowItem: View {
     let entry: EntryDTO
     let accounts: [AccountDTO]
     let categories: [CategoryDTO]
-    let confirm: (EntryDTO, String) -> Void
+    let delete: (EntryDTO) -> Void
 
     private var primaryLine: EntryCategoryLineDTO? { entry.categoryLines.first }
     private var primaryMovement: AccountMovementDTO? { entry.accountMovements.first }
@@ -418,7 +451,7 @@ private struct EntryListRowItem: View {
         switch category?.type {
         case .income: return "arrow.down.left.circle"
         case .expense: return "arrow.up.right.circle"
-        default: return entry.status == .confirmed ? "checkmark.circle" : "circle.dotted"
+        default: return entry.status == .voided ? "xmark.circle" : "checkmark.circle"
         }
     }
 
@@ -449,7 +482,9 @@ private struct EntryListRowItem: View {
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(FinanceTokens.Text.primary)
                         .lineLimit(1)
-                    StatusTag(title: entry.status.title, style: entry.status == .confirmed ? .confirmed : .draft)
+                    if entry.status == .voided {
+                        StatusTag(title: entry.status.title, style: .cancelled)
+                    }
                 }
                 Text("\((account?.name).map { "\($0) · " } ?? "")\(category?.name ?? "未分类") · \(FinanceFormatter.shortDate(entry.date))")
                     .font(FinanceTypography.caption)
@@ -468,31 +503,25 @@ private struct EntryListRowItem: View {
                 )
             }
 
-            Menu {
-                if entry.status == .draft {
-                    Button("确认") { confirm(entry, "confirm") }
+            if entry.status != .voided {
+                Menu {
+                    Button("删除", role: .destructive) { delete(entry) }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(FinanceTokens.Text.secondary)
+                        .frame(width: 20, height: 20)
+                        .contentShape(Rectangle())
                 }
-                if entry.status != .voided {
-                    Button("作废", role: .destructive) { confirm(entry, "void") }
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(FinanceTokens.Text.secondary)
-                    .frame(width: 20, height: 20)
-                    .contentShape(Rectangle())
+                .menuStyle(.button)
+                .buttonStyle(.plain)
             }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
         }
         .padding(.vertical, 10)
         .contentShape(Rectangle())
         .contextMenu {
-            if entry.status == .draft {
-                Button("确认") { confirm(entry, "confirm") }
-            }
             if entry.status != .voided {
-                Button("作废", role: .destructive) { confirm(entry, "void") }
+                Button("删除", role: .destructive) { delete(entry) }
             }
         }
     }
@@ -559,7 +588,6 @@ struct NewEntrySheet: View {
     @State private var title = ""
     @State private var amount = ""
     @State private var date = Date()
-    @State private var status: EntryStatus = .confirmed
     @State private var selectedBalanceAccountID: String?
     @State private var selectedCreditAccountID: String?
     @State private var selectedCategoryID: String?
@@ -612,10 +640,7 @@ struct NewEntrySheet: View {
                 TextField("标题", text: $title)
                 TextField("金额", text: $amount)
                 DatePicker("日期", selection: $date, displayedComponents: .date)
-                Picker("状态", selection: $status) {
-                    Text("已确认").tag(EntryStatus.confirmed)
-                    Text("草稿").tag(EntryStatus.draft)
-                }
+                // 状态 Picker 已删（v1.4.0 P5）：草稿状态移除，记录一律 confirmed。
 
                 if mode.usesBalanceAccount {
                     Picker(mode == .income ? "收款账户" : "付款账户", selection: balanceAccountSelection) {
@@ -890,7 +915,7 @@ struct NewEntrySheet: View {
         let request = EntryCreateRequest(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             date: date,
-            status: status,
+            status: .confirmed,
             note: noteValue,
             categoryLines: categoryLines,
             accountMovements: [

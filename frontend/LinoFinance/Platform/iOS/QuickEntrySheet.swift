@@ -131,9 +131,19 @@ struct QuickEntrySheet: View {
                     }
                 }
             } footer: {
-                Text("字段完整时直接确认；缺账户或分类时保存为草稿。")
+                Text("需要选择账户和分类后才能提交。")
             }
         }
+    }
+
+    /// 表单提交门（v1.4.0 P5）：草稿移除后，缺账户/分类不再降级存草稿，
+    /// 而是禁用「完成」。AI / 粘贴 tab 不受此门限制。
+    private var canSubmitForm: Bool {
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let decimal = parseDecimalAmount(amount), decimal > 0 else {
+            return false
+        }
+        return accountID != nil && categoryID != nil
     }
 
     private var submitButton: some View {
@@ -146,7 +156,7 @@ struct QuickEntrySheet: View {
                 Text("完成")
             }
         }
-        .disabled(isSubmitting)
+        .disabled(isSubmitting || (selectedTab == "form" && !canSubmitForm))
     }
 
     private var selectableAccounts: [AccountDTO] {
@@ -205,42 +215,37 @@ struct QuickEntrySheet: View {
         guard let decimal = parseDecimalAmount(amount), decimal > 0 else {
             throw QuickEntryError.invalidAmount
         }
+        // 草稿移除（v1.4.0 P5）：缺账户/分类不再降级存草稿，「完成」已禁用，
+        // 这里防御性兜底——缺任一字段直接抛错不建单。
+        guard let accountID, let categoryID else { throw QuickEntryError.missingLinks }
 
-        let hasRequiredLinks = accountID != nil && categoryID != nil
-        let status: EntryStatus = hasRequiredLinks ? .confirmed : .draft
-        var categoryLines: [EntryCategoryLineCreateRequest] = []
-        if let categoryID {
-            categoryLines.append(
-                EntryCategoryLineCreateRequest(
-                    categoryId: categoryID,
-                    direction: intent.categoryDirection,
-                    amount: DecimalValue(decimal),
-                    currency: .cny,
-                    exchangeRateId: nil,
-                    convertedCnyAmount: nil
-                )
+        let categoryLines = [
+            EntryCategoryLineCreateRequest(
+                categoryId: categoryID,
+                direction: intent.categoryDirection,
+                amount: DecimalValue(decimal),
+                currency: .cny,
+                exchangeRateId: nil,
+                convertedCnyAmount: nil
             )
-        }
+        ]
 
-        var movements: [AccountMovementCreateRequest] = []
-        if let accountID {
-            movements.append(
-                AccountMovementCreateRequest(
-                    accountId: accountID,
-                    statementCycleId: nil,
-                    movementType: intent.movementType,
-                    amount: DecimalValue(decimal),
-                    currency: .cny,
-                    exchangeRateId: nil,
-                    convertedCnyAmount: nil
-                )
+        let movements = [
+            AccountMovementCreateRequest(
+                accountId: accountID,
+                statementCycleId: nil,
+                movementType: intent.movementType,
+                amount: DecimalValue(decimal),
+                currency: .cny,
+                exchangeRateId: nil,
+                convertedCnyAmount: nil
             )
-        }
+        ]
 
         let request = EntryCreateRequest(
             title: cleanTitle,
             date: date,
-            status: status,
+            status: .confirmed,
             categoryLines: categoryLines,
             accountMovements: movements
         )

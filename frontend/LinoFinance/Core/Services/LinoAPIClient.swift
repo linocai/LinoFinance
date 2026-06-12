@@ -89,10 +89,6 @@ struct LinoAPIClient {
         try await post("entries", body: request)
     }
 
-    func confirmEntry(_ id: String) async throws -> EntryDTO {
-        try await post("entries/\(id)/confirm")
-    }
-
     func voidEntry(_ id: String) async throws -> EntryDTO {
         try await post("entries/\(id)/void")
     }

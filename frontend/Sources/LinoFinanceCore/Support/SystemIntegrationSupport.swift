@@ -1,7 +1,10 @@
 import Foundation
 
+/// 意图记账可解析性（v1.4.0 P5：草稿状态移除）。
+/// `confirmed` = 账户/分类齐备，可建正式记录；`incomplete` = 缺字段，
+/// 调用方据此返回失败文案、不再降级为草稿。
 public enum IntentRecordStatus: String, Equatable, Sendable {
-    case draft
+    case incomplete
     case confirmed
 }
 
@@ -47,7 +50,7 @@ public enum IntentRecordResolver {
         if account == nil { missing.append("account") }
         if category == nil { missing.append("category") }
         return IntentRecordResolution(
-            status: missing.isEmpty ? .confirmed : .draft,
+            status: missing.isEmpty ? .confirmed : .incomplete,
             accountID: account?.id,
             categoryID: category?.id,
             missingFields: missing
