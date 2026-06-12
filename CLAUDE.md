@@ -5,7 +5,9 @@
 
 ## 工作流
 
-实质施工走全局三段式（@planner → @builder → @reviewer），全部写进 PROJECT_PLAN.md。git 用 release 分支 + 版本 tag 纪律（与文档规范正交，保留）：每版本从 `main` 切 `release/vX.Y.Z`，发布合并回 `main`，本地打 tag。**tag / push / live 部署一律由用户手动执行**，builder 不碰。
+实质施工走全局三段式（@planner → @builder → @reviewer），全部写进 PROJECT_PLAN.md。
+
+**git 工作流（2026-06-12 起改）：直接在 `main` 上提交，不再建 `release/vX.Y.Z` 分支、不再走 PR。** v1.0–v1.3 历史上用过 release 分支 + PR，已于 v1.3.0 发布后由用户决定简化为 main 直提（旧 release 分支已清理，远端只剩 `main`）。版本 tag 习惯**保留**：发版时在 `main` 对应提交打 `vX.Y.Z` tag 作回滚锚点。**tag / push / live 部署一律由用户手动执行**——builder 只在本地 `main` 提交，不 push、不打 tag、不部署。
 
 ## 仓库结构速记
 
