@@ -38,6 +38,11 @@ enum Theme {
         /// Secondary action link — blue `#2D6FF2`.
         static var link: SwiftUI.Color { dynamic(light: 0x2D6FF2, dark: 0x5B9BFF) }
 
+        /// Reverse-ink text that sits on a `textPrimary`-filled (near-black/near-white)
+        /// surface — the PrimaryDarkButton / SegmentedPill / SelectableChip selected
+        /// segment. Light `#FFFFFF` on the dark fill; dark `#1C1C1E` on the light fill.
+        static var inkButtonText: SwiftUI.Color { dynamic(light: 0xFFFFFF, dark: 0x1C1C1E) }
+
         // Brand (indigo→violet gradient endpoints, HANDOFF §2.2)
         static var brandStart: SwiftUI.Color { fixed(0x5B8DEF) }
         static var brandEnd: SwiftUI.Color { fixed(0x8A6DF0) }

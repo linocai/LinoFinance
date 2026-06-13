@@ -118,16 +118,13 @@ struct SettleCompletionSheet: View {
                     .lineLimit(2)
             }
             Spacer(minLength: 8)
-            Button("取消") { dismiss() }
-                .keyboardShortcut(.cancelAction)
-            Button {
+            SubtleTextButton("取消") { dismiss() }
+            PrimaryDarkButton("兑现", isLoading: isSubmitting) {
                 Task { await submit() }
-            } label: {
-                if isSubmitting { ProgressView().controlSize(.small) } else { Text("兑现") }
             }
-            .buttonStyle(.borderedProminent)
             .keyboardShortcut(.defaultAction)
             .disabled(isSubmitting || accountId == nil || categoryId == nil)
+            .opacity((isSubmitting || accountId == nil || categoryId == nil) ? 0.5 : 1)
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 14)
@@ -167,6 +164,12 @@ struct SettleCompletionSheet: View {
                 .font(Theme.Font.caption(.medium))
                 .foregroundStyle(Theme.Color.textSecondary)
             content()
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .glassPanel(
+                    cornerRadius: Theme.Radius.button,
+                    shadow: Theme.ShadowSpec(color: .black.opacity(0.05), radius: 8, x: 0, y: 3)
+                )
         }
     }
 }

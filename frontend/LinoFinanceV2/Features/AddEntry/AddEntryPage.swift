@@ -2,25 +2,29 @@ import SwiftUI
 
 #if os(macOS)
 
-// AddEntrySheet — D3 记一笔 (macOS glass modal · double-entry · decision-gate D
-// "简单态默认 + 高级态可展开").
+// AddEntryPage — D3 记一笔 as a RIGHT-SIDE FULL PAGE (R1, Phase A ·去模态).
 //
-// SIMPLE MODE (default, end-to-end submittable):
-//   支出 / 收入 / 信用消费 / 转账 segment → 金额 + 币种 → 标题 → 分类 → 账户(s)
-//   → 日期 → 可报销 toggle. Mapping via AddEntryMapper (see AddEntryModel.swift).
-//   The bottom "将写入" panel previews the resulting category lines + account
-//   movements so the user SEES the double entry before submitting (HANDOFF §4.3).
-//   Submit is DISABLED until all required fields are present (no draft fallback).
+// Comp source: lf_addentry.png / lf_seg.png / lf_save.png — the sidebar stays
+// visible and the content area becomes 记一笔 (NOT a `.sheet`). Layout top→bottom:
+//   SegmentedPill 支出/收入/(信用消费)/转账 → big amount (`bigNumber`) + CNY/USD
+//   toggle → 标题 → 分类 as `SelectableChip` flow → 账户 / 日期 → 可报销 → soft
+//   brand-tinted "将写入" preview box → PrimaryDarkButton("保存", fullWidth) +
+//   SubtleTextButton("取消").
 //
-// ADVANCED MODE (P2 = disclosure skeleton only): a labelled section explaining the
-// manual multi-line editor and that simple mode already covers daily use. The full
-// manual category-line / account-movement editor lands in P3+ (see P2 report). We
-// deliberately do NOT ship a half-wired manual editor.
+// This page renders INSIDE MacGlassScene's existing ScrollView + content padding
+// (leading 226 / trailing 28 / vertical 28), so it does NOT add its own outer
+// ScrollView or leading inset — same convention as OverviewView / CashFlowScreen.
+//
+// The double-entry mapping (AddEntryMapper), preview lines, currency rules and
+// submit gating are reused UNCHANGED from AddEntryModel.swift — R1 only swaps the
+// controls + layout. `onClose()` returns to the previous screen (called on a
+// successful save and on 取消); ⌘N still drives presentation from the App.
 
-struct AddEntrySheet: View {
+struct AddEntryPage: View {
     @ObservedObject var model: AppModel
-    @Environment(\.dismiss) private var dismiss
 
+    /// Called to leave the page (back to the previous sidebar destination).
+    var onClose: () -> Void
     /// Called after a successful submit so the host can refresh the dashboard.
     var onSubmitted: () -> Void
 
@@ -36,31 +40,18 @@ struct AddEntrySheet: View {
     @State private var reimbursable = false
     @State private var reimbursementPayer = ""
     @State private var reimbursementExpectedDate = Date()
-    @State private var advancedExpanded = false
 
     @State private var isSubmitting = false
     @State private var errorMessage: String?
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 22) {
             header
-            Divider().overlay(Theme.Color.divider)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    simpleForm
-                    previewPanel
-                    advancedSection
-                }
-                .padding(22)
-            }
-            Divider().overlay(Theme.Color.divider)
+            formCard
+            previewPanel
             footer
         }
-        .frame(width: 560, height: 680)
-        .background {
-            BloomBackground(animated: false)
-                .opacity(0.9)
-        }
+        .frame(maxWidth: 720, alignment: .leading)
         .task {
             // Ensure accounts / categories / rates are loaded for the pickers.
             if model.accounts.isEmpty { await model.loadAccounts() }
@@ -68,15 +59,12 @@ struct AddEntrySheet: View {
             if model.rates.isEmpty { await model.loadRates() }
         }
         .onChange(of: segment) { _, _ in
-            // Reset selections that no longer apply to the new segment.
             categoryId = nil
             accountId = nil
             transferInAccountId = nil
         }
         .onChange(of: currency) { _, _ in
-            // Account currency must match the movement currency, so switching
-            // currency invalidates any account already picked (the picker now
-            // shows only matching-currency accounts).
+            // Account currency must match the movement currency.
             accountId = nil
             transferInAccountId = nil
         }
@@ -85,94 +73,112 @@ struct AddEntrySheet: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "plus")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 34, height: 34)
-                .background(Theme.Color.brandGradient, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            VStack(alignment: .leading, spacing: 2) {
-                Text("记一笔")
-                    .font(Theme.Font.pageTitle())
-                    .foregroundStyle(Theme.Color.textPrimary)
-                Text("复式记账 · 提交即确认")
-                    .font(Theme.Font.caption())
-                    .foregroundStyle(Theme.Color.textSecondary)
-            }
-            Spacer()
+        VStack(alignment: .leading, spacing: 4) {
+            Text("记一笔")
+                .font(Theme.Font.pageTitle())
+                .foregroundStyle(Theme.Color.textPrimary)
+            Text("复式记账 · 保存即确认")
+                .font(Theme.Font.caption())
+                .foregroundStyle(Theme.Color.textSecondary)
         }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 16)
     }
 
-    // MARK: - Simple form
+    // MARK: - Form card
 
-    private var simpleForm: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Segment
-            Picker("", selection: $segment) {
-                ForEach(AddEntrySegment.allCases) { seg in
-                    Text(seg.title).tag(seg)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+    private var formCard: some View {
+        GlassCard(padding: 24) {
+            VStack(alignment: .leading, spacing: 22) {
+                // Segment
+                SegmentedPill(options: AddEntrySegment.allCases, selection: $segment) { $0.title }
 
-            // Amount + currency
-            field("金额") {
-                HStack(spacing: 10) {
-                    TextField("0.00", text: $amountText)
+                // Big amount + currency toggle
+                amountBlock
+
+                // Title
+                field("标题") {
+                    TextField(segment == .transfer ? "如：信用卡还款" : "如：午餐", text: $title)
                         .textFieldStyle(.roundedBorder)
-                        .font(Theme.Font.cardNumber().monospacedDigit())
-                    Picker("", selection: $currency) {
-                        ForEach(CurrencyCode.allCases, id: \.self) { code in
-                            Text("\(code.symbol) \(code.rawValue)").tag(code)
-                        }
+                        .font(Theme.Font.body())
+                }
+
+                // Category chips (non-transfer only)
+                if segment.needsCategory {
+                    field("分类") { categoryChips }
+                }
+
+                // Accounts
+                if segment == .transfer {
+                    field("转出账户") { accountPicker($accountId, accounts: selectableAccounts, placeholder: "转出") }
+                    field("转入账户") { accountPicker($transferInAccountId, accounts: selectableAccounts, placeholder: "转入") }
+                } else {
+                    field(segment == .creditCharge ? "信用卡账户" : "支付账户") {
+                        accountPicker($accountId, accounts: selectableAccounts, placeholder: "账户")
                     }
-                    .labelsHidden()
-                    .frame(width: 120)
+                }
+
+                // Date
+                field("日期") {
+                    DatePicker("", selection: $date, displayedComponents: .date)
+                        .datePickerStyle(.field)
+                        .labelsHidden()
+                }
+
+                // Reimbursable (non-transfer only)
+                if segment.needsCategory {
+                    reimbursableSection
                 }
             }
+        }
+    }
 
-            // Title
-            field("标题") {
-                TextField(segment == .transfer ? "如：信用卡还款" : "如：午餐", text: $title)
-                    .textFieldStyle(.roundedBorder)
+    // MARK: - Amount block (大金额 + CNY/USD)
+
+    private var amountBlock: some View {
+        VStack(alignment: .center, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(currency.symbol)
+                    .font(Theme.Font.cardNumber(.semibold))
+                    .foregroundStyle(Theme.Color.textSecondary)
+                TextField("0", text: $amountText)
+                    .textFieldStyle(.plain)
+                    .font(Theme.Font.bigNumber())
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.Color.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize()
+                Text(".00")
+                    .font(Theme.Font.cardNumber(.semibold))
+                    .foregroundStyle(Theme.Color.textTertiary)
             }
 
-            // Category (non-transfer only)
-            if segment.needsCategory {
-                field("分类") {
-                    Picker("", selection: $categoryId) {
-                        Text("未选择").tag(Optional<String>.none)
-                        ForEach(selectableCategories) { category in
-                            Text(category.name).tag(Optional(category.id))
-                        }
+            // CNY / USD toggle (small SelectableChip pair)
+            HStack(spacing: 8) {
+                ForEach(CurrencyCode.allCases, id: \.self) { code in
+                    SelectableChip(title: code.rawValue, isSelected: currency == code) {
+                        currency = code
                     }
-                    .labelsHidden()
                 }
             }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 6)
+    }
 
-            // Accounts
-            if segment == .transfer {
-                field("转出账户") { accountPicker($accountId, accounts: selectableAccounts, placeholder: "转出") }
-                field("转入账户") { accountPicker($transferInAccountId, accounts: selectableAccounts, placeholder: "转入") }
+    // MARK: - Category chips
+
+    private var categoryChips: some View {
+        let cats = selectableCategories
+        return Group {
+            if cats.isEmpty {
+                Text("暂无可用分类")
+                    .font(Theme.Font.caption())
+                    .foregroundStyle(Theme.Color.textTertiary)
             } else {
-                field(segment == .creditCharge ? "信用卡账户" : "支付账户") {
-                    accountPicker($accountId, accounts: selectableAccounts, placeholder: "账户")
+                FlowChips(cats) { category in
+                    SelectableChip(title: category.name, isSelected: categoryId == category.id) {
+                        categoryId = (categoryId == category.id) ? nil : category.id
+                    }
                 }
-            }
-
-            // Date
-            field("日期") {
-                DatePicker("", selection: $date, displayedComponents: .date)
-                    .datePickerStyle(.field)
-                    .labelsHidden()
-            }
-
-            // Reimbursable (non-transfer only)
-            if segment.needsCategory {
-                reimbursableSection
             }
         }
     }
@@ -201,16 +207,16 @@ struct AddEntrySheet: View {
         .glassPanel(cornerRadius: Theme.Radius.button)
     }
 
-    // MARK: - Preview (将写入)
+    // MARK: - Preview (将写入) — soft brand-tinted box
 
     @ViewBuilder
     private var previewPanel: some View {
         let lines = previewLines
-        GlassCard {
+        GlassCard(tint: Theme.Color.link) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("将写入")
                     .font(Theme.Font.subtitle(.semibold))
-                    .foregroundStyle(Theme.Color.textPrimary)
+                    .foregroundStyle(Theme.Color.link)
                 if lines.isEmpty {
                     Text("填写金额与账户后，这里会显示复式结果")
                         .font(Theme.Font.caption())
@@ -238,6 +244,7 @@ struct AddEntrySheet: View {
                 }
             }
         }
+        .frame(maxWidth: 720, alignment: .leading)
     }
 
     private func signedValue(_ line: EntryPreviewLine) -> DecimalValue {
@@ -253,62 +260,31 @@ struct AddEntrySheet: View {
         }
     }
 
-    // MARK: - Advanced (disclosure skeleton, P3+ for the full editor)
-
-    private var advancedSection: some View {
-        DisclosureGroup(isExpanded: $advancedExpanded) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("高级模式可手动编辑多条分类行与多条账户流水（例如一笔记账拆到多个分类、或一次涉及多个账户）。")
-                    .font(Theme.Font.caption())
-                    .foregroundStyle(Theme.Color.textSecondary)
-                Text("日常记账用上面的简单模式即可。完整的手动多行编辑器将在后续 Phase 提供。")
-                    .font(Theme.Font.caption())
-                    .foregroundStyle(Theme.Color.textTertiary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 6)
-        } label: {
-            Text("高级")
-                .font(Theme.Font.body(.medium))
-                .foregroundStyle(Theme.Color.textPrimary)
-        }
-        .padding(12)
-        .glassPanel(cornerRadius: Theme.Radius.button)
-    }
-
-    // MARK: - Footer
+    // MARK: - Footer (保存 / 取消)
 
     private var footer: some View {
-        HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             if let errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
                     .font(Theme.Font.caption())
                     .foregroundStyle(Theme.Color.expense)
                     .lineLimit(2)
             }
-            Spacer(minLength: 8)
-            Button("取消") { dismiss() }
-                .keyboardShortcut(.cancelAction)
-            Button {
-                Task { await submit() }
-            } label: {
-                if isSubmitting {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Text("提交")
+            HStack(spacing: 12) {
+                PrimaryDarkButton("保存", fullWidth: true, isLoading: isSubmitting) {
+                    Task { await submit() }
                 }
+                .disabled(isSubmitting || !canSubmit)
+                .opacity((isSubmitting || !canSubmit) ? 0.5 : 1)
+
+                SubtleTextButton("取消") { onClose() }
             }
-            .buttonStyle(.borderedProminent)
-            .keyboardShortcut(.defaultAction)
-            .disabled(isSubmitting || !canSubmit)
         }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 14)
+        .frame(maxWidth: 720, alignment: .leading)
     }
 
     // MARK: - Selectable data
 
-    /// Categories filtered by the segment's direction (expense/income), active only.
     private var selectableCategories: [CategoryDTO] {
         guard let direction = segment.categoryDirection else { return [] }
         return model.categories
@@ -316,9 +292,6 @@ struct AddEntrySheet: View {
             .sorted { $0.displayOrder == $1.displayOrder ? $0.name < $1.name : $0.displayOrder < $1.displayOrder }
     }
 
-    /// Accounts the segment can use: expense/income/transfer → balance accounts;
-    /// creditCharge → credit accounts. When USD is selected, only matching-currency
-    /// accounts are valid (movement currency must equal account currency).
     private var selectableAccounts: [AccountDTO] {
         let base: [AccountDTO]
         switch segment {
@@ -347,9 +320,6 @@ struct AddEntrySheet: View {
             guard let out = accountId, let into = transferInAccountId, out != into else { return false }
             return true
         case .expense, .income, .creditCharge:
-            // reimbursementExpectedDate defaults to today and is always non-nil
-            // once 可报销 is toggled, so the backend's "reimbursable line needs an
-            // expected date" rule is satisfied without extra gating here.
             return categoryId != nil && accountId != nil
         }
     }
@@ -424,7 +394,7 @@ struct AddEntrySheet: View {
             _ = try await model.submitEntry(request)
             errorMessage = nil
             onSubmitted()
-            dismiss()
+            onClose()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -450,6 +420,76 @@ struct AddEntrySheet: View {
         }
         .labelsHidden()
         .disabled(accounts.isEmpty)
+    }
+}
+
+// MARK: - FlowChips — simple wrapping chip layout for category selection
+
+private struct FlowChips<Data: RandomAccessCollection, Content: View>: View where Data.Element: Identifiable {
+    let data: Data
+    let content: (Data.Element) -> Content
+
+    init(_ data: Data, @ViewBuilder content: @escaping (Data.Element) -> Content) {
+        self.data = data
+        self.content = content
+    }
+
+    var body: some View {
+        FlowLayout(spacing: 8, lineSpacing: 8) {
+            ForEach(data) { element in
+                content(element)
+            }
+        }
+    }
+}
+
+/// Minimal flow (wrapping) layout — places subviews left-to-right, wrapping to a
+/// new line when the row width is exceeded.
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+    var lineSpacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var rowWidth: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var totalHeight: CGFloat = 0
+        var totalWidth: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if rowWidth > 0, rowWidth + spacing + size.width > maxWidth {
+                totalHeight += rowHeight + lineSpacing
+                totalWidth = max(totalWidth, rowWidth)
+                rowWidth = size.width
+                rowHeight = size.height
+            } else {
+                rowWidth += (rowWidth > 0 ? spacing : 0) + size.width
+                rowHeight = max(rowHeight, size.height)
+            }
+        }
+        totalHeight += rowHeight
+        totalWidth = max(totalWidth, rowWidth)
+        return CGSize(width: min(totalWidth, maxWidth), height: totalHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let maxWidth = bounds.width
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width - bounds.minX > maxWidth {
+                x = bounds.minX
+                y += rowHeight + lineSpacing
+                rowHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
     }
 }
 

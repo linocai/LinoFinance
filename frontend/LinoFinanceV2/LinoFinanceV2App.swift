@@ -4,8 +4,8 @@ import SwiftUI
 //
 // macOS root is now the REAL app shell: MacGlassScene (floating sidebar + bloom +
 // glass) with the Overview dashboard as the .overview destination and the 记一笔
-// button presenting the AddEntrySheet. Other sidebar destinations show glass
-// placeholders until P3–P5.
+// button swapping the content area to AddEntryPage (right-side full page, R1 ·去模
+//态 — no longer a sheet). Other sidebar destinations show their real screens.
 //
 // The P1 DesignSystem showcase stays reachable in DEBUG via a CommandMenu entry
 // ("调试 ▸ DesignSystem 预览") so it remains a DS visual-regression surface.
@@ -83,15 +83,30 @@ private struct MacAppShell: View {
         MacGlassScene(selection: $model.selection, onAddEntry: { model.isAddEntryPresented = true }) {
             content
         }
-        .sheet(isPresented: $model.isAddEntryPresented) {
-            AddEntrySheet(model: model) {
-                Task { await model.refreshAll() }
-            }
+        // Tapping any sidebar nav row while the 记一笔 page is up leaves the page
+        // and shows the chosen destination (the page is no longer a modal).
+        .onChange(of: model.selection) { _, _ in
+            model.isAddEntryPresented = false
+        }
+    }
+
+    // 记一笔 is now a RIGHT-SIDE PAGE (R1 ·去模态): the sidebar stays visible and
+    // the content area swaps to AddEntryPage. The old `.sheet` is gone.
+    @ViewBuilder
+    private var content: some View {
+        if model.isAddEntryPresented {
+            AddEntryPage(
+                model: model,
+                onClose: { model.isAddEntryPresented = false },
+                onSubmitted: { Task { await model.refreshAll() } }
+            )
+        } else {
+            destinationContent
         }
     }
 
     @ViewBuilder
-    private var content: some View {
+    private var destinationContent: some View {
         switch model.selection {
         case .overview:      OverviewView(model: model)
         case .accounts:      AccountsScreen(model: model)          // P3 (D2) — also opens 对账

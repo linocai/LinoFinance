@@ -2,14 +2,23 @@ import SwiftUI
 
 #if os(macOS)
 
-// CashFlowScreen — D4 现金流 (macOS, liquid glass). Replaces the P2 stub.
+// CashFlowScreen — D4 现金流 (macOS, liquid glass). R2 redesign (Phase A).
 //
-// Lists future expected income/expense (cancelled hidden) as glass rows with a
-// status badge + dual-currency original amount. Each active row carries three
-// actions wired to distinct endpoints: 确认 (confirm) / 兑现 (settle) / 取消
-// (cancel). 兑现 either settles directly (account+category already linked) or
-// opens SettleCompletionSheet to gather them first. Transfers and
-// reimbursement-linked rows hide the 兑现 entry (their own flows settle them).
+// Comp source: lf_cashflow.png / lf_chips.png — a single glass card of hairline-
+// divided rows; each row = 图标 + 标题 + status/type tags + dual-currency amount +
+// inline soft action chips on the right. The old `⋯ Menu` + native二次确认 `.alert`
+// are GONE (user disliked the生硬的原生弹窗): each `TintedActionChip` fires its
+// action DIRECTLY.
+//   确认 (positive/绿) → confirm
+//   兑现 (action/蓝)   → settle (one-shot if linked, else SettleCompletionSheet)
+//   取消 (neutral/灰)  → cancel (comp uses gray; destructive semantics retained
+//                        only by the model call, no red per comp)
+// Transfers / reimbursement-linked rows hide 兑现 (their own flows settle them) —
+// the existing `canShowSettleAction` gate is unchanged.
+//
+// `actionError` banner stays (glass). The 新建现金流 button is now a
+// SubtleToolbarButton. SettleCompletionSheet is kept for the missing-link edge
+// case, re-skinned with R0 controls.
 //
 // Contract: `init(model: AppModel)`; owns its own @StateObject CashFlowModel.
 
@@ -19,7 +28,6 @@ struct CashFlowScreen: View {
 
     @State private var formMode: CashFlowFormSheet.Mode?
     @State private var settleItem: CashFlowItemDTO?
-    @State private var confirmDialog: ConfirmDialog?
 
     init(model: AppModel) {
         self.model = model
@@ -47,18 +55,6 @@ struct CashFlowScreen: View {
         .sheet(item: $settleItem) { item in
             SettleCompletionSheet(model: cashFlowModel, item: item) {}
         }
-        .alert(confirmDialog?.title ?? "", isPresented: Binding(
-            get: { confirmDialog != nil },
-            set: { if !$0 { confirmDialog = nil } }
-        ), presenting: confirmDialog) { dialog in
-            Button(dialog.confirmTitle, role: dialog.destructive ? .destructive : nil) {
-                dialog.action()
-                confirmDialog = nil
-            }
-            Button("取消", role: .cancel) { confirmDialog = nil }
-        } message: { dialog in
-            Text(dialog.message)
-        }
     }
 
     // MARK: - Header
@@ -74,12 +70,7 @@ struct CashFlowScreen: View {
                     .foregroundStyle(Theme.Color.textSecondary)
             }
             Spacer()
-            Button {
-                formMode = .create
-            } label: {
-                Label("新建现金流", systemImage: "plus")
-            }
-            .buttonStyle(.borderedProminent)
+            SubtleToolbarButton(title: "新建现金流") { formMode = .create }
         }
     }
 
@@ -136,40 +127,22 @@ struct CashFlowScreen: View {
             edit: { formMode = .edit(item) },
             confirm: { Task { await cashFlowModel.confirm(item.id) } },
             settle: { settle(item) },
-            cancel: { cancel(item) }
+            cancel: { Task { await cashFlowModel.cancel(item.id) } }
         )
     }
 
-    // MARK: - Actions
+    // MARK: - Actions (no native confirm dialog — chips fire directly, R2)
 
     private func settle(_ item: CashFlowItemDTO) {
-        confirmDialog = ConfirmDialog(
-            title: "兑现为正式记录？",
-            message: "这会创建一条正式记账记录，并影响账户余额。",
-            confirmTitle: "兑现",
-            destructive: false
-        ) {
-            Task {
-                switch await cashFlowModel.attemptSettle(item) {
-                case .needsCompletion:
-                    settleItem = item
-                case .blocked(let message):
-                    cashFlowModel.actionError = message
-                case .settled:
-                    break
-                }
+        Task {
+            switch await cashFlowModel.attemptSettle(item) {
+            case .needsCompletion:
+                settleItem = item
+            case .blocked(let message):
+                cashFlowModel.actionError = message
+            case .settled:
+                break
             }
-        }
-    }
-
-    private func cancel(_ item: CashFlowItemDTO) {
-        confirmDialog = ConfirmDialog(
-            title: "取消现金流？",
-            message: "取消后此现金流不再计入未来压力。",
-            confirmTitle: "取消现金流",
-            destructive: true
-        ) {
-            Task { await cashFlowModel.cancel(item.id) }
         }
     }
 
@@ -184,8 +157,7 @@ struct CashFlowScreen: View {
                 Text("创建一次性或周期性的预计收支后，这里会列出未来事件。")
                     .font(Theme.Font.caption())
                     .foregroundStyle(Theme.Color.textSecondary)
-                Button("新建现金流") { formMode = .create }
-                    .buttonStyle(.borderedProminent)
+                SubtleToolbarButton(title: "新建现金流") { formMode = .create }
                     .padding(.top, 4)
             }
         }
@@ -211,8 +183,9 @@ struct CashFlowScreen: View {
                 Text(message)
                     .font(Theme.Font.caption())
                     .foregroundStyle(Theme.Color.textSecondary)
-                Button("重试") { Task { await cashFlowModel.load() } }
-                    .buttonStyle(.bordered)
+                SubtleToolbarButton(title: "重试", systemImage: "arrow.clockwise") {
+                    Task { await cashFlowModel.load() }
+                }
             }
         }
     }
@@ -261,29 +234,25 @@ private struct CashFlowRow: View {
             Spacer(minLength: 8)
             AmountText(value: item.amount, currency: item.currency,
                        font: Theme.Font.subtitle(.semibold), color: tint)
-            actionMenu
+            actionChips
         }
         .opacity(isSettled ? 0.55 : 1)
     }
 
-    private var actionMenu: some View {
-        Menu {
-            if actions.canEdit { Button("编辑") { actions.edit() } }
-            if actions.canConfirm { Button("确认") { actions.confirm() } }
-            if actions.canSettle { Button("兑现") { actions.settle() } }
-            if actions.canCancel { Button("取消", role: .destructive) { actions.cancel() } }
-            if !actions.canEdit && !actions.canConfirm && !actions.canSettle && !actions.canCancel {
-                Text("无可用操作")
+    // Inline soft action chips (R2) — direct-fire, no menu / no confirm dialog.
+    @ViewBuilder
+    private var actionChips: some View {
+        HStack(spacing: 8) {
+            if actions.canConfirm {
+                TintedActionChip(title: "确认", tone: .positive, action: actions.confirm)
             }
-        } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.Color.textSecondary)
-                .frame(width: 22, height: 22)
-                .contentShape(Rectangle())
+            if actions.canSettle {
+                TintedActionChip(title: "兑现", tone: .action, action: actions.settle)
+            }
+            if actions.canCancel {
+                TintedActionChip(title: "取消", tone: .neutral, action: actions.cancel)
+            }
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
         .fixedSize()
     }
 
@@ -316,17 +285,6 @@ private struct CashFlowRow: View {
     }()
 
     private static func dateText(_ date: Date) -> String { dateFormatter.string(from: date) }
-}
-
-// MARK: - Confirm dialog model (shared P3 pattern)
-
-struct ConfirmDialog: Identifiable {
-    let id = UUID()
-    let title: String
-    let message: String
-    let confirmTitle: String
-    let destructive: Bool
-    let action: () -> Void
 }
 
 #endif
