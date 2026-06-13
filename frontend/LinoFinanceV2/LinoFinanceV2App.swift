@@ -38,13 +38,22 @@ struct LinoFinanceV2App: App {
         }
         #if os(macOS)
         .windowStyle(.hiddenTitleBar)
-        #endif
-        #if DEBUG && os(macOS)
         .commands {
+            CommandMenu("视图") {
+                Button("记一笔") { model.isAddEntryPresented = true }
+                    .keyboardShortcut("n", modifiers: .command)
+                Divider()
+                ForEach(Array(SidebarDestination.allCases.enumerated()), id: \.element) { index, dest in
+                    Button(dest.title) { model.selection = dest }
+                        .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+                }
+            }
+            #if DEBUG
             CommandMenu("调试") {
                 Button("DesignSystem 预览") { showShowcase = true }
                     .keyboardShortcut("d", modifiers: [.command, .shift])
             }
+            #endif
         }
         #endif
     }
@@ -67,14 +76,14 @@ private struct RootShell: View {
 #if os(macOS)
 private struct MacAppShell: View {
     @ObservedObject var model: AppModel
-    @State private var selection: SidebarDestination = .overview
-    @State private var showAddEntry = false
 
     var body: some View {
-        MacGlassScene(selection: $selection, onAddEntry: { showAddEntry = true }) {
+        // Nav selection + add-entry presentation live on the model so the menu
+        // commands (⌘1–8 / ⌘N) can drive them.
+        MacGlassScene(selection: $model.selection, onAddEntry: { model.isAddEntryPresented = true }) {
             content
         }
-        .sheet(isPresented: $showAddEntry) {
+        .sheet(isPresented: $model.isAddEntryPresented) {
             AddEntrySheet(model: model) {
                 Task { await model.refreshAll() }
             }
@@ -83,7 +92,7 @@ private struct MacAppShell: View {
 
     @ViewBuilder
     private var content: some View {
-        switch selection {
+        switch model.selection {
         case .overview:      OverviewView(model: model)
         case .accounts:      AccountsScreen(model: model)          // P3 (D2) — also opens 对账
         case .cashFlow:      CashFlowScreen(model: model)          // P3 (D4)

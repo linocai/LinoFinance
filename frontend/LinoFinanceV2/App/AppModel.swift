@@ -37,6 +37,11 @@ final class AppModel: ObservableObject {
 
     @Published private(set) var dashboardState: LoadState = .idle
 
+    // MARK: - Navigation (hoisted here so menu commands ⌘1–8 / ⌘N can drive it)
+
+    @Published var selection: SidebarDestination = .overview
+    @Published var isAddEntryPresented = false
+
     // MARK: - Networking
 
     let baseURL: URL

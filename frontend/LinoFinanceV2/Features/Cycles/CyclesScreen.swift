@@ -2,17 +2,397 @@ import SwiftUI
 
 #if os(macOS)
 
-// CyclesScreen — STUB. Replaced by the P4 builder with the real D7 周期 screen
-// (订阅 + 分期 + 信用账单周期). Contract: `init(model: AppModel)`.
+// CyclesScreen — D7 周期 (macOS · glass · 订阅 + 分期 + 信用账单周期).
+//
+// A segmented switcher chooses one of three sections; each renders glass cards
+// bound to its real DTO with inline row actions (plan §D7):
+//   • 订阅 SubscriptionRuleDTO   → 暂停/恢复 · 生成下一期 · 取消
+//   • 分期 InstallmentPlanDTO     → 进度 (已还 N/共 M) · 提前结清 · 标记已结清 · 取消
+//   • 信用账单周期 CreditStatementCycleDTO → 只读列表 + 新建（无 update/close）
 struct CyclesScreen: View {
     @ObservedObject var model: AppModel
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("周期").font(Theme.Font.pageTitle()).foregroundStyle(Theme.Color.textPrimary)
-            Text("P4 施工中").font(Theme.Font.caption()).foregroundStyle(Theme.Color.textSecondary)
+    @StateObject private var cyclesModel: CyclesModel
+
+    enum Section: String, CaseIterable, Identifiable {
+        case subscriptions, installments, statements
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .subscriptions: "订阅"
+            case .installments: "分期"
+            case .statements: "信用账单周期"
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
+
+    @State private var section: Section = .subscriptions
+    @State private var showingNewSubscription = false
+    @State private var showingNewInstallment = false
+    @State private var showingNewStatementCycle = false
+    @State private var pendingConfirm: CyclePendingConfirm?
+    @State private var actionError: String?
+
+    init(model: AppModel) {
+        self.model = model
+        _cyclesModel = StateObject(wrappedValue: CyclesModel(apiClient: model.apiClient))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            header
+            Picker("", selection: $section) {
+                ForEach(Section.allCases) { s in
+                    Text(s.title).tag(s)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 420)
+
+            switch cyclesModel.state {
+            case .idle, .loading:
+                loadingState
+            case .failed(let message):
+                failedState(message)
+            case .loaded:
+                switch section {
+                case .subscriptions: subscriptionsSection
+                case .installments: installmentsSection
+                case .statements: statementsSection
+                }
+            }
+            if let actionError {
+                Label(actionError, systemImage: "exclamationmark.triangle.fill")
+                    .font(Theme.Font.caption())
+                    .foregroundStyle(Theme.Color.expense)
+            }
+        }
+        .task {
+            if cyclesModel.subscriptions.isEmpty && cyclesModel.installments.isEmpty {
+                await cyclesModel.load()
+            }
+            if model.accounts.isEmpty { await model.loadAccounts() }
+            if model.categories.isEmpty { await model.loadCategories() }
+        }
+        .sheet(isPresented: $showingNewSubscription) {
+            NewSubscriptionSheet(model: model, cyclesModel: cyclesModel)
+        }
+        .sheet(isPresented: $showingNewInstallment) {
+            NewInstallmentSheet(model: model, cyclesModel: cyclesModel)
+        }
+        .sheet(isPresented: $showingNewStatementCycle) {
+            NewStatementCycleSheet(model: model, cyclesModel: cyclesModel)
+        }
+        .alert(pendingConfirm?.title ?? "确认操作", isPresented: confirmBinding, presenting: pendingConfirm) { item in
+            Button(item.confirmTitle, role: item.role) { Task { await item.run() } }
+            Button("取消", role: .cancel) {}
+        } message: { item in
+            Text(item.message)
+        }
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("周期")
+                    .font(Theme.Font.pageTitle())
+                    .foregroundStyle(Theme.Color.textPrimary)
+                Text("订阅、分期与信用卡账单周期")
+                    .font(Theme.Font.caption())
+                    .foregroundStyle(Theme.Color.textSecondary)
+            }
+            Spacer()
+            PrimaryActionButton(title: addButtonTitle, systemImage: "plus", compact: true) {
+                switch section {
+                case .subscriptions: showingNewSubscription = true
+                case .installments: showingNewInstallment = true
+                case .statements: showingNewStatementCycle = true
+                }
+            }
+            .frame(width: 150)
+        }
+    }
+
+    private var addButtonTitle: String {
+        switch section {
+        case .subscriptions: "新建订阅"
+        case .installments: "新建分期"
+        case .statements: "新建账单周期"
+        }
+    }
+
+    // MARK: - Subscriptions
+
+    @ViewBuilder
+    private var subscriptionsSection: some View {
+        if cyclesModel.subscriptions.isEmpty {
+            emptyCard("还没有订阅", "为流媒体、会员等周期性扣费创建订阅规则，自动生成现金流。")
+        } else {
+            VStack(spacing: 12) {
+                ForEach(cyclesModel.subscriptions) { rule in
+                    subscriptionCard(rule)
+                }
+            }
+        }
+    }
+
+    private func subscriptionCard(_ rule: SubscriptionRuleDTO) -> some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(rule.title)
+                        .font(Theme.Font.subtitle(.semibold))
+                        .foregroundStyle(Theme.Color.textPrimary)
+                    StatusBadge(text: rule.status.financeStatusTitle, tone: subscriptionTone(rule.status))
+                    Spacer()
+                    AmountText(value: rule.amount, currency: rule.currency, font: Theme.Font.cardNumber(), color: Theme.Color.textPrimary)
+                }
+                HStack(spacing: 14) {
+                    metaChip("周期", rule.billingInterval.financeStatusTitle)
+                    if let next = rule.nextChargeDate {
+                        metaChip("下次扣费", FinanceFormatter.shortDate(next))
+                    }
+                    metaChip("已生成", "\(rule.generatedCashFlowCount) 期")
+                }
+                Divider().overlay(Theme.Color.divider)
+                HStack(spacing: 14) {
+                    if rule.status == "active" {
+                        rowAction("暂停") { confirm("暂停订阅？", "暂停后不再生成新的现金流。", "暂停", nil) { try await cyclesModel.pauseSubscription(rule.id) } }
+                    } else if rule.status == "paused" {
+                        rowAction("恢复") { confirm("恢复订阅？", "恢复后将继续按周期生成现金流。", "恢复", nil) { try await cyclesModel.resumeSubscription(rule.id) } }
+                    }
+                    if rule.status == "active" {
+                        rowAction("生成下一期") { confirm("生成下一期？", "会立即生成一条新的现金流条目。", "生成", nil) { try await cyclesModel.generateNextSubscription(rule.id) } }
+                    }
+                    if rule.status != "cancelled" && rule.status != "canceled" {
+                        rowAction("取消", destructive: true) { confirm("取消订阅？", "取消后该订阅规则停止运作，不可恢复。", "取消订阅", .destructive) { try await cyclesModel.cancelSubscription(rule.id) } }
+                    }
+                    Spacer(minLength: 0)
+                }
+                .font(Theme.Font.caption())
+            }
+        }
+    }
+
+    private func subscriptionTone(_ status: String) -> StatusBadge.Tone {
+        switch status {
+        case "active": return .positive
+        case "paused": return .warning
+        case "cancelled", "canceled": return .negative
+        default: return .neutral
+        }
+    }
+
+    // MARK: - Installments
+
+    @ViewBuilder
+    private var installmentsSection: some View {
+        if cyclesModel.installments.isEmpty {
+            emptyCard("还没有分期", "把一笔信用卡大额消费拆成多期，跟踪每期金额与剩余进度。")
+        } else {
+            VStack(spacing: 12) {
+                ForEach(cyclesModel.installments) { plan in
+                    installmentCard(plan)
+                }
+            }
+        }
+    }
+
+    private func installmentCard(_ plan: InstallmentPlanDTO) -> some View {
+        let paid = plan.generatedCashFlowCount
+        let total = plan.numberOfPayments
+        let progress = total > 0 ? Double(paid) / Double(total) : 0
+        let remainingCount = max(total - paid, 0)
+        let remainingAmount = DecimalValue(plan.paymentAmount.value * Decimal(remainingCount))
+        return GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("分期")
+                        .font(Theme.Font.subtitle(.semibold))
+                        .foregroundStyle(Theme.Color.textPrimary)
+                    StatusBadge(text: plan.status.financeStatusTitle, tone: installmentTone(plan.status))
+                    Spacer()
+                    AmountText(value: plan.totalAmount, currency: plan.currency, font: Theme.Font.cardNumber(), color: Theme.Color.textPrimary)
+                }
+                // Progress (已还 N/共 M)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("已还 \(paid)/共 \(total) 期")
+                            .font(Theme.Font.caption(.medium).monospacedDigit())
+                            .foregroundStyle(Theme.Color.textSecondary)
+                        Spacer()
+                        Text("每期 \(FinanceFormatter.money(plan.paymentAmount, currency: plan.currency))")
+                            .font(Theme.Font.caption().monospacedDigit())
+                            .foregroundStyle(Theme.Color.textSecondary)
+                    }
+                    ProgressView(value: progress)
+                        .tint(Theme.Color.brandEnd)
+                }
+                HStack(spacing: 14) {
+                    metaChip("剩余", "\(remainingCount) 期 · \(FinanceFormatter.money(remainingAmount, currency: plan.currency))")
+                    metaChip("起始", FinanceFormatter.shortDate(plan.startDate))
+                }
+                Divider().overlay(Theme.Color.divider)
+                HStack(spacing: 14) {
+                    if plan.status == "active" {
+                        rowAction("提前结清") { confirm("提前结清分期？", "会一次性结清剩余所有期数。", "提前结清", nil) { try await cyclesModel.markInstallmentEarlyPaidOff(plan.id) } }
+                        rowAction("标记已结清") { confirm("标记已结清？", "把这笔分期标记为已全部还清。", "标记已结清", nil) { try await cyclesModel.markInstallmentPaidOff(plan.id) } }
+                        rowAction("取消", destructive: true) { confirm("取消分期？", "取消后该分期计划停止运作，不可恢复。", "取消分期", .destructive) { try await cyclesModel.cancelInstallment(plan.id) } }
+                    }
+                    Spacer(minLength: 0)
+                }
+                .font(Theme.Font.caption())
+            }
+        }
+    }
+
+    private func installmentTone(_ status: String) -> StatusBadge.Tone {
+        switch status {
+        case "paid": return .positive
+        case "active": return .pending
+        case "cancelled", "canceled": return .negative
+        default: return .neutral
+        }
+    }
+
+    // MARK: - Statement cycles (read-only + create)
+
+    @ViewBuilder
+    private var statementsSection: some View {
+        if cyclesModel.statementCycles.isEmpty {
+            emptyCard("还没有账单周期", "为信用卡账户登记账单周期，跟踪出账金额、最低还款与剩余。")
+        } else {
+            VStack(spacing: 12) {
+                ForEach(cyclesModel.statementCycles) { cycle in
+                    statementCycleCard(cycle)
+                }
+            }
+        }
+    }
+
+    private func statementCycleCard(_ cycle: CreditStatementCycleDTO) -> some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("账单 \(FinanceFormatter.shortDate(cycle.statementDate))")
+                        .font(Theme.Font.subtitle(.semibold))
+                        .foregroundStyle(Theme.Color.textPrimary)
+                    StatusBadge(text: cycle.status.financeStatusTitle, tone: statementTone(cycle.status))
+                    Spacer()
+                    AmountText(value: cycle.statementAmount, currency: cycle.currency, font: Theme.Font.cardNumber(), color: Theme.Color.textPrimary)
+                }
+                HStack(spacing: 14) {
+                    metaChip("周期", "\(FinanceFormatter.shortDate(cycle.cycleStartDate)) – \(FinanceFormatter.shortDate(cycle.cycleEndDate))")
+                    metaChip("还款日", FinanceFormatter.shortDate(cycle.dueDate))
+                }
+                HStack(spacing: 14) {
+                    metaChip("最低还款", FinanceFormatter.money(cycle.minimumPayment, currency: cycle.currency))
+                    metaChip("已还", FinanceFormatter.money(cycle.paidAmount, currency: cycle.currency))
+                    metaChip("剩余", FinanceFormatter.money(cycle.remainingAmount, currency: cycle.currency))
+                }
+            }
+        }
+    }
+
+    private func statementTone(_ status: String) -> StatusBadge.Tone {
+        switch status {
+        case "paid", "closed": return .positive
+        case "open": return .pending
+        case "statement_generated", "partially_paid": return .warning
+        case "overdue": return .negative
+        default: return .neutral
+        }
+    }
+
+    // MARK: - Shared bits
+
+    private func metaChip(_ label: String, _ value: String) -> some View {
+        HStack(spacing: 4) {
+            Text(label)
+                .font(Theme.Font.badge(.semibold))
+                .foregroundStyle(Theme.Color.textTertiary)
+            Text(value)
+                .font(Theme.Font.caption(.medium))
+                .foregroundStyle(Theme.Color.textSecondary)
+        }
+    }
+
+    private func rowAction(_ title: String, destructive: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(title, action: action)
+            .buttonStyle(.borderless)
+            .tint(destructive ? Theme.Color.expense : Theme.Color.link)
+    }
+
+    private func confirm(
+        _ title: String,
+        _ message: String,
+        _ confirmTitle: String,
+        _ role: ButtonRole?,
+        work: @escaping () async throws -> Void
+    ) {
+        pendingConfirm = CyclePendingConfirm(title: title, message: message, confirmTitle: confirmTitle, role: role) {
+            do {
+                actionError = nil
+                try await work()
+            } catch {
+                actionError = error.localizedDescription
+            }
+        }
+    }
+
+    private var confirmBinding: Binding<Bool> {
+        Binding(get: { pendingConfirm != nil }, set: { if !$0 { pendingConfirm = nil } })
+    }
+
+    private func emptyCard(_ title: String, _ message: String) -> some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Label(title, systemImage: "arrow.triangle.2.circlepath")
+                    .font(Theme.Font.subtitle(.semibold))
+                    .foregroundStyle(Theme.Color.textSecondary)
+                Text(message)
+                    .font(Theme.Font.caption())
+                    .foregroundStyle(Theme.Color.textTertiary)
+            }
+        }
+    }
+
+    private var loadingState: some View {
+        GlassCard {
+            HStack(spacing: 12) {
+                ProgressView().controlSize(.small)
+                Text("正在加载周期数据…")
+                    .font(Theme.Font.body())
+                    .foregroundStyle(Theme.Color.textSecondary)
+            }
+        }
+    }
+
+    private func failedState(_ message: String) -> some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("周期数据加载失败", systemImage: "exclamationmark.triangle.fill")
+                    .font(Theme.Font.subtitle(.semibold))
+                    .foregroundStyle(Theme.Color.expense)
+                Text(message)
+                    .font(Theme.Font.caption())
+                    .foregroundStyle(Theme.Color.textSecondary)
+                Button("重试") { Task { await cyclesModel.load() } }
+                    .buttonStyle(.bordered)
+            }
+        }
+    }
+}
+
+private struct CyclePendingConfirm: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+    let confirmTitle: String
+    let role: ButtonRole?
+    let run: () async -> Void
 }
 
 #endif
