@@ -79,12 +79,22 @@ struct LinoAPIClient {
         try await post("categories", body: request)
     }
 
+    /// PATCH /categories/{id} — editable subset (name/is_active/display_order).
+    func updateCategory(_ id: String, request: CategoryUpdateRequest) async throws -> CategoryDTO {
+        try await patch("categories/\(id)", body: request)
+    }
+
     func listCurrencyRates() async throws -> [CurrencyRateDTO] {
         try await get("currency-rates")
     }
 
     func createCurrencyRate(_ request: CurrencyRateCreateRequest) async throws -> CurrencyRateDTO {
         try await post("currency-rates", body: request)
+    }
+
+    /// PATCH /currency-rates/{id} — only `rate` editable; 409 if already referenced.
+    func updateCurrencyRate(_ id: String, request: CurrencyRateUpdateRequest) async throws -> CurrencyRateDTO {
+        try await patch("currency-rates/\(id)", body: request)
     }
 
     func listEntries() async throws -> [EntryDTO] {

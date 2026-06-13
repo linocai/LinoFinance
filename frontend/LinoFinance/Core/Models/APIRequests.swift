@@ -40,6 +40,14 @@ struct CategoryCreateRequest: Encodable {
     var displayOrder = 0
 }
 
+/// PATCH /categories/{id} — editable subset (`extra="forbid"`: type / parent_id
+/// immutable). nil fields omitted.
+struct CategoryUpdateRequest: Encodable {
+    var name: String?
+    var isActive: Bool?
+    var displayOrder: Int?
+}
+
 struct CurrencyRateCreateRequest: Encodable {
     var fromCurrency: CurrencyCode
     var toCurrency: CurrencyCode = .cny
@@ -47,6 +55,12 @@ struct CurrencyRateCreateRequest: Encodable {
     var date: Date
     var source = "manual"
     var note: String?
+}
+
+/// PATCH /currency-rates/{id} — only `rate` is editable (`extra="forbid"`:
+/// from/to/date immutable); rejected with 409 if the rate is already referenced.
+struct CurrencyRateUpdateRequest: Encodable {
+    var rate: DecimalValue
 }
 
 struct EntryCreateRequest: Encodable {
