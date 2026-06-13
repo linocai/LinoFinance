@@ -1,95 +1,130 @@
 import SwiftUI
 
-// LinoFinance v2 — empty multiplatform shell (P0 scaffolding only).
+// LinoFinance v2 — app entry (P2).
 //
-// P0 scope: prove the new target builds, the shared Core layer compiles into it,
-// and that auth + API are reachable. No DesignSystem, no real screens — those are P1+.
-// macOS: floating empty shell. iOS: TabView empty shell.
+// macOS root is now the REAL app shell: MacGlassScene (floating sidebar + bloom +
+// glass) with the Overview dashboard as the .overview destination and the 记一笔
+// button presenting the AddEntrySheet. Other sidebar destinations show glass
+// placeholders until P3–P5.
+//
+// The P1 DesignSystem showcase stays reachable in DEBUG via a CommandMenu entry
+// ("调试 ▸ DesignSystem 预览") so it remains a DS visual-regression surface.
+//
+// iOS keeps the P1 IOSTabScaffold skeleton (real iOS screens land in Px). Overview /
+// AddEntry / AppModel are cross-platform-compiled; macOS-only UI is #if os(macOS)-gated.
 
 @main
 struct LinoFinanceV2App: App {
+    @StateObject private var model = AppModel()
     @StateObject private var probe = APIReachabilityProbe()
+
+    #if DEBUG && os(macOS)
+    @State private var showShowcase = false
+    #endif
 
     var body: some Scene {
         WindowGroup {
-            RootShell()
+            RootShell(model: model)
                 .environmentObject(probe)
                 .task { await probe.run() }
+                .task { await model.refreshAll() }
+            #if DEBUG && os(macOS)
+                .sheet(isPresented: $showShowcase) {
+                    DesignSystemShowcaseView()
+                        .environmentObject(probe)
+                        .frame(minWidth: 1160, minHeight: 680)
+                }
+            #endif
         }
         #if os(macOS)
         .windowStyle(.hiddenTitleBar)
         #endif
+        #if DEBUG && os(macOS)
+        .commands {
+            CommandMenu("调试") {
+                Button("DesignSystem 预览") { showShowcase = true }
+                    .keyboardShortcut("d", modifiers: [.command, .shift])
+            }
+        }
+        #endif
     }
 }
 
-/// Root selector. In DEBUG the v2 app boots straight into the DesignSystem
-/// showcase (P1 visual sign-off — `open` and see the liquid glass). In Release it
-/// keeps the P0 connectivity shell. Real navigation lands in P2+.
+/// Root selector — real shell on both platforms (the P0 connectivity shell is gone;
+/// connectivity is now reflected in the Overview's loading/error state).
 private struct RootShell: View {
+    @ObservedObject var model: AppModel
+
     var body: some View {
-        #if DEBUG
-        DesignSystemShowcaseView()
-        #elseif os(macOS)
-        MacShell()
+        #if os(macOS)
+        MacAppShell(model: model)
         #else
-        iOSShell()
+        IOSAppShell(model: model)
         #endif
     }
 }
 
 #if os(macOS)
-private struct MacShell: View {
+private struct MacAppShell: View {
+    @ObservedObject var model: AppModel
+    @State private var selection: SidebarDestination = .overview
+    @State private var showAddEntry = false
+
     var body: some View {
-        ZStack {
-            Color(.windowBackgroundColor).ignoresSafeArea()
-            ProbePanel()
-                .frame(maxWidth: 420)
-                .padding(28)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-                .padding()
+        MacGlassScene(selection: $selection, onAddEntry: { showAddEntry = true }) {
+            content
         }
-        .frame(minWidth: 720, minHeight: 480)
+        .sheet(isPresented: $showAddEntry) {
+            AddEntrySheet(model: model) {
+                Task { await model.refreshAll() }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch selection {
+        case .overview:
+            OverviewView(model: model)
+        default:
+            PlaceholderScreen(destination: selection)
+        }
     }
 }
 #else
-private struct iOSShell: View {
+private struct IOSAppShell: View {
+    @ObservedObject var model: AppModel
+
     var body: some View {
-        TabView {
-            ProbePanel()
-                .padding()
-                .tabItem { Label("总览", systemImage: "chart.pie") }
+        // P1 TabBar skeleton retained; real iOS screens land in Px. Overview content
+        // is compiled here too so cross-platform builds stay green.
+        IOSTabScaffold(
+            onAddEntry: {},
+            overview: { OverviewView(model: model) },
+            accounts: { iOSPlaceholder("账户") },
+            cashFlow: { iOSPlaceholder("现金流") },
+            reports: { iOSPlaceholder("报表") }
+        )
+    }
+
+    private func iOSPlaceholder(_ title: String) -> some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(Theme.Font.subtitle(.semibold))
+                    .foregroundStyle(Theme.Color.textPrimary)
+                Text("占位 · Px 接真实屏")
+                    .font(Theme.Font.caption())
+                    .foregroundStyle(Theme.Color.textSecondary)
+            }
         }
     }
 }
 #endif
 
-/// P0 connectivity readout — confirms the shared Core layer (SecureTokenStore +
-/// LinoAPIClient) compiles and that auth + API are reachable from the new target.
-private struct ProbePanel: View {
-    @EnvironmentObject private var probe: APIReachabilityProbe
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("LinoFinance v2")
-                .font(.system(size: 27, weight: .semibold))
-            Text("P0 工程脚手架空壳")
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-            Divider()
-            Label(probe.baseURLDescription, systemImage: "network")
-                .font(.system(size: 13).monospacedDigit())
-            Label(probe.tokenDescription, systemImage: "key")
-                .font(.system(size: 13))
-            Label(probe.statusDescription, systemImage: probe.statusSymbol)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(probe.statusColor)
-        }
-    }
-}
-
-/// Drives one read-only call against the backend to prove networking + auth.
-/// Tries the authenticated `GET /dashboard/summary`; if that fails, falls back
-/// to the unauthenticated `GET /health` so the panel still reports reachability.
+/// P0 connectivity probe — retained because the DEBUG DesignSystem showcase's
+/// ProbeReadout still consumes it via the environment. Drives one read-only call
+/// against the backend to confirm networking + auth.
 @MainActor
 final class APIReachabilityProbe: ObservableObject {
     enum State { case idle, running, ok(String), failed(String) }
@@ -100,7 +135,7 @@ final class APIReachabilityProbe: ObservableObject {
     private let token: String?
 
     init() {
-        self.baseURL = APIReachabilityProbe.resolveBaseURL()
+        self.baseURL = AppModel.resolveBaseURL()
         self.token = SecureTokenStore.shared.readEffectiveToken()
     }
 
@@ -142,8 +177,6 @@ final class APIReachabilityProbe: ObservableObject {
             let summary = try await client.fetchDashboardSummary()
             state = .ok("dashboard/summary 净资产 CNY \(summary.netWorthCny.value)")
         } catch {
-            // Fall back to the unauthenticated health endpoint so we can still
-            // distinguish "network down" from "auth missing/expired".
             do {
                 let health = try await client.health()
                 state = .failed("鉴权调用失败，但 /health=\(health.status) 可达：\(error.localizedDescription)")
@@ -151,26 +184,5 @@ final class APIReachabilityProbe: ObservableObject {
                 state = .failed(error.localizedDescription)
             }
         }
-        // Mirror the outcome to stderr so the P0 reachability probe can be
-        // verified from a headless launch (no GUI inspection needed).
-        FileHandle.standardError.write(Data("[LinoFinanceV2.P0Probe] \(statusDescription)\n".utf8))
-    }
-
-    /// Same resolution chain as v1 (env → UserDefaults → Info.plist → prod fallback),
-    /// kept local so the v2 shell does not pull in v1's AppEnvironment.
-    private static func resolveBaseURL() -> URL {
-        let env = ProcessInfo.processInfo.environment
-        if let value = env["LINOFINANCE_API_BASE_URL"], let url = URL(string: value) {
-            return url
-        }
-        if let value = UserDefaults.standard.string(forKey: "linofinance.apiBaseURL"),
-           let url = URL(string: value) {
-            return url
-        }
-        if let value = Bundle.main.object(forInfoDictionaryKey: "LinoFinanceAPIBaseURL") as? String,
-           let url = URL(string: value) {
-            return url
-        }
-        return URL(string: "https://lf.linotsai.top/api/v1")!
     }
 }
