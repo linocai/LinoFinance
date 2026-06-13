@@ -117,24 +117,24 @@ struct DailyPnLSheet: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             if let errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
                     .font(Theme.Font.caption())
                     .foregroundStyle(Theme.Color.expense)
                     .lineLimit(2)
             }
-            Spacer(minLength: 8)
-            Button("取消") { dismiss() }
-                .keyboardShortcut(.cancelAction)
-            Button {
-                Task { await submit() }
-            } label: {
-                if isSubmitting { ProgressView().controlSize(.small) } else { Text("记录") }
+            HStack(spacing: 12) {
+                PrimaryDarkButton("记录", fullWidth: true, isLoading: isSubmitting) {
+                    Task { await submit() }
+                }
+                .disabled(isSubmitting || parsedNewBalance == nil)
+                .opacity((isSubmitting || parsedNewBalance == nil) ? 0.5 : 1)
+                .keyboardShortcut(.defaultAction)
+
+                SubtleTextButton("取消") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
             }
-            .buttonStyle(.borderedProminent)
-            .keyboardShortcut(.defaultAction)
-            .disabled(isSubmitting || parsedNewBalance == nil)
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 14)

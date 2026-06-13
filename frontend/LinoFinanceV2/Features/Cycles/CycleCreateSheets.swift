@@ -44,21 +44,28 @@ struct NewSubscriptionSheet: View {
             }
             amountRow($amountText, $currency)
             labeledField("周期") {
-                Picker("", selection: $billingInterval) {
-                    ForEach(intervals, id: \.self) { Text($0.financeStatusTitle).tag($0) }
-                }.labelsHidden()
+                GlassMenuPicker(label: billingInterval.financeStatusTitle) {
+                    ForEach(intervals, id: \.self) { iv in
+                        Button(iv.financeStatusTitle) { billingInterval = iv }
+                    }
+                }
             }
             labeledField("扣费账户（可选）") {
                 accountPicker($accountId, accounts: balanceAccounts)
             }
             labeledField("分类（可选）") {
-                Picker("", selection: $categoryId) {
-                    Text("未选择").tag(Optional<String>.none)
-                    ForEach(expenseCategories) { Text($0.name).tag(Optional($0.id)) }
-                }.labelsHidden()
+                GlassMenuPicker(
+                    label: expenseCategories.first { $0.id == categoryId }?.name ?? "未选择",
+                    isPlaceholder: categoryId == nil
+                ) {
+                    Button("未选择") { categoryId = nil }
+                    ForEach(expenseCategories) { cat in
+                        Button(cat.name) { categoryId = cat.id }
+                    }
+                }
             }
             labeledField("起始日期") {
-                DatePicker("", selection: $startDate, displayedComponents: .date).datePickerStyle(.field).labelsHidden()
+                glassDateField($startDate)
             }
             labeledField("备注（可选）") {
                 TextField("补充说明", text: $note).textFieldStyle(.roundedBorder)
@@ -133,10 +140,15 @@ struct NewInstallmentSheet: View {
             onSubmit: { await submit() }
         ) {
             labeledField("关联记录") {
-                Picker("", selection: $linkedEntryId) {
-                    if entries.isEmpty { Text("无已确认记录").tag(Optional<String>.none) }
-                    ForEach(entries) { Text($0.title).tag(Optional($0.id)) }
-                }.labelsHidden().disabled(entries.isEmpty)
+                GlassMenuPicker(
+                    label: entries.first { $0.id == linkedEntryId }?.title ?? (entries.isEmpty ? "无已确认记录" : "未选择"),
+                    isPlaceholder: linkedEntryId == nil,
+                    disabled: entries.isEmpty
+                ) {
+                    ForEach(entries) { entry in
+                        Button(entry.title) { linkedEntryId = entry.id }
+                    }
+                }
             }
             labeledField("信用卡账户") {
                 accountPicker($creditAccountId, accounts: creditAccounts)
@@ -156,7 +168,7 @@ struct NewInstallmentSheet: View {
                 }
             }
             labeledField("起始日期") {
-                DatePicker("", selection: $startDate, displayedComponents: .date).datePickerStyle(.field).labelsHidden()
+                glassDateField($startDate)
             }
             labeledField("备注（可选）") {
                 TextField("补充说明", text: $note).textFieldStyle(.roundedBorder)
@@ -230,12 +242,12 @@ struct NewStatementCycleSheet: View {
                 accountPicker($creditAccountId, accounts: model.accounts.activeCreditAccounts)
             }
             HStack(spacing: 12) {
-                labeledField("周期开始") { DatePicker("", selection: $cycleStart, displayedComponents: .date).datePickerStyle(.field).labelsHidden() }
-                labeledField("周期结束") { DatePicker("", selection: $cycleEnd, displayedComponents: .date).datePickerStyle(.field).labelsHidden() }
+                labeledField("周期开始") { glassDateField($cycleStart) }
+                labeledField("周期结束") { glassDateField($cycleEnd) }
             }
             HStack(spacing: 12) {
-                labeledField("出账日") { DatePicker("", selection: $statementDate, displayedComponents: .date).datePickerStyle(.field).labelsHidden() }
-                labeledField("还款日") { DatePicker("", selection: $dueDate, displayedComponents: .date).datePickerStyle(.field).labelsHidden() }
+                labeledField("出账日") { glassDateField($statementDate) }
+                labeledField("还款日") { glassDateField($dueDate) }
             }
             labeledField("出账金额") {
                 TextField("0.00", text: $statementAmountText).textFieldStyle(.roundedBorder).font(Theme.Font.body().monospacedDigit())
@@ -316,15 +328,13 @@ struct CycleSheetScaffold<Content: View>: View {
                         .lineLimit(2)
                 }
                 Spacer(minLength: 8)
-                Button("取消", action: onCancel).keyboardShortcut(.cancelAction)
-                Button {
+                SubtleTextButton("取消", action: onCancel).keyboardShortcut(.cancelAction)
+                PrimaryDarkButton("创建", isLoading: isSubmitting) {
                     Task { await onSubmit() }
-                } label: {
-                    if isSubmitting { ProgressView().controlSize(.small) } else { Text("创建") }
                 }
-                .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(isSubmitting || !canSubmit)
+                .opacity((isSubmitting || !canSubmit) ? 0.5 : 1)
             }
             .padding(.horizontal, 22)
             .padding(.vertical, 14)
@@ -353,27 +363,42 @@ func amountRow(_ amount: Binding<String>, _ currency: Binding<CurrencyCode>, lab
             TextField("0.00", text: amount)
                 .textFieldStyle(.roundedBorder)
                 .font(Theme.Font.cardNumber().monospacedDigit())
-            Picker("", selection: currency) {
+            GlassMenuPicker(label: "\(currency.wrappedValue.symbol) \(currency.wrappedValue.rawValue)") {
                 ForEach(CurrencyCode.allCases, id: \.self) { code in
-                    Text("\(code.symbol) \(code.rawValue)").tag(code)
+                    Button("\(code.symbol) \(code.rawValue)") { currency.wrappedValue = code }
                 }
             }
-            .labelsHidden()
-            .frame(width: 110)
+            .frame(width: 120)
         }
     }
 }
 
+/// A native compact DatePicker wrapped in a glass field — matches AddEntryPage's
+/// 日期 field convention (R3): `.field` style inside a glassPanel chrome.
+@ViewBuilder
+func glassDateField(_ selection: Binding<Date>) -> some View {
+    DatePicker("", selection: selection, displayedComponents: .date)
+        .datePickerStyle(.field)
+        .labelsHidden()
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassPanel(cornerRadius: Theme.Radius.button)
+}
+
 @ViewBuilder
 func accountPicker(_ binding: Binding<String?>, accounts: [AccountDTO]) -> some View {
-    Picker("", selection: binding) {
-        Text(accounts.isEmpty ? "无可用账户" : "未选择").tag(Optional<String>.none)
+    let selectedName = accounts.first { $0.id == binding.wrappedValue }?.name
+    GlassMenuPicker(
+        label: selectedName ?? (accounts.isEmpty ? "无可用账户" : "未选择"),
+        isPlaceholder: selectedName == nil,
+        disabled: accounts.isEmpty
+    ) {
+        Button("未选择") { binding.wrappedValue = nil }
         ForEach(accounts) { account in
-            Text(account.name).tag(Optional(account.id))
+            Button(account.name) { binding.wrappedValue = account.id }
         }
     }
-    .labelsHidden()
-    .disabled(accounts.isEmpty)
 }
 
 #endif

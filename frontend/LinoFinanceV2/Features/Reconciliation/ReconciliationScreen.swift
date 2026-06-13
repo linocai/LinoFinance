@@ -155,12 +155,9 @@ struct ReconciliationScreen: View {
                     font: Theme.Font.subtitle(.semibold),
                     color: deltaColor(row.deltaAmount)
                 )
-                Button("对此账户调整") {
+                TintedActionChip(title: "对此账户调整", tone: .action) {
                     selectAccount(row)
                 }
-                .buttonStyle(.borderless)
-                .font(Theme.Font.caption())
-                .tint(Theme.Color.link)
             }
         }
         .padding(.vertical, 4)
@@ -181,14 +178,16 @@ struct ReconciliationScreen: View {
                     .foregroundStyle(Theme.Color.textPrimary)
 
                 field("账户") {
-                    Picker("", selection: $selectedAccountId) {
-                        Text(reconModel.rows.isEmpty ? "无可对账账户" : "未选择").tag(Optional<String>.none)
+                    GlassMenuPicker(
+                        label: reconModel.rows.first { $0.accountId == selectedAccountId }?.accountName
+                            ?? (reconModel.rows.isEmpty ? "无可对账账户" : "未选择"),
+                        isPlaceholder: selectedAccountId == nil,
+                        disabled: reconModel.rows.isEmpty
+                    ) {
                         ForEach(reconModel.rows) { row in
-                            Text(row.accountName).tag(Optional(row.accountId))
+                            Button(row.accountName) { selectedAccountId = row.accountId }
                         }
                     }
-                    .labelsHidden()
-                    .disabled(reconModel.rows.isEmpty)
                     .onChange(of: selectedAccountId) { _, _ in
                         syncActualToSystem()
                     }
@@ -254,18 +253,11 @@ struct ReconciliationScreen: View {
                         .foregroundStyle(Theme.Color.income)
                 }
 
-                Button {
+                PrimaryDarkButton("生成对账调整", fullWidth: true, isLoading: isSubmitting) {
                     Task { await submit() }
-                } label: {
-                    if isSubmitting {
-                        ProgressView().controlSize(.small).frame(maxWidth: .infinity)
-                    } else {
-                        Text("生成对账调整").frame(maxWidth: .infinity)
-                    }
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
                 .disabled(isSubmitting || !canSubmit)
+                .opacity((isSubmitting || !canSubmit) ? 0.5 : 1)
             }
         }
     }
@@ -350,8 +342,9 @@ struct ReconciliationScreen: View {
                 Text(message)
                     .font(Theme.Font.caption())
                     .foregroundStyle(Theme.Color.textSecondary)
-                Button("重试") { Task { await reconModel.load() } }
-                    .buttonStyle(.bordered)
+                SubtleToolbarButton(title: "重试", systemImage: "arrow.clockwise") {
+                    Task { await reconModel.load() }
+                }
             }
         }
     }

@@ -23,7 +23,6 @@ struct ReimbursementsScreen: View {
     @ObservedObject var model: AppModel
     @StateObject private var reimModel: ReimbursementsModel
 
-    @State private var pendingConfirm: PendingConfirm?
     @State private var showingNewClaim = false
     @State private var attachmentsClaim: ReimbursementClaimDTO?
     @State private var actionError: String?
@@ -72,14 +71,6 @@ struct ReimbursementsScreen: View {
         .sheet(item: $attachmentsClaim) { claim in
             ReimbursementAttachmentsSheet(apiClient: model.apiClient, claim: claim)
         }
-        .alert(pendingConfirm?.title ?? "确认操作", isPresented: confirmBinding, presenting: pendingConfirm) { item in
-            Button(item.confirmTitle, role: item.role) {
-                Task { await item.run() }
-            }
-            Button("取消", role: .cancel) {}
-        } message: { item in
-            Text(item.message)
-        }
     }
 
     // MARK: - Header
@@ -95,10 +86,7 @@ struct ReimbursementsScreen: View {
                     .foregroundStyle(Theme.Color.textSecondary)
             }
             Spacer()
-            PrimaryActionButton(title: "新建报销", systemImage: "plus", compact: true) {
-                showingNewClaim = true
-            }
-            .frame(width: 150)
+            SubtleToolbarButton(title: "新建报销") { showingNewClaim = true }
         }
     }
 
@@ -113,15 +101,13 @@ struct ReimbursementsScreen: View {
                         .font(Theme.Font.subtitle(.semibold))
                         .foregroundStyle(Theme.Color.textPrimary)
                     Spacer()
-                    Picker("", selection: $reimModel.reportView) {
-                        Text("个人净额").tag("personal_net")
-                        Text("全部").tag("all")
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .frame(width: 180)
-                    .onChange(of: reimModel.reportView) { _, _ in
-                        Task { await reimModel.reloadReport() }
+                    HStack(spacing: 8) {
+                        SelectableChip(title: "个人净额", isSelected: reimModel.reportView == "personal_net") {
+                            setReportView("personal_net")
+                        }
+                        SelectableChip(title: "全部", isSelected: reimModel.reportView == "all") {
+                            setReportView("all")
+                        }
                     }
                 }
                 if let report = reimModel.report {
@@ -227,21 +213,23 @@ struct ReimbursementsScreen: View {
         .glassPanel(cornerRadius: Theme.Radius.button)
     }
 
+    // Inline state-machine chips (R3) — direct-fire, no native confirm dialog.
+    //   提交=action(蓝) · 批准/标记到账=positive(绿) · 拒绝/放弃=destructive(红)
     @ViewBuilder
     private func claimActions(_ claim: ReimbursementClaimDTO) -> some View {
         HStack(spacing: 8) {
             if claim.status == "reimbursable" || claim.status == "invoice_pending" {
-                actionButton("提交") { confirmSubmit(claim) }
+                TintedActionChip(title: "提交", tone: .action) { runSubmit(claim) }
             }
             if claim.status == "submitted" {
-                actionButton("批准") { confirmApprove(claim) }
-                actionButton("拒绝", destructive: true) { confirmReject(claim) }
+                TintedActionChip(title: "批准", tone: .positive) { runApprove(claim) }
+                TintedActionChip(title: "拒绝", tone: .destructive) { runReject(claim) }
             }
             if ["approved", "waiting_received", "partial_received"].contains(claim.status) {
-                actionButton("标记到账") { confirmReceive(claim) }
+                TintedActionChip(title: "标记到账", tone: .positive) { runReceive(claim) }
             }
             if !["received", "rejected", "abandoned"].contains(claim.status) {
-                actionButton("放弃", destructive: true) { confirmAbandon(claim) }
+                TintedActionChip(title: "放弃", tone: .destructive) { runAbandon(claim) }
             }
             Spacer(minLength: 0)
             Button {
@@ -249,73 +237,46 @@ struct ReimbursementsScreen: View {
             } label: {
                 Image(systemName: "paperclip")
                     .font(.system(size: 12))
+                    .foregroundStyle(Theme.Color.link)
             }
-            .buttonStyle(.borderless)
-            .tint(Theme.Color.link)
+            .buttonStyle(.plain)
             .help("凭证")
         }
         .font(Theme.Font.caption())
     }
 
-    private func actionButton(_ title: String, destructive: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(title, action: action)
-            .buttonStyle(.borderless)
-            .tint(destructive ? Theme.Color.expense : Theme.Color.link)
+    // MARK: - Actions (chips fire directly — no native二次确认)
+
+    private func runSubmit(_ claim: ReimbursementClaimDTO) {
+        Task { await perform { try await reimModel.submit(claim.id) } }
     }
 
-    // MARK: - Confirmations
-
-    private func confirmSubmit(_ claim: ReimbursementClaimDTO) {
-        pendingConfirm = PendingConfirm(
-            title: "提交报销？",
-            message: "状态会从「\(claim.status.financeStatusTitle)」进入「已提交」。",
-            confirmTitle: "提交",
-            role: nil
-        ) { await perform { try await reimModel.submit(claim.id) } }
+    private func runApprove(_ claim: ReimbursementClaimDTO) {
+        Task { await perform { try await reimModel.approve(claim.id) } }
     }
 
-    private func confirmApprove(_ claim: ReimbursementClaimDTO) {
-        pendingConfirm = PendingConfirm(
-            title: "批准报销？",
-            message: "批准后会进入待到账流程。",
-            confirmTitle: "批准",
-            role: nil
-        ) { await perform { try await reimModel.approve(claim.id) } }
+    private func runReject(_ claim: ReimbursementClaimDTO) {
+        Task { await perform { try await reimModel.reject(claim.id) } }
     }
 
-    private func confirmReject(_ claim: ReimbursementClaimDTO) {
-        pendingConfirm = PendingConfirm(
-            title: "拒绝报销？",
-            message: "拒绝后将不再计入预计回款。",
-            confirmTitle: "拒绝",
-            role: .destructive
-        ) { await perform { try await reimModel.reject(claim.id) } }
+    private func runAbandon(_ claim: ReimbursementClaimDTO) {
+        Task { await perform { try await reimModel.abandon(claim.id) } }
     }
 
-    private func confirmAbandon(_ claim: ReimbursementClaimDTO) {
-        pendingConfirm = PendingConfirm(
-            title: "放弃报销？",
-            message: "放弃后这笔垫付会作为个人支出。",
-            confirmTitle: "放弃",
-            role: .destructive
-        ) { await perform { try await reimModel.abandon(claim.id) } }
-    }
-
-    private func confirmReceive(_ claim: ReimbursementClaimDTO) {
-        let accountName = reimModel.receivingAccountName(for: claim, accounts: model.accounts) ?? "<无匹配账户>"
-        let amount = FinanceFormatter.money(claim.amount, currency: claim.currency)
-        pendingConfirm = PendingConfirm(
-            title: "标记到账？",
-            message: "会创建一条已确认的收入记账，并把 \(amount) 计入余额账户「\(accountName)」。继续吗？",
-            confirmTitle: "标记到账",
-            role: nil
-        ) {
+    private func runReceive(_ claim: ReimbursementClaimDTO) {
+        Task {
             await perform {
                 try await reimModel.markReceived(claim, accounts: model.accounts, categories: model.categories)
                 await model.loadAccounts()
                 await model.loadDashboard()
             }
         }
+    }
+
+    private func setReportView(_ view: String) {
+        guard reimModel.reportView != view else { return }
+        reimModel.reportView = view
+        Task { await reimModel.reloadReport() }
     }
 
     private func perform(_ work: () async throws -> Void) async {
@@ -325,10 +286,6 @@ struct ReimbursementsScreen: View {
         } catch {
             actionError = error.localizedDescription
         }
-    }
-
-    private var confirmBinding: Binding<Bool> {
-        Binding(get: { pendingConfirm != nil }, set: { if !$0 { pendingConfirm = nil } })
     }
 
     // MARK: - Status → tone
@@ -365,8 +322,9 @@ struct ReimbursementsScreen: View {
                 Text(message)
                     .font(Theme.Font.caption())
                     .foregroundStyle(Theme.Color.textSecondary)
-                Button("重试") { Task { await reimModel.load() } }
-                    .buttonStyle(.bordered)
+                SubtleToolbarButton(title: "重试", systemImage: "arrow.clockwise") {
+                    Task { await reimModel.load() }
+                }
             }
         }
     }
@@ -380,22 +338,11 @@ struct ReimbursementsScreen: View {
                 Text("从一条已确认的记账明细生成报销，跟踪垫付到回款的全过程。")
                     .font(Theme.Font.caption())
                     .foregroundStyle(Theme.Color.textTertiary)
-                Button("新建报销") { showingNewClaim = true }
-                    .buttonStyle(.borderedProminent)
+                SubtleToolbarButton(title: "新建报销") { showingNewClaim = true }
+                    .padding(.top, 4)
             }
         }
     }
-}
-
-// MARK: - Confirmation payload
-
-private struct PendingConfirm: Identifiable {
-    let id = UUID()
-    let title: String
-    let message: String
-    let confirmTitle: String
-    let role: ButtonRole?
-    let run: () async -> Void
 }
 
 #endif

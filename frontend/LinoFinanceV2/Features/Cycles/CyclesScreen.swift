@@ -29,7 +29,6 @@ struct CyclesScreen: View {
     @State private var showingNewSubscription = false
     @State private var showingNewInstallment = false
     @State private var showingNewStatementCycle = false
-    @State private var pendingConfirm: CyclePendingConfirm?
     @State private var actionError: String?
 
     init(model: AppModel) {
@@ -40,14 +39,8 @@ struct CyclesScreen: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             header
-            Picker("", selection: $section) {
-                ForEach(Section.allCases) { s in
-                    Text(s.title).tag(s)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 420)
+            SegmentedPill(options: Section.allCases, selection: $section) { $0.title }
+                .frame(maxWidth: 420)
 
             switch cyclesModel.state {
             case .idle, .loading:
@@ -83,12 +76,6 @@ struct CyclesScreen: View {
         .sheet(isPresented: $showingNewStatementCycle) {
             NewStatementCycleSheet(model: model, cyclesModel: cyclesModel)
         }
-        .alert(pendingConfirm?.title ?? "确认操作", isPresented: confirmBinding, presenting: pendingConfirm) { item in
-            Button(item.confirmTitle, role: item.role) { Task { await item.run() } }
-            Button("取消", role: .cancel) {}
-        } message: { item in
-            Text(item.message)
-        }
     }
 
     // MARK: - Header
@@ -104,14 +91,13 @@ struct CyclesScreen: View {
                     .foregroundStyle(Theme.Color.textSecondary)
             }
             Spacer()
-            PrimaryActionButton(title: addButtonTitle, systemImage: "plus", compact: true) {
+            SubtleToolbarButton(title: addButtonTitle) {
                 switch section {
                 case .subscriptions: showingNewSubscription = true
                 case .installments: showingNewInstallment = true
                 case .statements: showingNewStatementCycle = true
                 }
             }
-            .frame(width: 150)
         }
     }
 
@@ -157,21 +143,20 @@ struct CyclesScreen: View {
                     metaChip("已生成", "\(rule.generatedCashFlowCount) 期")
                 }
                 Divider().overlay(Theme.Color.divider)
-                HStack(spacing: 14) {
+                HStack(spacing: 8) {
                     if rule.status == "active" {
-                        rowAction("暂停") { confirm("暂停订阅？", "暂停后不再生成新的现金流。", "暂停", nil) { try await cyclesModel.pauseSubscription(rule.id) } }
+                        TintedActionChip(title: "暂停", tone: .neutral) { run { try await cyclesModel.pauseSubscription(rule.id) } }
                     } else if rule.status == "paused" {
-                        rowAction("恢复") { confirm("恢复订阅？", "恢复后将继续按周期生成现金流。", "恢复", nil) { try await cyclesModel.resumeSubscription(rule.id) } }
+                        TintedActionChip(title: "恢复", tone: .positive) { run { try await cyclesModel.resumeSubscription(rule.id) } }
                     }
                     if rule.status == "active" {
-                        rowAction("生成下一期") { confirm("生成下一期？", "会立即生成一条新的现金流条目。", "生成", nil) { try await cyclesModel.generateNextSubscription(rule.id) } }
+                        TintedActionChip(title: "生成下一期", tone: .action) { run { try await cyclesModel.generateNextSubscription(rule.id) } }
                     }
                     if rule.status != "cancelled" && rule.status != "canceled" {
-                        rowAction("取消", destructive: true) { confirm("取消订阅？", "取消后该订阅规则停止运作，不可恢复。", "取消订阅", .destructive) { try await cyclesModel.cancelSubscription(rule.id) } }
+                        TintedActionChip(title: "取消", tone: .destructive) { run { try await cyclesModel.cancelSubscription(rule.id) } }
                     }
                     Spacer(minLength: 0)
                 }
-                .font(Theme.Font.caption())
             }
         }
     }
@@ -235,15 +220,14 @@ struct CyclesScreen: View {
                     metaChip("起始", FinanceFormatter.shortDate(plan.startDate))
                 }
                 Divider().overlay(Theme.Color.divider)
-                HStack(spacing: 14) {
+                HStack(spacing: 8) {
                     if plan.status == "active" {
-                        rowAction("提前结清") { confirm("提前结清分期？", "会一次性结清剩余所有期数。", "提前结清", nil) { try await cyclesModel.markInstallmentEarlyPaidOff(plan.id) } }
-                        rowAction("标记已结清") { confirm("标记已结清？", "把这笔分期标记为已全部还清。", "标记已结清", nil) { try await cyclesModel.markInstallmentPaidOff(plan.id) } }
-                        rowAction("取消", destructive: true) { confirm("取消分期？", "取消后该分期计划停止运作，不可恢复。", "取消分期", .destructive) { try await cyclesModel.cancelInstallment(plan.id) } }
+                        TintedActionChip(title: "提前结清", tone: .action) { run { try await cyclesModel.markInstallmentEarlyPaidOff(plan.id) } }
+                        TintedActionChip(title: "标记已结清", tone: .positive) { run { try await cyclesModel.markInstallmentPaidOff(plan.id) } }
+                        TintedActionChip(title: "取消", tone: .destructive) { run { try await cyclesModel.cancelInstallment(plan.id) } }
                     }
                     Spacer(minLength: 0)
                 }
-                .font(Theme.Font.caption())
             }
         }
     }
@@ -319,20 +303,9 @@ struct CyclesScreen: View {
         }
     }
 
-    private func rowAction(_ title: String, destructive: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(title, action: action)
-            .buttonStyle(.borderless)
-            .tint(destructive ? Theme.Color.expense : Theme.Color.link)
-    }
-
-    private func confirm(
-        _ title: String,
-        _ message: String,
-        _ confirmTitle: String,
-        _ role: ButtonRole?,
-        work: @escaping () async throws -> Void
-    ) {
-        pendingConfirm = CyclePendingConfirm(title: title, message: message, confirmTitle: confirmTitle, role: role) {
+    // Chips fire actions directly — no native二次确认 (data is recoverable, R3).
+    private func run(_ work: @escaping () async throws -> Void) {
+        Task {
             do {
                 actionError = nil
                 try await work()
@@ -340,10 +313,6 @@ struct CyclesScreen: View {
                 actionError = error.localizedDescription
             }
         }
-    }
-
-    private var confirmBinding: Binding<Bool> {
-        Binding(get: { pendingConfirm != nil }, set: { if !$0 { pendingConfirm = nil } })
     }
 
     private func emptyCard(_ title: String, _ message: String) -> some View {
@@ -379,20 +348,12 @@ struct CyclesScreen: View {
                 Text(message)
                     .font(Theme.Font.caption())
                     .foregroundStyle(Theme.Color.textSecondary)
-                Button("重试") { Task { await cyclesModel.load() } }
-                    .buttonStyle(.bordered)
+                SubtleToolbarButton(title: "重试", systemImage: "arrow.clockwise") {
+                    Task { await cyclesModel.load() }
+                }
             }
         }
     }
-}
-
-private struct CyclePendingConfirm: Identifiable {
-    let id = UUID()
-    let title: String
-    let message: String
-    let confirmTitle: String
-    let role: ButtonRole?
-    let run: () async -> Void
 }
 
 #endif

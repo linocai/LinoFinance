@@ -11,6 +11,20 @@ import SwiftUI
 // be linked, unlinked or left alone. (The v1 monthly-salary recurrence helper is
 // out of scope for P3 — a one-shot item per submit; recurrence_rule kept nil.)
 
+/// Direction segments for the SegmentedPill (the underlying state stays a String
+/// so all existing direction logic — submit/seed/category filter — is unchanged).
+private enum FlowDirection: String, CaseIterable, Identifiable {
+    case inflow, outflow, transfer
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .inflow: "进账"
+        case .outflow: "出账"
+        case .transfer: "转账"
+        }
+    }
+}
+
 struct CashFlowFormSheet: View {
     @ObservedObject var model: CashFlowModel
     @Environment(\.dismiss) private var dismiss
@@ -49,34 +63,33 @@ struct CashFlowFormSheet: View {
                             .textFieldStyle(.roundedBorder)
                     }
                     field("方向") {
-                        Picker("", selection: $direction) {
-                            Text("进账").tag("inflow")
-                            Text("出账").tag("outflow")
-                            Text("转账").tag("transfer")
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
+                        SegmentedPill(
+                            options: FlowDirection.allCases,
+                            selection: Binding(
+                                get: { FlowDirection(rawValue: direction) ?? .outflow },
+                                set: { direction = $0.rawValue }
+                            )
+                        ) { $0.title }
                     }
                     field("类型") {
-                        Picker("", selection: $cashFlowType) {
+                        GlassMenuPicker(label: CashFlowType.title(cashFlowType)) {
                             ForEach(CashFlowType.allCases, id: \.self) { raw in
-                                Text(CashFlowType.title(raw)).tag(raw)
+                                Button(CashFlowType.title(raw)) { cashFlowType = raw }
                             }
                         }
-                        .labelsHidden()
                     }
                     field("金额") {
                         HStack(spacing: 10) {
                             TextField("0.00", text: $amountText)
                                 .textFieldStyle(.roundedBorder)
                                 .font(Theme.Font.body().monospacedDigit())
-                            Picker("", selection: $currency) {
+                            HStack(spacing: 6) {
                                 ForEach(CurrencyCode.allCases, id: \.self) { code in
-                                    Text("\(code.symbol) \(code.rawValue)").tag(code)
+                                    SelectableChip(title: code.rawValue, isSelected: currency == code) {
+                                        currency = code
+                                    }
                                 }
                             }
-                            .labelsHidden()
-                            .frame(width: 110)
                         }
                     }
                     field("预计日期") {
@@ -85,23 +98,27 @@ struct CashFlowFormSheet: View {
                             .labelsHidden()
                     }
                     field("账户（可选）") {
-                        Picker("", selection: $accountId) {
-                            Text("不关联").tag(Optional<String>.none)
+                        GlassMenuPicker(
+                            label: accountId.flatMap { id in selectableAccounts.first { $0.id == id }?.name } ?? "不关联",
+                            isPlaceholder: accountId == nil
+                        ) {
+                            Button("不关联") { accountId = nil }
                             ForEach(selectableAccounts) { account in
-                                Text(account.name).tag(Optional(account.id))
+                                Button(account.name) { accountId = account.id }
                             }
                         }
-                        .labelsHidden()
                     }
                     if direction != "transfer" {
                         field("分类（可选）") {
-                            Picker("", selection: $categoryId) {
-                                Text("不关联").tag(Optional<String>.none)
+                            GlassMenuPicker(
+                                label: categoryId.flatMap { id in selectableCategories.first { $0.id == id }?.name } ?? "不关联",
+                                isPlaceholder: categoryId == nil
+                            ) {
+                                Button("不关联") { categoryId = nil }
                                 ForEach(selectableCategories) { category in
-                                    Text(category.name).tag(Optional(category.id))
+                                    Button(category.name) { categoryId = category.id }
                                 }
                             }
-                            .labelsHidden()
                         }
                     }
                     field("备注") {
@@ -160,16 +177,14 @@ struct CashFlowFormSheet: View {
                     .lineLimit(2)
             }
             Spacer(minLength: 8)
-            Button("取消") { dismiss() }
+            SubtleTextButton("取消") { dismiss() }
                 .keyboardShortcut(.cancelAction)
-            Button {
+            PrimaryDarkButton(isEdit ? "保存" : "创建", isLoading: isSubmitting) {
                 Task { await submit() }
-            } label: {
-                if isSubmitting { ProgressView().controlSize(.small) } else { Text(isEdit ? "保存" : "创建") }
             }
-            .buttonStyle(.borderedProminent)
             .keyboardShortcut(.defaultAction)
             .disabled(isSubmitting || !canSubmit)
+            .opacity((isSubmitting || !canSubmit) ? 0.5 : 1)
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 14)

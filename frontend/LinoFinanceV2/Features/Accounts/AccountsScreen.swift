@@ -67,18 +67,12 @@ struct AccountsScreen: View {
             }
             Spacer()
             HStack(spacing: 10) {
-                Button {
+                SubtleToolbarButton(title: "对账", systemImage: "checklist") {
                     showReconciliation = true
-                } label: {
-                    Label("对账", systemImage: "checklist")
                 }
-                .buttonStyle(.bordered)
-                Button {
+                SubtleToolbarButton(title: "新建账户") {
                     formMode = .create
-                } label: {
-                    Label("新建账户", systemImage: "plus")
                 }
-                .buttonStyle(.borderedProminent)
             }
         }
     }
@@ -94,60 +88,37 @@ struct AccountsScreen: View {
                 if !accountsModel.balanceAccounts.isEmpty {
                     group(title: "资金账户", accounts: accountsModel.balanceAccounts) { account in
                         BalanceAccountRow(account: account, convertedCNY: accountsModel.convertedCNY(for: account))
-                    } trailing: { account in
-                        rowMenu(account)
                     }
                 }
                 if !accountsModel.investmentAccounts.isEmpty {
                     group(title: "投资账户", accounts: accountsModel.investmentAccounts) { account in
                         InvestmentAccountRow(account: account, convertedCNY: accountsModel.convertedCNY(for: account))
                     } trailing: { account in
-                        HStack(spacing: 6) {
-                            Button {
-                                pnlAccount = account
-                            } label: {
-                                Label("记盈亏", systemImage: "plus.circle")
-                                    .font(Theme.Font.caption(.medium))
-                            }
-                            .buttonStyle(.borderless)
-                            rowMenu(account)
+                        TintedActionChip(title: "记盈亏", tone: .brand) {
+                            pnlAccount = account
                         }
                     }
                 }
                 if !accountsModel.creditAccounts.isEmpty {
                     group(title: "信用账户", accounts: accountsModel.creditAccounts) { account in
                         CreditAccountRow(account: account)
-                    } trailing: { account in
-                        rowMenu(account)
                     }
                 }
             }
         }
     }
 
-    private func rowMenu(_ account: AccountDTO) -> some View {
-        Menu {
-            Button("编辑") { formMode = .edit(account) }
-        } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.Color.textSecondary)
-                .frame(width: 22, height: 22)
-                .contentShape(Rectangle())
-        }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .fixedSize()
-    }
-
     // MARK: - Group card
+    //
+    // 每行整行可点进入编辑（comp 是干净行，没有行内 ⋯/编辑按钮）。`trailing` 仅
+    // 用于投资账户的「记盈亏」chip，它自身吞掉点击，不触发整行编辑。
 
     @ViewBuilder
     private func group<Row: View, Trailing: View>(
         title: String,
         accounts: [AccountDTO],
         @ViewBuilder row: @escaping (AccountDTO) -> Row,
-        @ViewBuilder trailing: @escaping (AccountDTO) -> Trailing
+        @ViewBuilder trailing: @escaping (AccountDTO) -> Trailing = { (_: AccountDTO) in EmptyView() }
     ) -> some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
@@ -169,6 +140,8 @@ struct AccountsScreen: View {
                         if index > 0 { Divider().overlay(Theme.Color.divider) }
                         HStack(alignment: .center, spacing: 10) {
                             row(account)
+                                .contentShape(Rectangle())
+                                .onTapGesture { formMode = .edit(account) }
                             trailing(account)
                         }
                         .padding(.vertical, 10)
@@ -189,8 +162,7 @@ struct AccountsScreen: View {
                 Text("创建一个资金账户后就可以开始记账。")
                     .font(Theme.Font.caption())
                     .foregroundStyle(Theme.Color.textSecondary)
-                Button("新建账户") { formMode = .create }
-                    .buttonStyle(.borderedProminent)
+                SubtleToolbarButton(title: "新建账户") { formMode = .create }
                     .padding(.top, 4)
             }
         }
@@ -216,8 +188,9 @@ struct AccountsScreen: View {
                 Text(message)
                     .font(Theme.Font.caption())
                     .foregroundStyle(Theme.Color.textSecondary)
-                Button("重试") { Task { await accountsModel.load() } }
-                    .buttonStyle(.bordered)
+                SubtleToolbarButton(title: "重试", systemImage: "arrow.clockwise") {
+                    Task { await accountsModel.load() }
+                }
             }
         }
     }

@@ -42,26 +42,28 @@ struct NewReimbursementClaimSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     field("原始记录") {
-                        Picker("", selection: entryBinding) {
-                            if reimModel.entries.isEmpty {
-                                Text("无已确认记录").tag(Optional<String>.none)
-                            }
+                        GlassMenuPicker(
+                            label: selectedEntry?.title ?? "无已确认记录",
+                            isPlaceholder: selectedEntry == nil,
+                            disabled: reimModel.entries.isEmpty
+                        ) {
                             ForEach(reimModel.entries) { entry in
-                                Text(entry.title).tag(Optional(entry.id))
+                                Button(entry.title) { entryBinding.wrappedValue = entry.id }
                             }
                         }
-                        .labelsHidden()
-                        .disabled(reimModel.entries.isEmpty)
                     }
                     field("分类明细") {
-                        Picker("", selection: lineBinding) {
+                        GlassMenuPicker(
+                            label: selectedLine.map { "\($0.direction.title) · \(FinanceFormatter.money($0.amount, currency: $0.currency))" } ?? "无可选明细",
+                            isPlaceholder: selectedLine == nil,
+                            disabled: selectedEntry == nil
+                        ) {
                             ForEach(selectedEntry?.categoryLines ?? []) { line in
-                                Text("\(line.direction.title) · \(FinanceFormatter.money(line.amount, currency: line.currency))")
-                                    .tag(Optional(line.id))
+                                Button("\(line.direction.title) · \(FinanceFormatter.money(line.amount, currency: line.currency))") {
+                                    lineBinding.wrappedValue = line.id
+                                }
                             }
                         }
-                        .labelsHidden()
-                        .disabled(selectedEntry == nil)
                     }
                     field("付款方") {
                         TextField("如：公司", text: $payer)
@@ -71,6 +73,9 @@ struct NewReimbursementClaimSheet: View {
                         DatePicker("", selection: $expectedDate, displayedComponents: .date)
                             .datePickerStyle(.field)
                             .labelsHidden()
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .glassPanel(cornerRadius: Theme.Radius.button)
                     }
                     field("备注（可选）") {
                         TextField("补充说明", text: $note)
@@ -129,14 +134,9 @@ struct NewReimbursementClaimSheet: View {
                     .font(Theme.Font.caption(.medium))
                     .foregroundStyle(Theme.Color.textSecondary)
                 Spacer()
-                Button {
+                SubtleToolbarButton(title: "选择文件", systemImage: "paperclip") {
                     isImporting = true
-                } label: {
-                    Label("选择文件", systemImage: "paperclip")
-                        .font(Theme.Font.caption())
                 }
-                .buttonStyle(.borderless)
-                .tint(Theme.Color.link)
             }
             ForEach(pendingAttachments) { attachment in
                 HStack(spacing: 8) {
@@ -150,12 +150,13 @@ struct NewReimbursementClaimSheet: View {
                     Text(attachment.formattedSize)
                         .font(Theme.Font.badge())
                         .foregroundStyle(Theme.Color.textTertiary)
-                    Button(role: .destructive) {
+                    Button {
                         pendingAttachments.removeAll { $0.id == attachment.id }
                     } label: {
                         Image(systemName: "xmark.circle")
+                            .foregroundStyle(Theme.Color.expense)
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -172,20 +173,14 @@ struct NewReimbursementClaimSheet: View {
                     .lineLimit(2)
             }
             Spacer(minLength: 8)
-            Button("取消") { dismiss() }
+            SubtleTextButton("取消") { dismiss() }
                 .keyboardShortcut(.cancelAction)
-            Button {
+            PrimaryDarkButton("创建", isLoading: isSubmitting) {
                 Task { await submit() }
-            } label: {
-                if isSubmitting {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Text("创建")
-                }
             }
-            .buttonStyle(.borderedProminent)
             .keyboardShortcut(.defaultAction)
             .disabled(isSubmitting || selectedEntry == nil || selectedLine == nil)
+            .opacity((isSubmitting || selectedEntry == nil || selectedLine == nil) ? 0.5 : 1)
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 14)

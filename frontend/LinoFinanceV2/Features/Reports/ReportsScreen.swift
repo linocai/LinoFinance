@@ -55,13 +55,9 @@ struct ReportsScreen: View {
                     .foregroundStyle(Theme.Color.textSecondary)
             }
             Spacer()
-            Button {
+            SubtleToolbarButton(title: "刷新", systemImage: "arrow.clockwise") {
                 Task { await reportsModel.load() }
-            } label: {
-                Label("刷新", systemImage: "arrow.clockwise")
-                    .font(Theme.Font.caption())
             }
-            .buttonStyle(.bordered)
         }
     }
 
@@ -317,8 +313,9 @@ struct ReportsScreen: View {
                 Text(message)
                     .font(Theme.Font.caption())
                     .foregroundStyle(Theme.Color.textSecondary)
-                Button("重试") { Task { await reportsModel.load() } }
-                    .buttonStyle(.bordered)
+                SubtleToolbarButton(title: "重试", systemImage: "arrow.clockwise") {
+                    Task { await reportsModel.load() }
+                }
             }
         }
     }

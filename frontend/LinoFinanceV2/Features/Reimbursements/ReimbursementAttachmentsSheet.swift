@@ -75,14 +75,11 @@ struct ReimbursementAttachmentsSheet: View {
                     .foregroundStyle(Theme.Color.textSecondary)
             }
             Spacer()
-            Button {
+            SubtleToolbarButton(title: "上传", systemImage: "square.and.arrow.up") {
                 isImporting = true
-            } label: {
-                Label("上传", systemImage: "square.and.arrow.up")
-                    .font(Theme.Font.caption())
             }
-            .buttonStyle(.bordered)
             .disabled(busy)
+            .opacity(busy ? 0.5 : 1)
             Button {
                 dismiss()
             } label: {
@@ -115,17 +112,17 @@ struct ReimbursementAttachmentsSheet: View {
                 Task { await download(attachment) }
             } label: {
                 Image(systemName: "arrow.down.circle")
+                    .foregroundStyle(Theme.Color.link)
             }
-            .buttonStyle(.borderless)
-            .tint(Theme.Color.link)
+            .buttonStyle(.plain)
             .disabled(busy)
-            Button(role: .destructive) {
+            Button {
                 Task { await delete(attachment) }
             } label: {
                 Image(systemName: "trash")
+                    .foregroundStyle(Theme.Color.expense)
             }
-            .buttonStyle(.borderless)
-            .tint(Theme.Color.expense)
+            .buttonStyle(.plain)
             .disabled(busy)
         }
         .padding(12)

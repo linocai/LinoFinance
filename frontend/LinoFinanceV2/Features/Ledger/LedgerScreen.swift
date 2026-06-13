@@ -19,7 +19,6 @@ struct LedgerScreen: View {
 
     @State private var filter: LedgerFilter = .all
     @State private var searchText = ""
-    @State private var deleteTarget: EntryDTO?
 
     init(model: AppModel) {
         self.model = model
@@ -42,18 +41,6 @@ struct LedgerScreen: View {
             }
         }
         .task { if ledgerModel.entries.isEmpty { await ledgerModel.load() } }
-        .alert("删除记录？", isPresented: Binding(
-            get: { deleteTarget != nil },
-            set: { if !$0 { deleteTarget = nil } }
-        ), presenting: deleteTarget) { entry in
-            Button("删除", role: .destructive) {
-                Task { await ledgerModel.voidEntry(entry.id) }
-                deleteTarget = nil
-            }
-            Button("取消", role: .cancel) { deleteTarget = nil }
-        } message: { _ in
-            Text("删除会回滚这条记录对余额、账单和报销的影响，可在「已作废」过滤中找回。")
-        }
     }
 
     // MARK: - Header + controls
@@ -71,14 +58,8 @@ struct LedgerScreen: View {
 
     private var controls: some View {
         HStack(spacing: 12) {
-            Picker("", selection: $filter) {
-                ForEach(LedgerFilter.allCases) { option in
-                    Text(option.title).tag(option)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 420)
+            SegmentedPill(options: LedgerFilter.allCases, selection: $filter) { $0.title }
+                .frame(maxWidth: 420)
 
             Spacer(minLength: 12)
 
@@ -94,9 +75,11 @@ struct LedgerScreen: View {
                     Button {
                         searchText = ""
                         Task { await ledgerModel.runSearch("") }
-                    } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.borderless)
-                        .foregroundStyle(Theme.Color.textTertiary)
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(Theme.Color.textTertiary)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 10)
@@ -178,7 +161,9 @@ struct LedgerScreen: View {
                             kind: ledgerModel.kind(of: entry),
                             category: ledgerModel.category(entry.categoryLines.first?.categoryId ?? ""),
                             account: ledgerModel.account(entry.accountMovements.first?.accountId),
-                            onDelete: entry.status == .voided ? nil : { deleteTarget = entry }
+                            onDelete: entry.status == .voided ? nil : {
+                                Task { await ledgerModel.voidEntry(entry.id) }
+                            }
                         )
                         .padding(.vertical, 10)
                     }
@@ -276,8 +261,9 @@ struct LedgerScreen: View {
                 Text(message)
                     .font(Theme.Font.caption())
                     .foregroundStyle(Theme.Color.textSecondary)
-                Button("重试") { Task { await ledgerModel.load() } }
-                    .buttonStyle(.bordered)
+                SubtleToolbarButton(title: "重试", systemImage: "arrow.clockwise") {
+                    Task { await ledgerModel.load() }
+                }
             }
         }
     }
@@ -351,24 +337,12 @@ private struct EntryRow: View {
             }
 
             if let onDelete {
-                Menu {
-                    Button("删除", role: .destructive) { onDelete() }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Theme.Color.textSecondary)
-                        .frame(width: 22, height: 22)
-                        .contentShape(Rectangle())
-                }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .fixedSize()
+                // 直接作废，无原生二次确认（数据可在「已作废」过滤中找回）。
+                TintedActionChip(title: "删除", tone: .destructive, action: onDelete)
+                    .help("作废后可在「已作废」过滤中找回")
             }
         }
         .opacity(entry.status == .voided ? 0.6 : 1)
-        .contextMenu {
-            if let onDelete { Button("删除", role: .destructive) { onDelete() } }
-        }
     }
 
     private func signedAmount(_ line: EntryCategoryLineDTO) -> DecimalValue {

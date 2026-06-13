@@ -226,8 +226,9 @@ struct OverviewView: View {
                 Text(message)
                     .font(Theme.Font.caption())
                     .foregroundStyle(Theme.Color.textSecondary)
-                Button("重试") { Task { await model.loadDashboard() } }
-                    .buttonStyle(.bordered)
+                SubtleToolbarButton(title: "重试", systemImage: "arrow.clockwise") {
+                    Task { await model.loadDashboard() }
+                }
             }
         }
     }
