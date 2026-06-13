@@ -65,6 +65,12 @@ struct LinoAPIClient {
         try await post("accounts", body: request)
     }
 
+    /// PATCH /accounts/{id} — editable safe subset (see `AccountUpdateRequest`;
+    /// type/currency/balance are immutable server-side, balance via reconciliation).
+    func updateAccount(_ id: String, request: AccountUpdateRequest) async throws -> AccountDTO {
+        try await patch("accounts/\(id)", body: request)
+    }
+
     func listCategories() async throws -> [CategoryDTO] {
         try await get("categories")
     }
@@ -83,6 +89,12 @@ struct LinoAPIClient {
 
     func listEntries() async throws -> [EntryDTO] {
         try await get("entries")
+    }
+
+    /// GET /entries/{id} — full entry detail (lines + movements). The list already
+    /// returns full objects, so detail screens may also use the cached list item.
+    func fetchEntry(_ id: String) async throws -> EntryDTO {
+        try await get("entries/\(id)")
     }
 
     func createEntry(_ request: EntryCreateRequest) async throws -> EntryDTO {

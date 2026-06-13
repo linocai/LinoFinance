@@ -16,6 +16,22 @@ struct AccountCreateRequest: Encodable {
     var notes: String?
 }
 
+/// PATCH /accounts/{id} — editable safe subset only. The backend schema is
+/// `extra="forbid"`: `type` / `currency` / `current_balance` / `current_liability`
+/// are immutable and MUST NOT be sent (balance changes flow through reconciliation).
+/// nil fields are omitted (left unchanged).
+struct AccountUpdateRequest: Encodable {
+    var name: String?
+    var includeInNetWorth: Bool?
+    var status: String?
+    var displayOrder: Int?
+    var creditLimit: DecimalValue?
+    var statementDay: Int?
+    var dueDay: Int?
+    var minimumPayment: DecimalValue?
+    var notes: String?
+}
+
 struct CategoryCreateRequest: Encodable {
     var name: String
     var type: CategoryType

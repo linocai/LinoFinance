@@ -84,10 +84,14 @@ private struct MacAppShell: View {
     @ViewBuilder
     private var content: some View {
         switch selection {
-        case .overview:
-            OverviewView(model: model)
-        default:
-            PlaceholderScreen(destination: selection)
+        case .overview:      OverviewView(model: model)
+        case .accounts:      AccountsScreen(model: model)          // P3 (D2) — also opens 对账
+        case .cashFlow:      CashFlowScreen(model: model)          // P3 (D4)
+        case .ledger:        LedgerScreen(model: model)            // P3 (D5)
+        case .reimbursements: ReimbursementsScreen(model: model)   // P4 (D6)
+        case .cycles:        CyclesScreen(model: model)            // P4 (D7)
+        case .reports:       ReportsScreen(model: model)           // P4 (D8)
+        case .settings:      PlaceholderScreen(destination: .settings)  // P5
         }
     }
 }
