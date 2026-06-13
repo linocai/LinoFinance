@@ -22,12 +22,14 @@ struct LinoFinanceV2App: App {
     }
 }
 
-/// Minimal platform-split shell. macOS shows a single floating placeholder card;
-/// iOS shows a TabView placeholder. Real navigation (floating glass sidebar /
-/// iOS TabBar with the "记一笔" button) lands in P1/Px.
+/// Root selector. In DEBUG the v2 app boots straight into the DesignSystem
+/// showcase (P1 visual sign-off — `open` and see the liquid glass). In Release it
+/// keeps the P0 connectivity shell. Real navigation lands in P2+.
 private struct RootShell: View {
     var body: some View {
-        #if os(macOS)
+        #if DEBUG
+        DesignSystemShowcaseView()
+        #elseif os(macOS)
         MacShell()
         #else
         iOSShell()
