@@ -145,6 +145,9 @@ remote "
 sudo -u linofinance bash -se <<'INNER_EOF'
 cd '$REMOTE_TARGET'
 python3 -m venv .venv
+# HZ 服务器直连公网 PyPI 跨墙极慢/超时，必须走阿里云镜像（见 ~/hz_info.md §13；linowriting deploy 同此教训）。
+export PIP_INDEX_URL='https://mirrors.aliyun.com/pypi/simple/'
+export PIP_DEFAULT_TIMEOUT=60
 .venv/bin/pip install --upgrade pip setuptools wheel --quiet
 .venv/bin/pip install -e . --quiet
 INNER_EOF
