@@ -13,7 +13,15 @@
 ## 仓库结构速记
 
 - `backend/` FastAPI 应用（`app/`），Alembic（`alembic/versions/`），测试 `tests/`，脚本 `scripts/`。venv 在 `backend/.venv`（gitignore）。
-- `frontend/` Xcode 工程 `LinoFinance.xcodeproj` + SwiftPM `Package.swift`。三 target：macOS `LinoFinance`、iOS `LinoFinanceiOS`（product `LinoF`，bundle `com.lino.linofinance.ios`）、widget `LinoFinanceWidgets`。
+- `frontend/` Xcode 工程 `LinoFinance.xcodeproj` + SwiftPM `Package.swift`。v1.4.0 三 target：macOS `LinoFinance`、iOS `LinoFinanceiOS`（product `LinoF`，bundle `com.lino.linofinance.ios`）、widget `LinoFinanceWidgets`。**v2.0.0 起新增两 target**（v2.0.0 P0，2026-06-13）：多平台 App `LinoFinanceV2`（product `LinoF2`，源在 `frontend/LinoFinanceV2/`，开发期 bundle `com.lino.linofinance.v2`，部署 macOS 26.0/iOS 26.0）+ widget `LinoFinanceV2Widgets`（`frontend/LinoFinanceV2Widgets/`，bundle `com.lino.linofinance.v2.widgets`）。v2 复用 Core 6 文件 shared membership（`LinoAPIClient`/`SecureTokenStore`/`APIDTOs`/`APIRequests`/`FinanceRepository`/`Formatters`），老三 target 原样保留可出包。
+
+## pbxproj（objectVersion 77 折叠同步工程）
+
+- 本工程是**手写 objectVersion 77** pbxproj，用 `PBXFileSystemSynchronizedRootGroup` 文件夹同步（不是逐文件 reference）：每个 target `fileSystemSynchronizedGroups` 指一个源文件夹，整夹自动入编译。改它**不要手撸 UUID**。
+- 可靠手段：`xcodeproj` Ruby gem（`gem install xcodeproj --user-install`，1.27.0 支持 v77 + 同步组）。**系统 ruby 2.6 必须强制 UTF-8**：`LANG/LC_ALL=en_US.UTF-8 RUBYOPT="-Eutf-8" GEM_HOME=~/.gem/ruby/2.6.0`，否则读 pbxproj 中文 INFOPLIST 键报 `invalid byte sequence in US-ASCII`。
+- gem 坑：`PBXNativeTarget`/同步组的 to-many 关系（`file_system_synchronized_groups`、`exceptions`）**无 `=` setter，用 `<<`**；`proj.new(PBXNativeTarget)` **不自动建 `build_configuration_list`**，要手建 `XCConfigurationList`+Debug/Release `XCBuildConfiguration`。
+- 跨 target 共享单个文件（非整夹）：建普通 `PBXFileReference`（`source_tree=SOURCE_ROOT`，path 指 v1 文件夹内文件）+ `PBXBuildFile` 塞进目标 target 的 Sources phase——与同步组并存合法。
+- 安全流程（已验证零破坏）：改前 `cp project.pbxproj project.pbxproj.bak-<UTC>`；先 no-op open+save round-trip（churn 仅补空 `exceptions=()`/删空 `packageProductDependencies=()`，无害）+ 临时副本跑脚本 dry-run；落真工程后立即 `xcodebuild -list` + 老 macOS/iOS target 复测 BUILD SUCCEEDED 再继续。**注：临时副本因 SOURCE_ROOT 错位不能直接 build 验源码，只验结构；源码编译验证在真工程原地做。**
 - `docs/` 参考文档（`api-contract.md` / `deployment.md`）。`deploy/` systemd + nginx 示例。`scripts/deploy-api.sh` 部署脚本。
 
 ## 构建 & 测试
