@@ -7,10 +7,24 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		006EE82203EA20BFD766AED4 /* SecureTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 988830AEFB53ACDEFFA4DC03 /* SecureTokenStore.swift */; };
+		5161795146F4501FEDB29992 /* LinoFinanceV2Widgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 4AC098380468320F19EB2E2D /* LinoFinanceV2Widgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		540C6547DE3CF47347AA1C9A /* Formatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 749E1D7750E3877EFACCF948 /* Formatters.swift */; };
+		71609AF8A3EDE8666E187AC5 /* FinanceRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0BD393FA536EA34FD7CEDA2 /* FinanceRepository.swift */; };
+		9A3806DAA61BD371BB5FE0F1 /* APIRequests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 112F0BFE6CCABBA4A01723D3 /* APIRequests.swift */; };
 		A20000000000000000000012 /* LinoFinanceWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A30000000000000000000001 /* LinoFinanceWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C865D7B5B7B28A5C3E437778 /* LinoAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FFF53905D7F95F6C59D64A /* LinoAPIClient.swift */; };
+		DA0BB764578E4E966BE74CE0 /* APIDTOs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CBB33142F2B82AABF2BBFC5 /* APIDTOs.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		9F7805DCD8520204054CA6C5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000000000000000000009 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3DECA756E79E93B0B98A07A7;
+			remoteInfo = LinoFinanceV2Widgets;
+		};
 		A20000000000000000000011 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = A10000000000000000000009 /* Project object */;
@@ -32,15 +46,41 @@
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		FA738163AAF8008CFD43C59C /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				5161795146F4501FEDB29992 /* LinoFinanceV2Widgets.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		09FFF53905D7F95F6C59D64A /* LinoAPIClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LinoFinance/Core/Services/LinoAPIClient.swift; sourceTree = SOURCE_ROOT; };
+		112F0BFE6CCABBA4A01723D3 /* APIRequests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LinoFinance/Core/Models/APIRequests.swift; sourceTree = SOURCE_ROOT; };
+		4AC098380468320F19EB2E2D /* LinoFinanceV2Widgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LinoFinanceV2Widgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		5CBB33142F2B82AABF2BBFC5 /* APIDTOs.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LinoFinance/Core/Models/APIDTOs.swift; sourceTree = SOURCE_ROOT; };
+		749E1D7750E3877EFACCF948 /* Formatters.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LinoFinance/Core/Utilities/Formatters.swift; sourceTree = SOURCE_ROOT; };
+		988830AEFB53ACDEFFA4DC03 /* SecureTokenStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LinoFinance/Core/Services/SecureTokenStore.swift; sourceTree = SOURCE_ROOT; };
+		A08B9A715C3881314BD11238 /* LinoF2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LinoF2.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000001 /* LinoF.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LinoF.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000001 /* LinoF.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LinoF.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A30000000000000000000001 /* LinoFinanceWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LinoFinanceWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		F0BD393FA536EA34FD7CEDA2 /* FinanceRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LinoFinance/Core/Repositories/FinanceRepository.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		9E232A1052F94E6BC4A3E023 /* Exceptions for "LinoFinanceV2Widgets" folder in "LinoFinanceV2Widgets" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 3DECA756E79E93B0B98A07A7 /* LinoFinanceV2Widgets */;
+		};
 		A30000000000000000000014 /* Exceptions for "LinoFinanceWidgets" folder in "LinoFinanceWidgets" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -51,8 +91,25 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		275FB34B251E211223E677BF /* LinoFinanceV2 */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			path = LinoFinanceV2;
+			sourceTree = "<group>";
+		};
+		70B4953FF3A1BF654F46AABC /* LinoFinanceV2Widgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				9E232A1052F94E6BC4A3E023 /* Exceptions for "LinoFinanceV2Widgets" folder in "LinoFinanceV2Widgets" target */,
+			);
+			path = LinoFinanceV2Widgets;
+			sourceTree = "<group>";
+		};
 		A10000000000000000000002 /* LinoFinance */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = LinoFinance;
 			sourceTree = "<group>";
 		};
@@ -67,6 +124,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		348DC8E07B018DDC1C0A7C46 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A10000000000000000000003 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -88,15 +152,38 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AC2844E40ABC0E591F9F424A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		94E6BAC66DB4636AB0A8AA8C /* SharedCore */ = {
+			isa = PBXGroup;
+			children = (
+				09FFF53905D7F95F6C59D64A /* LinoAPIClient.swift */,
+				988830AEFB53ACDEFFA4DC03 /* SecureTokenStore.swift */,
+				5CBB33142F2B82AABF2BBFC5 /* APIDTOs.swift */,
+				112F0BFE6CCABBA4A01723D3 /* APIRequests.swift */,
+				F0BD393FA536EA34FD7CEDA2 /* FinanceRepository.swift */,
+				749E1D7750E3877EFACCF948 /* Formatters.swift */,
+			);
+			name = SharedCore;
+			sourceTree = "<group>";
+		};
 		A10000000000000000000004 = {
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000002 /* LinoFinance */,
 				A30000000000000000000002 /* LinoFinanceWidgets */,
 				A10000000000000000000005 /* Products */,
+				275FB34B251E211223E677BF /* LinoFinanceV2 */,
+				70B4953FF3A1BF654F46AABC /* LinoFinanceV2Widgets */,
+				94E6BAC66DB4636AB0A8AA8C /* SharedCore */,
 			);
 			sourceTree = "<group>";
 		};
@@ -106,6 +193,8 @@
 				A10000000000000000000001 /* LinoF.app */,
 				A20000000000000000000001 /* LinoF.app */,
 				A30000000000000000000001 /* LinoFinanceWidgets.appex */,
+				A08B9A715C3881314BD11238 /* LinoF2.app */,
+				4AC098380468320F19EB2E2D /* LinoFinanceV2Widgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -113,6 +202,48 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		3697A3F2D5753467D05ED0F4 /* LinoFinanceV2 */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1341B59DDCD98C8114B0F7C5 /* Build configuration list for PBXNativeTarget "LinoFinanceV2" */;
+			buildPhases = (
+				4E09955E69A31589865053A9 /* Sources */,
+				348DC8E07B018DDC1C0A7C46 /* Frameworks */,
+				51FCEC8125133097DAB7B188 /* Resources */,
+				FA738163AAF8008CFD43C59C /* Embed App Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B95F18D71376D88DAA7C1346 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				275FB34B251E211223E677BF /* LinoFinanceV2 */,
+			);
+			name = LinoFinanceV2;
+			productName = LinoF2;
+			productReference = A08B9A715C3881314BD11238 /* LinoF2.app */;
+			productType = "com.apple.product-type.application";
+		};
+		3DECA756E79E93B0B98A07A7 /* LinoFinanceV2Widgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 11CCE6B779EDC1388DFB3311 /* Build configuration list for PBXNativeTarget "LinoFinanceV2Widgets" */;
+			buildPhases = (
+				A4A42CE7165E2AAF4CE902A5 /* Sources */,
+				AC2844E40ABC0E591F9F424A /* Frameworks */,
+				D897923C4608AC13CA9F168B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				70B4953FF3A1BF654F46AABC /* LinoFinanceV2Widgets */,
+			);
+			name = LinoFinanceV2Widgets;
+			productName = LinoFinanceV2Widgets;
+			productReference = 4AC098380468320F19EB2E2D /* LinoFinanceV2Widgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		A10000000000000000000006 /* LinoFinance */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = A10000000000000000000013 /* Build configuration list for PBXNativeTarget "LinoFinance" */;
@@ -129,8 +260,6 @@
 				A10000000000000000000002 /* LinoFinance */,
 			);
 			name = LinoFinance;
-			packageProductDependencies = (
-			);
 			productName = LinoF;
 			productReference = A10000000000000000000001 /* LinoF.app */;
 			productType = "com.apple.product-type.application";
@@ -153,8 +282,6 @@
 				A10000000000000000000002 /* LinoFinance */,
 			);
 			name = LinoFinanceiOS;
-			packageProductDependencies = (
-			);
 			productName = LinoF;
 			productReference = A20000000000000000000001 /* LinoF.app */;
 			productType = "com.apple.product-type.application";
@@ -175,8 +302,6 @@
 				A30000000000000000000002 /* LinoFinanceWidgets */,
 			);
 			name = LinoFinanceWidgets;
-			packageProductDependencies = (
-			);
 			productName = LinoFinanceWidgets;
 			productReference = A30000000000000000000001 /* LinoFinanceWidgets.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -191,6 +316,12 @@
 				LastSwiftUpdateCheck = 2640;
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
+					3697A3F2D5753467D05ED0F4 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					3DECA756E79E93B0B98A07A7 = {
+						CreatedOnToolsVersion = 26.5;
+					};
 					A10000000000000000000006 = {
 						CreatedOnToolsVersion = 26.4.1;
 					};
@@ -220,11 +351,20 @@
 				A10000000000000000000006 /* LinoFinance */,
 				A20000000000000000000006 /* LinoFinanceiOS */,
 				A30000000000000000000006 /* LinoFinanceWidgets */,
+				3697A3F2D5753467D05ED0F4 /* LinoFinanceV2 */,
+				3DECA756E79E93B0B98A07A7 /* LinoFinanceV2Widgets */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		51FCEC8125133097DAB7B188 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A10000000000000000000008 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -246,9 +386,29 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D897923C4608AC13CA9F168B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		4E09955E69A31589865053A9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C865D7B5B7B28A5C3E437778 /* LinoAPIClient.swift in Sources */,
+				006EE82203EA20BFD766AED4 /* SecureTokenStore.swift in Sources */,
+				DA0BB764578E4E966BE74CE0 /* APIDTOs.swift in Sources */,
+				9A3806DAA61BD371BB5FE0F1 /* APIRequests.swift in Sources */,
+				71609AF8A3EDE8666E187AC5 /* FinanceRepository.swift in Sources */,
+				540C6547DE3CF47347AA1C9A /* Formatters.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A10000000000000000000007 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -270,6 +430,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A4A42CE7165E2AAF4CE902A5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -278,9 +445,59 @@
 			target = A30000000000000000000006 /* LinoFinanceWidgets */;
 			targetProxy = A20000000000000000000011 /* PBXContainerItemProxy */;
 		};
+		B95F18D71376D88DAA7C1346 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = LinoFinanceV2Widgets;
+			target = 3DECA756E79E93B0B98A07A7 /* LinoFinanceV2Widgets */;
+			targetProxy = 9F7805DCD8520204054CA6C5 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		30483982C6911A83A71744B5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = LinoFinanceV2Widgets/LinoFinanceV2Widgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2.0.0;
+				DEVELOPMENT_TEAM = HX73DFL88G;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LinoFinanceV2Widgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				"LD_RUNPATH_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 2.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lino.linofinance.v2.widgets;
+				PRODUCT_NAME = LinoFinanceV2Widgets;
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
 		A1000000000000000000000A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -607,9 +824,167 @@
 			};
 			name = Release;
 		};
+		B48D2FB76D9149FE3CC7D316 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = LinoFinanceV2Widgets/LinoFinanceV2Widgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2.0.0;
+				DEVELOPMENT_TEAM = HX73DFL88G;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LinoFinanceV2Widgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				"LD_RUNPATH_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 2.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lino.linofinance.v2.widgets;
+				PRODUCT_NAME = LinoFinanceV2Widgets;
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		EE0002BC870F706650DA098A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = LinoFinanceV2/LinoFinanceV2.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2.0.0;
+				DEVELOPMENT_TEAM = HX73DFL88G;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = LinoF2;
+				INFOPLIST_KEY_CFBundleName = LinoF2;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Lino";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDefault;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				"LD_RUNPATH_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 2.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lino.linofinance.v2;
+				PRODUCT_NAME = LinoF2;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		F9676512C95FF15A3A8F1277 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = LinoFinanceV2/LinoFinanceV2.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2.0.0;
+				DEVELOPMENT_TEAM = HX73DFL88G;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = LinoF2;
+				INFOPLIST_KEY_CFBundleName = LinoF2;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Lino";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDefault;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				"LD_RUNPATH_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 2.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lino.linofinance.v2;
+				PRODUCT_NAME = LinoF2;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		11CCE6B779EDC1388DFB3311 /* Build configuration list for PBXNativeTarget "LinoFinanceV2Widgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				30483982C6911A83A71744B5 /* Debug */,
+				B48D2FB76D9149FE3CC7D316 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1341B59DDCD98C8114B0F7C5 /* Build configuration list for PBXNativeTarget "LinoFinanceV2" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EE0002BC870F706650DA098A /* Debug */,
+				F9676512C95FF15A3A8F1277 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		A10000000000000000000012 /* Build configuration list for PBXProject "LinoFinance" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
