@@ -2,14 +2,15 @@ import SwiftUI
 
 #if os(macOS)
 
-// LedgerScreen — D5 流水 (macOS, liquid glass). Replaces the P2 stub.
+// LedgerScreen — D5 流水 (macOS, liquid glass). Row design matches the comp:
+// a FLAT list (one glass card, hairline rows — no day-group headers / daily
+// summary), each row = colored category tile + title + inline badges
+// (可报销 / 转账 / 已作废) + 分类·账户 subtitle, with the date + signed amount +
+// 删除 chip on the right.
 //
-// Lists entries grouped by day. Five filters: 全部 / 支出 / 收入 / 转账 / 已作废
-// (voided hidden by default; the first four show only non-voided). Top search
-// box runs `GET /search` (entries) and also falls back to a local title/note
-// match. Each day header shows a 支出/收入 小汇总 (CNY 折算, only confirmed).
-// 作废 action文案 = 删除; the confirm弹窗写明可在「已作废」找回. No draft, no
-// confirm flow (v1.4.0 口径).
+// Five filters: 全部 / 支出 / 收入 / 转账 / 已作废 (voided hidden by default). Top
+// search runs GET /search with a local title/note fallback. 删除 = void (直接作废,
+// 无原生二次确认; 可在「已作废」过滤中找回). No draft, no confirm flow.
 //
 // Contract: `init(model: AppModel)`; owns its own @StateObject LedgerModel.
 
@@ -102,60 +103,27 @@ struct LedgerScreen: View {
                     .foregroundStyle(Theme.Color.textPrimary)
                 Spacer(minLength: 8)
                 Button { ledgerModel.actionError = nil } label: { Image(systemName: "xmark") }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.plain)
             }
             .padding(12)
             .glassPanel(cornerRadius: Theme.Radius.button, tint: Theme.Color.expense)
         }
     }
 
-    // MARK: - Content
+    // MARK: - Content (flat list, one glass card)
 
     @ViewBuilder
     private var content: some View {
-        let groups = groupedEntries
+        let rows = sortedEntries
         if ledgerModel.entries.isEmpty {
             emptyState(title: "还没有记录", message: "用「记一笔」添加第一条记账，这里就会显示流水。")
-        } else if groups.isEmpty {
+        } else if rows.isEmpty {
             emptyState(title: "当前过滤下没有记录", message: "换一个过滤条件或清空搜索。")
         } else {
-            VStack(alignment: .leading, spacing: 16) {
-                ForEach(groups) { group in
-                    dayCard(group)
-                }
-            }
-        }
-    }
-
-    private func dayCard(_ group: DayGroup) -> some View {
-        let totals = ledgerModel.dailyTotals(group.entries)
-        return GlassCard {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 10) {
-                    Text(group.title)
-                        .font(Theme.Font.subtitle(.semibold))
-                        .foregroundStyle(Theme.Color.textPrimary)
-                    Spacer()
-                    if totals.expense > 0 || totals.income > 0 {
-                        HStack(spacing: 10) {
-                            if totals.expense > 0 {
-                                Text("支出 \(cny(totals.expense))")
-                                    .foregroundStyle(Theme.Color.expense)
-                            }
-                            if totals.income > 0 {
-                                Text("收入 \(cny(totals.income))")
-                                    .foregroundStyle(Theme.Color.income)
-                            }
-                        }
-                        .font(Theme.Font.badge(.semibold).monospacedDigit())
-                    }
-                    Text("\(group.entries.count) 条")
-                        .font(Theme.Font.badge().monospacedDigit())
-                        .foregroundStyle(Theme.Color.textTertiary)
-                }
+            GlassCard(padding: 6) {
                 VStack(spacing: 0) {
-                    ForEach(Array(group.entries.enumerated()), id: \.element.id) { index, entry in
-                        if index > 0 { Divider().overlay(Theme.Color.divider) }
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, entry in
+                        if index > 0 { Divider().overlay(Theme.Color.divider).padding(.horizontal, 12) }
                         EntryRow(
                             entry: entry,
                             kind: ledgerModel.kind(of: entry),
@@ -165,23 +133,18 @@ struct LedgerScreen: View {
                                 Task { await ledgerModel.voidEntry(entry.id) }
                             }
                         )
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 11)
                     }
                 }
             }
         }
     }
 
-    private func cny(_ value: Decimal) -> String {
-        "¥" + (Self.groupingFormatter.string(from: NSDecimalNumber(decimal: value)) ?? "\(value)")
-    }
+    // MARK: - Filtering (flat, sorted by date desc)
 
-    // MARK: - Grouping + filtering
-
-    private struct DayGroup: Identifiable {
-        let id: TimeInterval
-        let title: String
-        let entries: [EntryDTO]
+    private var sortedEntries: [EntryDTO] {
+        filteredEntries.sorted { $0.date > $1.date }
     }
 
     private var filteredEntries: [EntryDTO] {
@@ -205,25 +168,6 @@ struct LedgerScreen: View {
             return entry.title.localizedCaseInsensitiveContains(trimmed)
                 || (entry.note?.localizedCaseInsensitiveContains(trimmed) ?? false)
         }
-    }
-
-    private var groupedEntries: [DayGroup] {
-        let calendar = Calendar.current
-        let dict = Dictionary(grouping: filteredEntries) { calendar.startOfDay(for: $0.date) }
-        return dict.keys.sorted(by: >).map { day in
-            DayGroup(
-                id: day.timeIntervalSince1970,
-                title: dayLabel(day),
-                entries: (dict[day] ?? []).sorted { $0.date > $1.date }
-            )
-        }
-    }
-
-    private func dayLabel(_ day: Date) -> String {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(day) { return "今日" }
-        if calendar.isDateInYesterday(day) { return "昨天" }
-        return Self.dayFormatter.string(from: day)
     }
 
     // MARK: - States
@@ -267,28 +211,9 @@ struct LedgerScreen: View {
             }
         }
     }
-
-    // MARK: - Formatters
-
-    private static let dayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "M 月 d 日 EEEE"
-        return f
-    }()
-
-    private static let groupingFormatter: NumberFormatter = {
-        let f = NumberFormatter()
-        f.numberStyle = .decimal
-        f.usesGroupingSeparator = true
-        f.minimumFractionDigits = 2
-        f.maximumFractionDigits = 2
-        f.locale = Locale(identifier: "en_US_POSIX")
-        return f
-    }()
 }
 
-// MARK: - Entry row
+// MARK: - Entry row (comp-matched: colored tile + badges + date + amount + chip)
 
 private struct EntryRow: View {
     let entry: EntryDTO
@@ -299,24 +224,25 @@ private struct EntryRow: View {
     let onDelete: (() -> Void)?
 
     private var primaryLine: EntryCategoryLineDTO? { entry.categoryLines.first }
+    private var isVoided: Bool { entry.status == .voided }
+    private var isReimbursable: Bool { entry.categoryLines.contains { $0.reimbursableFlag } }
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: iconSymbol)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(iconTint)
-                .frame(width: 28, height: 28)
-                .background(iconTint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        HStack(spacing: 13) {
+            // Colored category tile (solid rounded square, comp style).
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(tileColor)
+                .frame(width: 38, height: 38)
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(entry.title)
-                        .font(Theme.Font.body(.medium))
-                        .foregroundStyle(Theme.Color.textPrimary)
+                        .font(Theme.Font.body(.semibold))
+                        .foregroundStyle(isVoided ? Theme.Color.textSecondary : Theme.Color.textPrimary)
                         .lineLimit(1)
-                    if entry.status == .voided {
-                        StatusBadge(text: "已作废", tone: .negative)
-                    }
+                    if kind == .transfer { StatusBadge(text: "转账", tone: .neutral) }
+                    if isReimbursable { StatusBadge(text: "可报销", tone: .brand) }
+                    if isVoided { StatusBadge(text: "已作废", tone: .negative) }
                 }
                 Text(subtitle)
                     .font(Theme.Font.caption())
@@ -326,61 +252,102 @@ private struct EntryRow: View {
 
             Spacer(minLength: 8)
 
-            if let primaryLine {
+            Text(dateLabel)
+                .font(Theme.Font.caption().monospacedDigit())
+                .foregroundStyle(Theme.Color.textTertiary)
+
+            if let amountValue {
                 AmountText(
-                    value: signedAmount(primaryLine),
-                    currency: primaryLine.currency,
+                    value: amountValue,
+                    currency: amountCurrency,
                     showsPositiveSign: kind == .income,
                     font: Theme.Font.subtitle(.semibold),
                     color: amountTint
                 )
+                .frame(minWidth: 96, alignment: .trailing)
             }
 
             if let onDelete {
                 // 直接作废，无原生二次确认（数据可在「已作废」过滤中找回）。
-                TintedActionChip(title: "删除", tone: .destructive, action: onDelete)
+                TintedActionChip(title: "删除", tone: .neutral, action: onDelete)
                     .help("作废后可在「已作废」过滤中找回")
             }
         }
-        .opacity(entry.status == .voided ? 0.6 : 1)
+        .opacity(isVoided ? 0.62 : 1)
     }
 
     private func signedAmount(_ line: EntryCategoryLineDTO) -> DecimalValue {
         kind == .expense ? DecimalValue(-line.amount.value) : line.amount
     }
 
+    /// Amount to show: the category line (signed) for expense/income; the movement
+    /// amount (unsigned, neutral) for transfers, which carry no category line.
+    private var amountValue: DecimalValue? {
+        if let line = primaryLine { return signedAmount(line) }
+        if let mv = entry.accountMovements.first { return mv.amount }
+        return nil
+    }
+
+    private var amountCurrency: CurrencyCode {
+        primaryLine?.currency ?? entry.accountMovements.first?.currency ?? .cny
+    }
+
+    /// 分类 · 账户 (comp order).
     private var subtitle: String {
-        let accountPart = account.map { "\($0.name) · " } ?? ""
         let categoryPart = category?.name ?? (kind == .transfer ? "转账" : "未分类")
-        return "\(accountPart)\(categoryPart)"
+        let accountPart = account.map { " · \($0.name)" } ?? ""
+        return "\(categoryPart)\(accountPart)"
     }
 
-    private var iconSymbol: String {
-        if entry.status == .voided { return "xmark.circle" }
-        switch kind {
-        case .income: return "arrow.down.left.circle"
-        case .expense: return "arrow.up.right.circle"
-        case .transfer: return "arrow.left.arrow.right.circle"
-        }
+    private var dateLabel: String {
+        let cal = Calendar.current
+        if cal.isDateInToday(entry.date) { return "今天" }
+        if cal.isDateInYesterday(entry.date) { return "昨天" }
+        return Self.md.string(from: entry.date)
     }
 
-    private var iconTint: Color {
-        if entry.status == .voided { return Theme.Color.textTertiary }
+    /// Solid tile color: voided→gray, transfer→indigo, income→green, expense→a
+    /// stable per-category palette pick (so each category keeps one color).
+    private var tileColor: Color {
+        if isVoided { return Theme.fixed(0x9A9AA0) }
         switch kind {
-        case .income: return Theme.Color.income
-        case .expense: return Theme.Color.expense
-        case .transfer: return Theme.Color.link
+        case .income: return Theme.fixed(0x34C759)
+        case .transfer: return Theme.fixed(0x5B8DEF)
+        case .expense:
+            let key = category?.name ?? entry.title
+            return Self.expensePalette[Self.stableIndex(key, Self.expensePalette.count)]
         }
     }
 
     private var amountTint: Color {
-        if entry.status == .voided { return Theme.Color.textTertiary }
+        if isVoided { return Theme.Color.textTertiary }
         switch kind {
         case .income: return Theme.Color.income
         case .expense: return Theme.Color.expense
         case .transfer: return Theme.Color.textSecondary
         }
     }
+
+    // Soft-vivid expense palette (comp vibe: orange / blue / violet / pink / teal / amber).
+    private static let expensePalette: [Color] = [
+        Theme.fixed(0xFF8A4C), Theme.fixed(0x4C9AFF), Theme.fixed(0x9B7BFF),
+        Theme.fixed(0xFF6F91), Theme.fixed(0x2BB7A6), Theme.fixed(0xF0B429),
+    ]
+
+    /// Deterministic (process-stable) hash → palette index. Swift's String.hashValue
+    /// is per-run randomized, so use a fixed djb2 instead.
+    private static func stableIndex(_ s: String, _ count: Int) -> Int {
+        var h = 5381
+        for b in s.utf8 { h = (h &* 33 &+ Int(b)) & 0x7fffffff }
+        return count > 0 ? h % count : 0
+    }
+
+    private static let md: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "M/d"
+        return f
+    }()
 }
 
 #endif
