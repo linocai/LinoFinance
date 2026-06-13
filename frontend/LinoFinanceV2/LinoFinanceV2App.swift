@@ -124,26 +124,20 @@ private struct IOSAppShell: View {
     @ObservedObject var model: AppModel
 
     var body: some View {
-        // P1 TabBar skeleton retained; real iOS screens land in Px. Overview content
-        // is compiled here too so cross-platform builds stay green.
+        // Px: the core 5 screens are wired (总览 / 账户 / 现金流 / 报表 + 记一笔 via
+        // the raised center button as a full-screen sheet). 「更多」(top-trailing)
+        // reaches the secondary features (流水 real, others placeholder).
         IOSTabScaffold(
-            onAddEntry: {},
-            overview: { OverviewView(model: model) },
-            accounts: { iOSPlaceholder("账户") },
-            cashFlow: { iOSPlaceholder("现金流") },
-            reports: { iOSPlaceholder("报表") }
+            onAddEntry: { model.isAddEntryPresented = true },
+            overview: { OverviewIOSView(model: model) },
+            accounts: { AccountsIOSView(model: model) },
+            cashFlow: { CashFlowIOSView(model: model) },
+            reports: { ReportsIOSView(model: model) },
+            more: { MoreIOSView(model: model) }
         )
-    }
-
-    private func iOSPlaceholder(_ title: String) -> some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(title)
-                    .font(Theme.Font.subtitle(.semibold))
-                    .foregroundStyle(Theme.Color.textPrimary)
-                Text("占位 · Px 接真实屏")
-                    .font(Theme.Font.caption())
-                    .foregroundStyle(Theme.Color.textSecondary)
+        .sheet(isPresented: $model.isAddEntryPresented) {
+            AddEntryIOSSheet(model: model) {
+                Task { await model.refreshAll() }
             }
         }
     }

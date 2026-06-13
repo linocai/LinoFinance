@@ -1,8 +1,6 @@
 import Foundation
 import SwiftUI
 
-#if os(macOS)
-
 // ReportsModel — D8 报表 view-model. Loads all 6 reports in parallel; each chart
 // binds to its own DTO (plan §D8). Individual report failures degrade to nil so
 // one bad endpoint doesn't blank the whole page.
@@ -62,5 +60,3 @@ final class ReportsModel: ObservableObject {
         }
     }
 }
-
-#endif

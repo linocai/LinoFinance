@@ -30,7 +30,8 @@ struct DesignSystemShowcaseView: View {
             overview: { gallery },
             accounts: { placeholder("账户") },
             cashFlow: { placeholder("现金流") },
-            reports: { placeholder("报表") }
+            reports: { placeholder("报表") },
+            more: { placeholder("更多") }
         )
         .preferredColorScheme(schemeOverride)
 #endif

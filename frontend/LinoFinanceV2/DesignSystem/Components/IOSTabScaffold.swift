@@ -7,17 +7,20 @@ import SwiftUI
 // No sidebar on iOS. Bottom tab bar = 总览 · 账户 · 〔＋ 记一笔〕· 现金流 · 报表,
 // with the center "记一笔" rendered as a raised indigo/violet rounded button.
 //
-// P1 ships the SKELETON only: tabs render with placeholder content over the bloom
-// background; the raised center button calls `onAddEntry`. Real screens land in Px.
+// Px wires the real iOS screens: tabs render their feature views over the bloom
+// background; the raised center button presents 记一笔 via `onAddEntry`; a top-
+// trailing 「更多」button presents the secondary features (流水 / 报销 / …).
 
-struct IOSTabScaffold<Overview: View, Accounts: View, CashFlow: View, Reports: View>: View {
+struct IOSTabScaffold<Overview: View, Accounts: View, CashFlow: View, Reports: View, More: View>: View {
     var onAddEntry: () -> Void
     @ViewBuilder var overview: () -> Overview
     @ViewBuilder var accounts: () -> Accounts
     @ViewBuilder var cashFlow: () -> CashFlow
     @ViewBuilder var reports: () -> Reports
+    @ViewBuilder var more: () -> More
 
     @State private var selection: Tab = .overview
+    @State private var showMore = false
 
     enum Tab: Hashable { case overview, accounts, cashFlow, reports }
 
@@ -34,7 +37,28 @@ struct IOSTabScaffold<Overview: View, Accounts: View, CashFlow: View, Reports: V
                 }
             }
 
+            moreButton
             tabBar
+        }
+        .sheet(isPresented: $showMore) { more() }
+    }
+
+    private var moreButton: some View {
+        VStack {
+            HStack {
+                Spacer()
+                Button { showMore = true } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Theme.Color.textPrimary)
+                        .frame(width: 40, height: 40)
+                        .glassPanel(cornerRadius: 12, shadow: Theme.ShadowSpec(color: .black.opacity(0.06), radius: 10, x: 0, y: 4))
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 16)
+                .padding(.top, 8)
+            }
+            Spacer()
         }
     }
 
