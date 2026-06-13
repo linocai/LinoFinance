@@ -115,7 +115,7 @@ private struct MacAppShell: View {
         case .reimbursements: ReimbursementsScreen(model: model)   // P4 (D6)
         case .cycles:        CyclesScreen(model: model)            // P4 (D7)
         case .reports:       ReportsScreen(model: model)           // P4 (D8)
-        case .settings:      PlaceholderScreen(destination: .settings)  // P5
+        case .settings:      SettingsScreen(model: model)              // P5 (D10)
         }
     }
 }
