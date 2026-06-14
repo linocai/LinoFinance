@@ -151,4 +151,22 @@ extension AppModel {
         rebuildClients(token: SecureTokenStore.shared.readEffectiveToken())
         await refreshAll()
     }
+
+    /// Real Apple-session logout: tell the backend, clear the session keychain
+    /// slot, then rebuild around whatever remains (an admin token, or nil).
+    func logoutSession() async throws {
+        try await apiClient.logout()
+        try? SecureTokenStore.shared.clear(kind: .session)
+        rebuildClients(token: SecureTokenStore.shared.readEffectiveToken())
+        await refreshAll()
+    }
+
+    /// Clear the local admin-token bypass. Admin tokens are an env/ops escape
+    /// hatch the backend refuses to "log out" (400) — clearing them is purely a
+    /// local keychain operation, no backend call.
+    func clearAdminToken() async {
+        try? SecureTokenStore.shared.clear(kind: .admin)
+        rebuildClients(token: SecureTokenStore.shared.readEffectiveToken())
+        await refreshAll()
+    }
 }

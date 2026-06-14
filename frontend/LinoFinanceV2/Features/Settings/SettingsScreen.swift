@@ -528,7 +528,7 @@ private struct AuthCard: View {
                         HStack {
                             Spacer()
                             TintedActionChip(title: "退出登录", tone: .destructive) {
-                                Task { await settings.logout() }
+                                Task { try? await model.logoutSession(); await settings.loadAuth() }
                             }
                         }
                     } else {
@@ -536,6 +536,21 @@ private struct AuthCard: View {
                         // the session keychain slot + rebuilds clients via AppModel)
                         // plus the admin-token bypass, kept in parallel.
                         Divider().overlay(Theme.Color.divider)
+                        if settings.isAdminBypass {
+                            // Admin env-token is active but there's no Apple session.
+                            // Offer Sign in with Apple directly (no need to "log out"
+                            // the admin token — the backend refuses that), plus a
+                            // local-only 清除 for the bypass token.
+                            HStack(spacing: 8) {
+                                Text("当前为管理员令牌旁路。可直接用 Apple 登录，或清除该令牌。")
+                                    .font(Theme.Font.caption())
+                                    .foregroundStyle(Theme.Color.textTertiary)
+                                Spacer(minLength: 8)
+                                TintedActionChip(title: "清除令牌", tone: .neutral) {
+                                    Task { await model.clearAdminToken(); await settings.loadAuth() }
+                                }
+                            }
+                        }
                         SignInWithAppleView(model: model) {
                             Task { await settings.loadAuth() }
                         }

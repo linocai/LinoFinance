@@ -248,7 +248,12 @@ final class SettingsModel: ObservableObject {
         return "在 Py 阶段接入 Apple 登录"
     }
 
-    var isLoggedIn: Bool { me?.user != nil || me?.admin == true }
+    /// A real Apple session (NOT the admin-token env bypass). The admin bypass is
+    /// deliberately excluded so the card offers Sign in with Apple instead of a
+    /// 退出登录 that the backend refuses for admin tokens (400 "cannot log out").
+    var isLoggedIn: Bool { me?.user != nil }
+    /// Admin-token escape hatch is active but there is no real Apple session.
+    var isAdminBypass: Bool { me?.admin == true && me?.user == nil }
 
     func revoke(_ id: String) async {
         do {
