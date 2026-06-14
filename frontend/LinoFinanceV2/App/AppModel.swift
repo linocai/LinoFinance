@@ -26,6 +26,13 @@ final class AppModel: ObservableObject {
     @Published private(set) var categories: [CategoryDTO] = []
     @Published private(set) var rates: [CurrencyRateDTO] = []
 
+    // Py (platform integration): the MenuBarExtra popover + widget snapshot writer
+    // need the credit cycles + AI plans too, so they're cached here. Loaded by
+    // `refreshAll()` alongside the rest. Additive — the P2 Overview/AddEntry slice
+    // never touched these.
+    @Published private(set) var cycles: [CreditStatementCycleDTO] = []
+    @Published private(set) var aiPlans: [AIPlanDTO] = []
+
     /// Dashboard load lifecycle, so the Overview can show loading / error states
     /// (never silently blank).
     enum LoadState: Equatable {
@@ -45,9 +52,12 @@ final class AppModel: ObservableObject {
     // MARK: - Networking
 
     let baseURL: URL
-    private let token: String?
-    let apiClient: LinoAPIClient
-    let repository: FinanceRepository
+    private var token: String?
+    // `var` (was `let`): Sign in with Apple / admin-token save (Py) rebuilds these
+    // around the new session token. The P2 slice never re-auth'd, so they were
+    // effectively constant; nothing else mutates them.
+    private(set) var apiClient: LinoAPIClient
+    private(set) var repository: FinanceRepository
 
     init() {
         let resolvedURL = AppModel.resolveBaseURL()
@@ -60,6 +70,14 @@ final class AppModel: ObservableObject {
 
     var baseURLDescription: String { baseURL.absoluteString }
     var hasToken: Bool { token != nil }
+
+    /// Rebuild the API client + repository around a new auth token (Py: after a
+    /// successful Sign in with Apple or admin-token save). baseURL is unchanged.
+    func rebuildClients(token newToken: String?) {
+        self.token = newToken
+        self.apiClient = LinoAPIClient(baseURL: baseURL, authToken: newToken)
+        self.repository = FinanceRepository(apiClient: LinoAPIClient(baseURL: baseURL, authToken: newToken))
+    }
 
     // MARK: - Loads
 
@@ -91,14 +109,31 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func loadCycles() async {
+        if let result = try? await apiClient.listStatementCycles() {
+            cycles = result
+        }
+    }
+
+    func loadAIPlans() async {
+        if let result = try? await apiClient.listAIPlans() {
+            aiPlans = result
+        }
+    }
+
     /// Pull everything the Add Entry form needs (accounts + categories + rates)
-    /// plus the dashboard, in parallel.
+    /// plus the dashboard, the credit cycles + AI plans (for the menu bar / widget
+    /// snapshot), in parallel. On completion it pushes a fresh widget snapshot to
+    /// the shared App Group so the widget reflects the latest data.
     func refreshAll() async {
         async let d: Void = loadDashboard()
         async let a: Void = loadAccounts()
         async let c: Void = loadCategories()
         async let r: Void = loadRates()
-        _ = await (d, a, c, r)
+        async let cy: Void = loadCycles()
+        async let ai: Void = loadAIPlans()
+        _ = await (d, a, c, r, cy, ai)
+        writeWidgetSnapshot()
     }
 
     // MARK: - Mutations
@@ -119,7 +154,10 @@ final class AppModel: ObservableObject {
 
     // MARK: - baseURL resolution (v1 + P0 chain)
 
-    static func resolveBaseURL() -> URL {
+    // `nonisolated`: pure static helper reading ProcessInfo / UserDefaults / Bundle
+    // (no actor state), so App Intents — which run off the main actor — can resolve
+    // the base URL without hopping to the main actor.
+    nonisolated static func resolveBaseURL() -> URL {
         let env = ProcessInfo.processInfo.environment
         if let value = env["LINOFINANCE_API_BASE_URL"], let url = URL(string: value) {
             return url

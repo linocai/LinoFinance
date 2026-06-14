@@ -18,6 +18,12 @@ struct LinoFinanceV2App: App {
     @StateObject private var model = AppModel()
     @StateObject private var probe = APIReachabilityProbe()
 
+    #if os(iOS)
+    // Py ③ — the app delegate bridges the APNs registration callbacks to
+    // NotificationCenter; IOSAppShell consumes them and registers the device.
+    @UIApplicationDelegateAdaptor(LinoAppDelegate.self) private var appDelegate
+    #endif
+
     #if DEBUG && os(macOS)
     @State private var showShowcase = false
     #endif
@@ -55,6 +61,15 @@ struct LinoFinanceV2App: App {
             }
             #endif
         }
+        #endif
+
+        #if os(macOS)
+        // Py ⑥ — macOS menu-bar quick entry / sync popover (window style so the
+        // custom glass layout renders; `.menu` would break it).
+        MenuBarExtra("LinoF", systemImage: "yensign.circle") {
+            MenuBarPopover(model: model)
+        }
+        .menuBarExtraStyle(.window)
         #endif
     }
 }
@@ -139,6 +154,17 @@ private struct IOSAppShell: View {
             AddEntryIOSSheet(model: model) {
                 Task { await model.refreshAll() }
             }
+        }
+        // Py ③ — APNs registration + deep-link bridge. The delegate posts these;
+        // the shell registers the token with the backend and routes push targets.
+        .onReceive(NotificationCenter.default.publisher(for: .linoDidRegisterForRemoteNotifications)) { notification in
+            guard let token = notification.userInfo?["token"] as? String else { return }
+            Task { await model.registerPushDevice(apnsToken: token) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .linoDidReceivePushTarget)) { notification in
+            let targetType = notification.userInfo?["target_type"] as? String
+            let targetID = notification.userInfo?["target_id"] as? String
+            Task { await model.handlePushNotificationTarget(type: targetType, id: targetID) }
         }
     }
 }

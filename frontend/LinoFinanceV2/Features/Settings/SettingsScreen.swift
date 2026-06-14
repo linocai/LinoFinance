@@ -42,7 +42,7 @@ struct SettingsScreen: View {
                             onNew: { showingNewCategory = true },
                             onEdit: { editingCategory = $0 }
                         )
-                        AuthCard(settings: settings)
+                        AuthCard(settings: settings, model: model)
                         ExportCard(settings: settings)
                     }
                     VStack(spacing: 18) {
@@ -498,6 +498,9 @@ private struct ExportCard: View {
 
 private struct AuthCard: View {
     @ObservedObject var settings: SettingsModel
+    @ObservedObject var model: AppModel
+    @State private var showingAdminEntry = false
+    @State private var adminToken = ""
 
     var body: some View {
         SettingsCard(title: "登录与设备", systemImage: "person.crop.circle") {
@@ -529,10 +532,40 @@ private struct AuthCard: View {
                             }
                         }
                     } else {
-                        // Apple 登录按钮属 Py (entitlements 未办) — 占位说明.
-                        Text("在 Py 阶段接入 Apple 登录")
-                            .font(Theme.Font.caption())
-                            .foregroundStyle(Theme.Color.textTertiary)
+                        // Py ② — real Sign in with Apple button (login persists to
+                        // the session keychain slot + rebuilds clients via AppModel)
+                        // plus the admin-token bypass, kept in parallel.
+                        Divider().overlay(Theme.Color.divider)
+                        SignInWithAppleView(model: model) {
+                            Task { await settings.loadAuth() }
+                        }
+                        DisclosureGroup(isExpanded: $showingAdminEntry) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("仅在使用 LINOFINANCE_API_AUTH_TOKEN 直连后端时填写。")
+                                    .font(Theme.Font.caption())
+                                    .foregroundStyle(Theme.Color.textTertiary)
+                                SecureField("Admin Token", text: $adminToken)
+                                    .textFieldStyle(.roundedBorder)
+                                    .autocorrectionDisabled()
+                                HStack {
+                                    Spacer()
+                                    TintedActionChip(title: "保存", tone: .neutral) {
+                                        let token = adminToken
+                                        adminToken = ""
+                                        Task {
+                                            try? await model.saveAdminToken(token)
+                                            await settings.loadAuth()
+                                        }
+                                    }
+                                    .disabled(adminToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                }
+                            }
+                            .padding(.top, 4)
+                        } label: {
+                            Text("高级设置 / 管理员 Token")
+                                .font(Theme.Font.caption(.medium))
+                                .foregroundStyle(Theme.Color.textSecondary)
+                        }
                     }
                 }
             }
