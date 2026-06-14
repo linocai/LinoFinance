@@ -41,6 +41,10 @@ xcodebuild -project frontend/LinoFinance.xcodeproj -scheme LinoFinance \
   -derivedDataPath frontend/.derivedData build
 # iOS 验证（确认模拟器 runtime 可用，历史上本机一度只有不可用的 iPhone Air iOS 26.4）：
 #   -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.4.1'
+# v2 target（LinoFinanceV2/LinoF2）自 Py 批次1 起 entitlements 含 App Group/aps/SIWA：
+#   本地构建必须加 CODE_SIGNING_ALLOWED=NO（三 capability 须开发者后台为 .v2* id 注册
+#   才能签名；注册前签名会失败）。模拟器 build 本就不签名、可不加。老三 target 正常签名。
+#   xcodebuild ... -scheme LinoFinanceV2 -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
 ```
 
 ## 前端铁律
@@ -73,6 +77,7 @@ xcodebuild -project frontend/LinoFinance.xcodeproj -scheme LinoFinance \
 - 部署前 `scripts/deploy-api.sh --dry-run` 必须干净。**live 部署 / tag / push 由用户手动**。
 - **macOS 装机路径是 `/Applications/LinoF.app`**（历史 v1.1.5/6 plan 一度误写 `/Users/linotsai/Applications/...`，别再犯）。换包前旧 bundle 备份成 `LinoF.app.bak-<UTC>`。拷 `.app` 用 `ditto` 不用 `cp -R`。
 - 付费 Apple 团队 Team ID `HX73DFL88G`；改 team 要同步 pbxproj 里 4 处 `DEVELOPMENT_TEAM`。真机签名走 automatic signing。
+- **bundle id 现状（v2.0.0 发布前已切正式，commit `b1abcf9`）**：v2 app = `com.lino.linofinance`（统一多平台，顶替线上 v1 macOS 同 id → macOS 原地升级；iOS 上与 v1 的 `com.lino.linofinance.ios` 不同 id → 是新 app）；v2 widget = `com.lino.linofinance.widgets`；App Group 已切 `group.com.lino.linofinance`（entitlements + `V2WidgetSnapshot`/`WidgetsBundle` 常量）。老 macOS target 让出 `com.lino.linofinance` → `com.lino.linofinance.legacy`（备查不下线）；老 iOS（`.ios`/`.ios.widgets`）不动。`aps-environment` 暂留 development（Archive 分发时翻 production）。**正式 id 的 App Group/SIWA/Push capability 须用户在开发者后台注册才能签名**（注册前 v2 构建须 `CODE_SIGNING_ALLOWED=NO`）。
 - 版本号源（发版统一改）：`backend/pyproject.toml`、`backend/app/core/config.py` 的 `app_version`、`scripts/deploy-api.sh` 的 `EXPECTED_VERSION`、pbxproj 里 12 处 `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION`。
 - 范围铁律：只动 LinoFinance，不碰 hz 上的 LA / Qbot / 主页 / 100j。
 
