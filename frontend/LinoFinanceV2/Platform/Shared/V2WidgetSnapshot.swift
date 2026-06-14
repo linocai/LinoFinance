@@ -10,7 +10,7 @@ import WidgetKit
 // Group read/write mechanism are reused, but the writer reads v2's `AppModel`
 // (DTOs) instead of v1's `AppEnvironment`/ViewModels.
 //
-// App Group id is `group.com.lino.linofinance.v2` (Py development id; Pz switches
+// App Group id is `group.com.lino.linofinance` (Py development id; Pz switches
 // it back to `group.com.lino.linofinance` alongside the bundle id + aps env).
 // The id lives in ONE constant (`V2WidgetSharing.appGroupID`) so the app side and
 // the widget side reference the same string; the widget target — compiled
@@ -18,7 +18,7 @@ import WidgetKit
 // sanctions "widget 内复制" for the separately-compiled extension).
 
 enum V2WidgetSharing {
-    static let appGroupID = "group.com.lino.linofinance.v2"
+    static let appGroupID = "group.com.lino.linofinance"
     static let snapshotKey = "linofinance.widget.snapshot"
 }
 

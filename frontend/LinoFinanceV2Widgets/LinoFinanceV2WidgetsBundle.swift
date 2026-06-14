@@ -5,7 +5,7 @@ import WidgetKit
 //
 // Replaces the P0 placeholder with the three v1 widgets (net worth / credit due /
 // AI plans), reading the SAME `WidgetSnapshot` shape from the shared App Group
-// `group.com.lino.linofinance.v2` that the v2 app writes after each refresh.
+// `group.com.lino.linofinance` that the v2 app writes after each refresh.
 // Appearance is reworked toward the v2 liquid-glass tone: the widget render
 // environment does not support the app's full `.glassEffect`, so we approximate
 // with a soft indigo→violet gradient `containerBackground` (decision E only asks
@@ -15,7 +15,7 @@ import WidgetKit
 // `V2WidgetSharing` — the widget target compiles separately from the app, so it
 // cannot link the app-side constant; the plan sanctions this copy.
 
-private let appGroupID = "group.com.lino.linofinance.v2"
+private let appGroupID = "group.com.lino.linofinance"
 private let snapshotKey = "linofinance.widget.snapshot"
 
 // MARK: - Snapshot (verbatim shape copy of V2WidgetSnapshot)
