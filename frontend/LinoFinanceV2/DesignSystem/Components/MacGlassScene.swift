@@ -18,6 +18,8 @@ import SwiftUI
 struct MacGlassScene<Content: View>: View {
     @Binding var selection: SidebarDestination
     var onAddEntry: () -> Void
+    var accountSubtitle: String = "未登录"
+    var accountLoggedIn: Bool = false
     @ViewBuilder var content: () -> Content
 
     /// Content left inset so the full-width content clears the floating sidebar.
@@ -36,7 +38,12 @@ struct MacGlassScene<Content: View>: View {
             }
         }
         .overlay(alignment: .leading) {
-            FloatingSidebar(selection: $selection, onAddEntry: onAddEntry)
+            FloatingSidebar(
+                selection: $selection,
+                onAddEntry: onAddEntry,
+                accountSubtitle: accountSubtitle,
+                accountLoggedIn: accountLoggedIn
+            )
                 .padding(.leading, 14)
                 .frame(maxHeight: .infinity, alignment: .center)
         }

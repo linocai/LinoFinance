@@ -59,6 +59,13 @@ final class AppModel: ObservableObject {
     private(set) var apiClient: LinoAPIClient
     private(set) var repository: FinanceRepository
 
+    /// Bumped every time the API client is rebuilt around a new token (login /
+    /// logout / admin-token change). Screens use it as a `.id(...)` so their
+    /// `@StateObject` feature-models — which each captured a *value-type copy* of
+    /// the old token-less `LinoAPIClient` — are recreated against the fresh client.
+    /// Without this, logging in leaves every section still holding a 401 client.
+    @Published private(set) var authVersion = 0
+
     init() {
         let resolvedURL = AppModel.resolveBaseURL()
         let resolvedToken = SecureTokenStore.shared.readEffectiveToken()
@@ -77,6 +84,8 @@ final class AppModel: ObservableObject {
         self.token = newToken
         self.apiClient = LinoAPIClient(baseURL: baseURL, authToken: newToken)
         self.repository = FinanceRepository(apiClient: LinoAPIClient(baseURL: baseURL, authToken: newToken))
+        // Force screens (+ their captured stale client copies) to rebuild.
+        self.authVersion += 1
     }
 
     // MARK: - Loads

@@ -126,6 +126,18 @@ final class SettingsModel: ObservableObject {
             // Sessions may 404/403 for an admin-token bypass — degrade gracefully.
             sessions = (try? await sessionsResult) ?? []
             authState = .loaded
+        } catch let error as APIError {
+            // A 401 means "not authenticated" — that's the NORMAL pre-login state,
+            // not a failure. Surface it as logged-out (me=nil) so the card shows the
+            // Sign in with Apple button instead of an error+retry that locks the
+            // user out of logging in. Other errors are real failures.
+            if case .badStatus(401, _) = error {
+                me = nil
+                sessions = []
+                authState = .loaded
+            } else {
+                authState = .failed(error.localizedDescription)
+            }
         } catch {
             authState = .failed(error.localizedDescription)
         }

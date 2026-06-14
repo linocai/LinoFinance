@@ -17,6 +17,10 @@ import SwiftUI
 struct FloatingSidebar: View {
     @Binding var selection: SidebarDestination
     var onAddEntry: () -> Void
+    /// Honest auth subtitle driven by the shell (was a hardcoded "已通过 Apple 登录"
+    /// that lied when there was no token). Defaults to logged-out.
+    var accountSubtitle: String = "未登录"
+    var accountLoggedIn: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -66,9 +70,9 @@ struct FloatingSidebar: View {
                 Text("Lino")
                     .font(Theme.Font.body(.semibold))
                     .foregroundStyle(Theme.Color.textPrimary)
-                Text("已通过 Apple 登录")
+                Text(accountSubtitle)
                     .font(.system(size: 10.5))
-                    .foregroundStyle(Theme.Color.textTertiary)
+                    .foregroundStyle(accountLoggedIn ? Theme.Color.textTertiary : Theme.Color.expense)
             }
             Spacer(minLength: 0)
         }

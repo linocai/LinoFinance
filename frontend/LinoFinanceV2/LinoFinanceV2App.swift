@@ -95,8 +95,18 @@ private struct MacAppShell: View {
     var body: some View {
         // Nav selection + add-entry presentation live on the model so the menu
         // commands (⌘1–8 / ⌘N) can drive them.
-        MacGlassScene(selection: $model.selection, onAddEntry: { model.isAddEntryPresented = true }) {
+        MacGlassScene(
+            selection: $model.selection,
+            onAddEntry: { model.isAddEntryPresented = true },
+            accountSubtitle: model.hasToken ? "已登录" : "未登录 · 去设置登录",
+            accountLoggedIn: model.hasToken
+        ) {
+            // `.id(authVersion)` recreates the screens — and the @StateObject
+            // feature-models that each captured a value-type copy of the API
+            // client — whenever the token changes (login / logout). Otherwise a
+            // fresh login leaves every section holding its old 401 client.
             content
+                .id(model.authVersion)
         }
         // Tapping any sidebar nav row while the 记一笔 page is up leaves the page
         // and shows the chosen destination (the page is no longer a modal).
@@ -150,6 +160,9 @@ private struct IOSAppShell: View {
             reports: { ReportsIOSView(model: model) },
             more: { MoreIOSView(model: model) }
         )
+        // Recreate the tab screens (+ their captured stale API-client copies)
+        // when the token changes, so logging in actually refreshes every tab.
+        .id(model.authVersion)
         .sheet(isPresented: $model.isAddEntryPresented) {
             AddEntryIOSSheet(model: model) {
                 Task { await model.refreshAll() }
