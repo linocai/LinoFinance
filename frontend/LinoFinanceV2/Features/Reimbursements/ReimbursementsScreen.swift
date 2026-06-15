@@ -360,12 +360,13 @@ private struct ReceiveConfirmSheet: View {
     @State private var errorMessage: String?
 
     private var selectedAccount: AccountDTO? {
-        guard let accountId else { return accounts.first }
+        // 不回退第一个账户:未选即 nil → canSubmit 假 → 强制用户显式选并看见钱进哪(A4/T3 核心修复)
+        guard let accountId else { return nil }
         return accounts.first { $0.id == accountId }
     }
 
     private var selectedCategory: CategoryDTO? {
-        guard let categoryId else { return categories.first }
+        guard let categoryId else { return nil }
         return categories.first { $0.id == categoryId }
     }
 

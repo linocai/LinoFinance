@@ -172,7 +172,7 @@ struct ReimbursementClaimCreateRequest: Encodable {
     var convertedCnyAmount: DecimalValue?
     var payer = "company"
     var expectedDate: Date
-    var status = "reimbursable"
+    var status = "pending"   // v2.1.0 三态;旧 "reimbursable" 会被后端 422
     var invoiceAttachmentIds: [String]?
     var note: String?
 }
