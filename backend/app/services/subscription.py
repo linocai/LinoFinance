@@ -190,11 +190,3 @@ def _get_rule_or_raise(db: Session, rule_id: str) -> SubscriptionRule:
     if rule is None:
         raise LedgerNotFoundError("Subscription rule not found")
     return rule
-
-
-def advance_next_charge_date(rule: SubscriptionRule) -> None:
-    rule.next_charge_date = next_subscription_date(
-        rule.next_charge_date,
-        rule.billing_interval,
-        rule.billing_day,
-    )
