@@ -149,6 +149,19 @@ private struct IOSAppShell: View {
     @ObservedObject var model: AppModel
 
     var body: some View {
+        // Bugfix: iOS has no Settings/login screen (决策门 B deferred it), so a fresh
+        // install — empty keychain — could never sign in and every tab showed an
+        // empty 401 state. Gate the TabBar behind a token: show IOSLoginGate (SIWA +
+        // admin-token paste) until `hasToken`, which flips after a successful login
+        // (rebuildClients bumps the @Published authVersion → this shell re-renders).
+        if model.hasToken {
+            tabShell
+        } else {
+            IOSLoginGate(model: model)
+        }
+    }
+
+    private var tabShell: some View {
         // Px: the core 5 screens are wired (总览 / 账户 / 现金流 / 报表 + 记一笔 via
         // the raised center button as a full-screen sheet). 「更多」(top-trailing)
         // reaches the secondary features (流水 real, others placeholder).
