@@ -86,7 +86,7 @@ struct IOSTabScaffold<Overview: View, Accounts: View, CashFlow: View, Reports: V
             tabButton(.cashFlow, title: "现金流", systemImage: "arrow.left.arrow.right")
             tabButton(.reports, title: "报表", systemImage: "chart.bar")
         }
-        .frame(height: 54)
+        .frame(height: 48)
         .padding(.horizontal, 8)
         .padding(.vertical, 8)
         .glassPanel(cornerRadius: 26, shadow: Theme.Shadow.sidebar)
@@ -118,9 +118,9 @@ struct IOSTabScaffold<Overview: View, Accounts: View, CashFlow: View, Reports: V
     private var addButton: some View {
         Button(action: onAddEntry) {
             Image(systemName: "plus")
-                .font(.system(size: 22, weight: .bold))
+                .font(.system(size: 23, weight: .bold))
                 .foregroundStyle(.white)
-                .frame(width: 52, height: 52)
+                .frame(width: 56, height: 56)
                 .background(Theme.Color.brandGradient, in: Circle())
                 .overlay { Circle().strokeBorder(.white.opacity(0.25), lineWidth: 0.5) }
                 .themeShadow(Theme.Shadow.brandGlow)
@@ -129,8 +129,11 @@ struct IOSTabScaffold<Overview: View, Accounts: View, CashFlow: View, Reports: V
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .frame(width: 60)
-        .offset(y: -16)   // raised above the bar
+        .frame(width: 64)
+        // Circle (56) is bigger than the bar (48) and only nudged up 6pt: its
+        // bottom stays anchored INSIDE the bar (no floating gap below) while it
+        // pops above the top edge — a docked FAB, not a detached one.
+        .offset(y: -6)
     }
 }
 
