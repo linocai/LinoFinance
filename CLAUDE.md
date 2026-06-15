@@ -84,3 +84,6 @@ xcodebuild -project LinoFinance.xcodeproj -scheme LinoFinanceV2 \
 ## 真机验证
 
 依赖真签名/真容器/真系统环境的行为（启动期 AMFI、keychain ACL、APNs 真推、Apple 登录闭环）单测一律抓不到。这些项 builder 在本环境做不了，照实留给用户自理并写进 PROJECT_PLAN 的「用户侧收尾」。`notarize`/`codesign --verify` 通过 ≠ 能启动。
+
+- **iOS 模拟器目视坑（2026-06-14 实测）**：`xcrun simctl io <dev> screenshot` **抓不到 v2 app 的 Liquid Glass 全屏内容**——只渲染 `BloomBackground` 模糊层，`.glassEffect` 的 tab bar/卡片/内容恒为**纯白(浅色)/纯黑(深色)**,极易误判为「白屏 bug」。app 实际正常(设备 + 实时窗口都对)。**正确目视法**：`open -a Simulator` 起实时窗口 → computer-use `screenshot`(只读，本机 5K 点击错位但**截屏可用**)+ `zoom` 看细节。
+- 模拟器看真实数据：后台起 `backend/.venv/bin/python scripts/run_local_sqlite.py`(`auth_required:false`,无需 token),`SIMCTL_CHILD_LINOFINANCE_API_BASE_URL='http://127.0.0.1:6868/api/v1' xcrun simctl launch <dev> com.lino.linofinance`(代理对 localhost 放行)。iOS 有登录门,需 token 才进主界面;临时目视可在 `IOSAppShell` 把 `if model.hasToken` 暂改 `if true`(单独文件,`git checkout` 还原)。
