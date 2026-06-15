@@ -277,13 +277,16 @@ def test_ai_can_update_reimbursement_status_with_audit_and_rollback(client) -> N
     response = client.post(
         "/api/v1/ai/plans",
         json={
-            "source_text": "这笔报销已审核通过",
+            "source_text": "这笔报销不打算要了",
             "actions": [
                 {
+                    # v2.1.0 P2: reimbursement is three-state now; the only status
+                    # the AI can set directly is "abandoned" (pending is initial,
+                    # received requires mark-received).
                     "action_type": "UpdateReimbursementStatus",
                     "payload": {
                         "reimbursement_claim_id": claim["id"],
-                        "status": "approved",
+                        "status": "abandoned",
                     },
                     "explanation": "Reimbursement status changes require confirmation.",
                 }
@@ -303,7 +306,7 @@ def test_ai_can_update_reimbursement_status_with_audit_and_rollback(client) -> N
     action = executed_plan["actions"][0]
     assert action["status"] == "executed"
     assert action["target_type"] == "reimbursement_claim"
-    assert client.get(f"/api/v1/reimbursement-claims/{claim['id']}").json()["status"] == "approved"
+    assert client.get(f"/api/v1/reimbursement-claims/{claim['id']}").json()["status"] == "abandoned"
 
     audit_logs = client.get("/api/v1/audit-logs", params={"target_id": claim["id"]}).json()
     assert audit_logs[0]["target_type"] == "reimbursement_claim"
@@ -312,4 +315,4 @@ def test_ai_can_update_reimbursement_status_with_audit_and_rollback(client) -> N
     rollback_response = client.post(f"/api/v1/ai/actions/{action['id']}/rollback")
     assert rollback_response.status_code == 200
     assert rollback_response.json()["status"] == "rolled_back"
-    assert client.get(f"/api/v1/reimbursement-claims/{claim['id']}").json()["status"] == "reimbursable"
+    assert client.get(f"/api/v1/reimbursement-claims/{claim['id']}").json()["status"] == "pending"

@@ -18,8 +18,13 @@ from app.services import ledger
 from app.services.ledger import LedgerNotFoundError, LedgerValidationError, quantize_money
 
 
-CONFIRMED_CASH_FLOW_STATUSES = {"approved", "waiting_received"}
-FINAL_STATUSES = {"received", "rejected", "abandoned"}
+# v2.1.0 P2: reimbursement collapsed to three states (pending/received/abandoned).
+# The linked cash-flow item mirrors the claim:
+#   pending -> expected   received -> settled   abandoned -> cancelled
+# (There is no longer a "confirmed" cash-flow stage for reimbursements, so the
+# old CONFIRMED_CASH_FLOW_STATUSES constant was removed.)
+SUPPORTED_STATUSES = {"pending", "received", "abandoned"}
+FINAL_STATUSES = {"received", "abandoned"}
 
 
 def create_reimbursement_claim(
@@ -70,17 +75,9 @@ def update_claim_status(
     claim = _get_claim_or_raise(db, claim_id)
     if not allow_final_source:
         _ensure_not_final(claim)
-    if status == "received" or status == "partial_received":
+    if status == "received":
         raise LedgerValidationError("Received reimbursement status requires mark-received")
-    if status not in {
-        "reimbursable",
-        "invoice_pending",
-        "submitted",
-        "approved",
-        "waiting_received",
-        "rejected",
-        "abandoned",
-    }:
+    if status not in SUPPORTED_STATUSES:
         raise LedgerValidationError("Unsupported reimbursement status")
     claim.status = status
     _sync_reimbursement_cash_flow(db, claim)
@@ -119,7 +116,7 @@ def create_claims_for_entry(
             converted_cny_amount=line.converted_cny_amount,
             payer=line.reimbursement_payer or "company",
             expected_date=line.reimbursement_expected_date,
-            status=line.reimbursement_status or "reimbursable",
+            status=line.reimbursement_status or "pending",
             invoice_attachment_ids=None,
             note=line.note,
         )
@@ -160,38 +157,32 @@ def get_reimbursement_claim(db: Session, claim_id: str) -> ReimbursementClaimRea
 
 
 def submit_claim(db: Session, claim_id: str) -> ReimbursementClaimRead:
-    claim = _get_claim_or_raise(db, claim_id)
-    _ensure_not_final(claim)
-    claim.status = "submitted"
-    _sync_reimbursement_cash_flow(db, claim)
-    db.commit()
-    return get_reimbursement_claim(db, claim_id)
+    """v2.1.0 P2: the approval ceremony (submit/approve/reject) is gone for
+    single-user use. These endpoints are physically retained (T1 / D4) so old
+    clients don't 404, but they must NEVER write a non-three-state value. Submit
+    is now an idempotent no-op that simply returns the claim in its current
+    (pending) state — it does not advance the status machine.
+    """
+    return _noop_keep_status(db, claim_id)
 
 
 def approve_claim(db: Session, claim_id: str) -> ReimbursementClaimRead:
-    claim = _get_claim_or_raise(db, claim_id)
-    _ensure_not_final(claim)
-    claim.status = "approved"
-    _sync_reimbursement_cash_flow(db, claim)
-    db.commit()
-    try:
-        from app.services import push_dispatch
-
-        push_dispatch.dispatch_reimbursement_status(db, claim_id, "approved")
-    except Exception:
-        pass
-    return get_reimbursement_claim(db, claim_id)
+    """Idempotent no-op; see ``submit_claim``. Returns the claim unchanged."""
+    return _noop_keep_status(db, claim_id)
 
 
 def reject_claim(db: Session, claim_id: str) -> ReimbursementClaimRead:
+    """Retained endpoint mapped to abandon: single-user has no "rejected"
+    semantics, so a reject is treated as abandoning the claim (pending ->
+    abandoned). Already-final claims are rejected with a validation error.
+    """
+    return abandon_claim(db, claim_id)
+
+
+def _noop_keep_status(db: Session, claim_id: str) -> ReimbursementClaimRead:
     claim = _get_claim_or_raise(db, claim_id)
     _ensure_not_final(claim)
-    claim.status = "rejected"
-    cash_flow = _get_claim_cash_flow(db, claim)
-    if cash_flow is not None:
-        cash_flow.status = "cancelled"
-    db.commit()
-    return get_reimbursement_claim(db, claim_id)
+    return ReimbursementClaimRead.model_validate(claim)
 
 
 def abandon_claim(db: Session, claim_id: str) -> ReimbursementClaimRead:
@@ -248,11 +239,14 @@ def mark_claim_received(
 
 
 def _sync_reimbursement_cash_flow(db: Session, claim: ReimbursementClaim) -> None:
-    status = "confirmed" if claim.status in CONFIRMED_CASH_FLOW_STATUSES else "expected"
+    # Three-state mapping: pending -> expected, received -> settled,
+    # abandoned -> cancelled.
     if claim.status == "received":
         status = "settled"
-    elif claim.status in {"rejected", "abandoned"}:
+    elif claim.status == "abandoned":
         status = "cancelled"
+    else:
+        status = "expected"
 
     existing = _get_claim_cash_flow(db, claim)
     if existing is not None:

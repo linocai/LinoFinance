@@ -22,9 +22,12 @@ class EntryCategoryLineCreate(BaseModel):
     reimbursable_flag: bool = False
     reimbursement_payer: Optional[str] = Field(default=None, max_length=120)
     reimbursement_expected_date: Optional[DateType] = None
+    # v2.1.0 P2: reimbursement collapsed to three states; the only status a
+    # reimbursable line may pre-set at creation is "pending" (待回款). Omit to
+    # let create_claims_for_entry default the claim to pending.
     reimbursement_status: Optional[str] = Field(
         default=None,
-        pattern="^(reimbursable|invoice_pending|submitted|approved|waiting_received)$",
+        pattern="^pending$",
     )
     note: Optional[str] = None
 

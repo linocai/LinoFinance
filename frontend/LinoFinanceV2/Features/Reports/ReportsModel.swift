@@ -39,7 +39,9 @@ final class ReportsModel: ObservableObject {
         async let categoryResult = try? apiClient.categoryExpensesReport()
         async let pressureResult = try? apiClient.cashFlowPressureReport(dateFrom: from, dateTo: to)
         async let creditResult = try? apiClient.creditLiabilityTrendReport()
-        async let reimResult = try? apiClient.reimbursementReport(view: "all")
+        // v2.1.0 P2: the "all" view was removed; reports only reads the
+        // view-independent statusBreakdown, so any valid view works.
+        async let reimResult = try? apiClient.reimbursementReport(view: "personal_net")
         async let subResult = try? apiClient.subscriptionReport()
 
         monthly = await monthlyResult

@@ -33,21 +33,16 @@ from app.services.ledger import LedgerValidationError, convert_to_cny, quantize_
 
 
 ACTIVE_CASH_FLOW_STATUSES = {"expected", "confirmed", "partial"}
-EXPECTED_REIMBURSEMENT_STATUSES = {
-    "reimbursable",
-    "invoice_pending",
-    "submitted",
-    "approved",
-    "waiting_received",
-    "received",
-    "partial_received",
-}
-APPROVED_REIMBURSEMENT_STATUSES = {"approved", "waiting_received", "received", "partial_received"}
-RECEIVED_REIMBURSEMENT_STATUSES = {"received", "partial_received"}
+# v2.1.0 P2: reimbursement collapsed to three states (pending/received/abandoned).
+# "Expected" offset = anything that still offsets personal cost (pending + received);
+# "received" offset = received only. There is no separate "approved" state under
+# single-user, so the approved offset is aliased to the expected offset (the
+# response fields and monthly-overview approved_* are retained unchanged for the
+# untouched AI memo layer).
+EXPECTED_REIMBURSEMENT_STATUSES = {"pending", "received"}
+RECEIVED_REIMBURSEMENT_STATUSES = {"received"}
 REIMBURSEMENT_REPORT_VIEWS = {
-    "pre_reimbursement",
     "expected_net",
-    "approved_net",
     "received_net",
     "personal_net",
 }
@@ -254,7 +249,6 @@ def reimbursement_report(
     claims = list(db.execute(select(ReimbursementClaim)).scalars())
     gross = Decimal("0")
     expected = Decimal("0")
-    approved = Decimal("0")
     received = Decimal("0")
     status_totals: Dict[str, Tuple[Decimal, int]] = defaultdict(lambda: (Decimal("0"), 0))
     currency_totals: Dict[str, List[Decimal]] = defaultdict(lambda: [Decimal("0"), Decimal("0")])
@@ -262,11 +256,11 @@ def reimbursement_report(
     for claim in claims:
         amount_cny = quantize_money(claim.converted_cny_amount or Decimal("0"))
         original_date = _claim_original_entry_date(db, claim)
-        # All five reimbursement views anchor on the ORIGINAL expense date
-        # (audit 2.2). Previously `received` was anchored to the received date,
-        # so a May expense received in June produced a June report whose gross
-        # excluded the original expense yet still subtracted `received` —
-        # yielding a spurious negative net. Unify on `original_in_range`.
+        # All reimbursement views anchor on the ORIGINAL expense date (audit 2.2).
+        # Previously `received` was anchored to the received date, so a May expense
+        # received in June produced a June report whose gross excluded the original
+        # expense yet still subtracted `received` — a spurious negative net. Unify
+        # on `original_in_range`.
         original_in_range = original_date is not None and start <= original_date <= end
         if not original_in_range:
             continue
@@ -281,8 +275,6 @@ def reimbursement_report(
             )
         if claim.status in EXPECTED_REIMBURSEMENT_STATUSES:
             expected = quantize_money(expected + amount_cny)
-        if claim.status in APPROVED_REIMBURSEMENT_STATUSES:
-            approved = quantize_money(approved + amount_cny)
         if claim.status in RECEIVED_REIMBURSEMENT_STATUSES:
             received = quantize_money(received + amount_cny)
         status_amount, status_count = status_totals[claim.status]
@@ -291,15 +283,19 @@ def reimbursement_report(
             status_count + 1,
         )
 
+    # v2.1.0 P2: no separate "approved" state under single-user — approved is an
+    # alias of expected. pre_reimbursement equals gross. The user-selectable views
+    # collapse to three (expected_net/received_net/personal_net); the legacy
+    # response fields (approved_*/pre_reimbursement_*) are retained for the
+    # untouched AI memo layer.
+    approved = expected
     pre_reimbursement = gross
     expected_net = quantize_money(gross - expected)
-    approved_net = quantize_money(gross - approved)
+    approved_net = expected_net
     received_net = quantize_money(gross - received)
     personal_net = expected_net
     selected = {
-        "pre_reimbursement": pre_reimbursement,
         "expected_net": expected_net,
-        "approved_net": approved_net,
         "received_net": received_net,
         "personal_net": personal_net,
     }[view]
@@ -447,7 +443,6 @@ def _reimbursement_offsets(
     end: DateType,
 ) -> Tuple[Decimal, Decimal, Decimal]:
     expected = Decimal("0")
-    approved = Decimal("0")
     received = Decimal("0")
     claims = db.execute(
         select(ReimbursementClaim)
@@ -460,10 +455,12 @@ def _reimbursement_offsets(
         original_in_range = original_date is not None and start <= original_date <= end
         if original_in_range and claim.status in EXPECTED_REIMBURSEMENT_STATUSES:
             expected = quantize_money(expected + amount)
-        if original_in_range and claim.status in APPROVED_REIMBURSEMENT_STATUSES:
-            approved = quantize_money(approved + amount)
         if original_in_range and claim.status in RECEIVED_REIMBURSEMENT_STATUSES:
             received = quantize_money(received + amount)
+    # v2.1.0 P2: no separate "approved" state — approved aliases expected so the
+    # retained MonthlyOverviewReport.approved_reimbursement_cny field (read by the
+    # untouched AI memo) stays coherent.
+    approved = expected
     return expected, approved, received
 
 

@@ -7,10 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer
 from app.schemas.entry import EntryCreate, EntryRead, format_decimal
 
 
-REIMBURSEMENT_STATUS_PATTERN = (
-    "^(reimbursable|invoice_pending|submitted|approved|waiting_received|"
-    "received|partial_received|rejected|abandoned)$"
-)
+# v2.1.0 P2: reimbursement status collapsed to three states for single-user use.
+# pending (待回款) / received (已到账) / abandoned (已放弃).
+REIMBURSEMENT_STATUS_PATTERN = "^(pending|received|abandoned)$"
 
 
 class ReimbursementClaimCreate(BaseModel):
@@ -22,7 +21,7 @@ class ReimbursementClaimCreate(BaseModel):
     converted_cny_amount: Optional[Decimal] = None
     payer: str = Field(default="company", min_length=1, max_length=120)
     expected_date: DateType
-    status: str = Field(default="reimbursable", pattern=REIMBURSEMENT_STATUS_PATTERN)
+    status: str = Field(default="pending", pattern=REIMBURSEMENT_STATUS_PATTERN)
     invoice_attachment_ids: Optional[List[str]] = None
     note: Optional[str] = None
 

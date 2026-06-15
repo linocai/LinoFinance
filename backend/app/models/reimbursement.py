@@ -23,7 +23,7 @@ class ReimbursementClaim(IDTimestampMixin, Base):
     actual_received_date: Mapped[Optional[DateType]] = mapped_column(Date)
     received_account_id: Mapped[Optional[str]] = mapped_column(ForeignKey("accounts.id"))
     received_entry_id: Mapped[Optional[str]] = mapped_column(ForeignKey("financial_entries.id"))
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="reimbursable")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     cash_flow_item_id: Mapped[Optional[str]] = mapped_column(ForeignKey("cash_flow_items.id"))
     invoice_attachment_ids: Mapped[Optional[list]] = mapped_column(JSON)
     note: Mapped[Optional[str]] = mapped_column(Text)

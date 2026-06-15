@@ -157,7 +157,7 @@ def test_reimbursement_reports_anchor_all_views_on_original_expense_date(client)
                     "reimbursable_flag": True,
                     "reimbursement_payer": "Company",
                     "reimbursement_expected_date": "2026-06-10",
-                    "reimbursement_status": "approved",
+                    "reimbursement_status": "pending",
                 }
             ],
             "account_movements": [
@@ -256,6 +256,32 @@ def test_reimbursement_reports_anchor_all_views_on_original_expense_date(client)
     assert june_overview["expense_cny"] == "0"
     assert june_overview["expected_reimbursement_cny"] == "0"
     assert june_overview["received_reimbursement_cny"] == "0"
+
+
+def test_reimbursement_report_legacy_view_is_rejected(client) -> None:
+    # v2.1.0 P2: the view parameter is collapsed to three values; legacy values
+    # (pre_reimbursement / approved_net) are rejected with 422.
+    for legacy_view in ("pre_reimbursement", "approved_net"):
+        response = client.get(
+            "/api/v1/reports/reimbursements",
+            params={
+                "date_from": "2026-05-01",
+                "date_to": "2026-05-31",
+                "view": legacy_view,
+            },
+        )
+        assert response.status_code == 422, legacy_view
+
+    for new_view in ("expected_net", "received_net", "personal_net"):
+        response = client.get(
+            "/api/v1/reports/reimbursements",
+            params={
+                "date_from": "2026-05-01",
+                "date_to": "2026-05-31",
+                "view": new_view,
+            },
+        )
+        assert response.status_code == 200, new_view
 
 
 def test_cash_flow_pressure_and_subscription_report(client) -> None:

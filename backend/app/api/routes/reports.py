@@ -58,7 +58,9 @@ def credit_liability_trend(
 def reimbursement_report(
     date_from: Optional[DateType] = None,
     date_to: Optional[DateType] = None,
-    view: str = Query(default="personal_net"),
+    # v2.1.0 P2: view collapsed to three values; a legacy value (e.g.
+    # pre_reimbursement / approved_net) fails query validation with 422.
+    view: str = Query(default="personal_net", pattern="^(expected_net|received_net|personal_net)$"),
     db: Session = Depends(get_db),
 ) -> ReimbursementReport:
     return _report_or_400(lambda: report.reimbursement_report(db, date_from, date_to, view))

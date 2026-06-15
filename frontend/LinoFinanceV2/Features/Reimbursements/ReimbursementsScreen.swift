@@ -2,36 +2,31 @@ import SwiftUI
 
 #if os(macOS)
 
-// ReimbursementsScreen — D6 报销 (macOS · glass · state machine + 凭证 attachments).
+// ReimbursementsScreen — v2.1.0 P2 报销 (macOS · glass · three-state).
 //
-// State machine (plan §D6):
-//   reimbursable → invoice_pending → submitted → approved → waiting_received → received
-//   (+ partial_received / rejected / abandoned)
-// Each status surfaces only its valid actions (StatusBadge shows the state):
-//   • reimbursable / invoice_pending      → 提交
-//   • submitted                            → 批准 / 拒绝
-//   • approved / waiting_received / 部分到账 → 标记到账
-//   • any non-terminal                     → 放弃
+// State machine collapsed to three single-user states (PROJECT_PLAN §5.7 D1):
+//   pending (待回款) → received (已到账)   |   pending → abandoned (已放弃)
+// Each state surfaces only its valid actions:
+//   • pending → 确认到账 (opens ReceiveConfirmSheet) / 放弃
+//   • received / abandoned → terminal, no actions
+// "确认到账" is NEVER silent: the sheet forces the user to see and choose the
+// receiving balance account, income category, and actual received date, and
+// echoes "将 +¥X 进入 <账户>" before submitting (fixes the old "first matching
+// account" guesswork that made net worth appear to jump out of nowhere — D-T3).
 //
-// Data (all real client methods):
-//   listReimbursementClaims / createReimbursementClaim
-//   submit/approve/reject/abandon ReimbursementClaim
-//   markReimbursementReceived (builds an income settlement entry, see model)
-//   reimbursementReport(view:)  — personal-net vs all
-//   listAttachments / uploadAttachment / downloadAttachment / deleteAttachment
+// Report chip collapses to three views (T6): 预计抵扣 (expected_net) /
+// 已到账抵扣 (received_net) / 个人净支出 (personal_net).
 struct ReimbursementsScreen: View {
     @ObservedObject var model: AppModel
     @StateObject private var reimModel: ReimbursementsModel
 
     @State private var showingNewClaim = false
     @State private var attachmentsClaim: ReimbursementClaimDTO?
+    @State private var receivingClaim: ReimbursementClaimDTO?
     @State private var actionError: String?
 
-    /// Display order of status columns.
-    private let statusOrder = [
-        "reimbursable", "invoice_pending", "submitted", "approved",
-        "waiting_received", "partial_received", "received", "rejected", "abandoned",
-    ]
+    /// Display order of the three status columns.
+    private let statusOrder = ["pending", "received", "abandoned"]
 
     init(model: AppModel) {
         self.model = model
@@ -71,6 +66,22 @@ struct ReimbursementsScreen: View {
         .sheet(item: $attachmentsClaim) { claim in
             ReimbursementAttachmentsSheet(apiClient: model.apiClient, claim: claim)
         }
+        .sheet(item: $receivingClaim) { claim in
+            ReceiveConfirmSheet(
+                claim: claim,
+                accounts: reimModel.eligibleAccounts(for: claim, accounts: model.accounts),
+                categories: reimModel.incomeCategories(model.categories)
+            ) { account, category, date in
+                try await reimModel.markReceived(
+                    claim,
+                    into: account,
+                    incomeCategory: category,
+                    receivedDate: date
+                )
+                await model.loadAccounts()
+                await model.loadDashboard()
+            }
+        }
     }
 
     // MARK: - Header
@@ -81,7 +92,7 @@ struct ReimbursementsScreen: View {
                 Text("报销")
                     .font(Theme.Font.pageTitle())
                     .foregroundStyle(Theme.Color.textPrimary)
-                Text("垫付、审批、到账与个人净支出 · 按状态流转")
+                Text("垫付、回款与个人净支出 · 待回款 / 已到账 / 已放弃")
                     .font(Theme.Font.caption())
                     .foregroundStyle(Theme.Color.textSecondary)
             }
@@ -102,27 +113,30 @@ struct ReimbursementsScreen: View {
                         .foregroundStyle(Theme.Color.textPrimary)
                     Spacer()
                     HStack(spacing: 8) {
-                        SelectableChip(title: "个人净额", isSelected: reimModel.reportView == "personal_net") {
-                            setReportView("personal_net")
+                        SelectableChip(title: "预计抵扣", isSelected: reimModel.reportView == "expected_net") {
+                            setReportView("expected_net")
                         }
-                        SelectableChip(title: "全部", isSelected: reimModel.reportView == "all") {
-                            setReportView("all")
+                        SelectableChip(title: "已到账抵扣", isSelected: reimModel.reportView == "received_net") {
+                            setReportView("received_net")
+                        }
+                        SelectableChip(title: "个人净支出", isSelected: reimModel.reportView == "personal_net") {
+                            setReportView("personal_net")
                         }
                     }
                 }
                 if let report = reimModel.report {
                     HStack(alignment: .top, spacing: 24) {
                         reportMetric("应报销支出", report.grossReimbursableExpenseCny, color: Theme.Color.textPrimary)
-                        reportMetric("已到账抵扣", report.receivedOffsetCny, color: Theme.Color.income)
                         reportMetric("预计抵扣", report.expectedOffsetCny, color: Theme.Color.link)
-                        reportMetric("个人净支出", report.personalNetExpenseCny, color: Theme.Color.expenseStrong)
+                        reportMetric("已到账抵扣", report.receivedOffsetCny, color: Theme.Color.income)
+                        reportMetric("个人净支出", report.selectedNetExpenseCny, color: Theme.Color.expenseStrong)
                     }
                     if !report.statusBreakdown.isEmpty {
                         Divider().overlay(Theme.Color.divider)
                         HStack(spacing: 8) {
                             ForEach(report.statusBreakdown) { row in
                                 StatusBadge(
-                                    text: "\(row.status.financeStatusTitle) \(row.claimCount)",
+                                    text: "\(reimbursementStatusTitle(row.status)) \(row.claimCount)",
                                     tone: tone(for: row.status)
                                 )
                             }
@@ -170,7 +184,7 @@ struct ReimbursementsScreen: View {
         let claims = reimModel.claims.filter { $0.status == status }
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                StatusBadge(text: status.financeStatusTitle, tone: tone(for: status))
+                StatusBadge(text: reimbursementStatusTitle(status), tone: tone(for: status))
                 Spacer()
                 Text("\(claims.count)")
                     .font(Theme.Font.caption(.semibold).monospacedDigit())
@@ -213,22 +227,13 @@ struct ReimbursementsScreen: View {
         .glassPanel(cornerRadius: Theme.Radius.button)
     }
 
-    // Inline state-machine chips (R3) — direct-fire, no native confirm dialog.
-    //   提交=action(蓝) · 批准/标记到账=positive(绿) · 拒绝/放弃=destructive(红)
+    // Inline action chips (R3) — only the pending state has actions.
+    //   确认到账=positive(绿，opens sheet) · 放弃=destructive(红)
     @ViewBuilder
     private func claimActions(_ claim: ReimbursementClaimDTO) -> some View {
         HStack(spacing: 8) {
-            if claim.status == "reimbursable" || claim.status == "invoice_pending" {
-                TintedActionChip(title: "提交", tone: .action) { runSubmit(claim) }
-            }
-            if claim.status == "submitted" {
-                TintedActionChip(title: "批准", tone: .positive) { runApprove(claim) }
-                TintedActionChip(title: "拒绝", tone: .destructive) { runReject(claim) }
-            }
-            if ["approved", "waiting_received", "partial_received"].contains(claim.status) {
-                TintedActionChip(title: "标记到账", tone: .positive) { runReceive(claim) }
-            }
-            if !["received", "rejected", "abandoned"].contains(claim.status) {
+            if claim.status == "pending" {
+                TintedActionChip(title: "确认到账", tone: .positive) { receivingClaim = claim }
                 TintedActionChip(title: "放弃", tone: .destructive) { runAbandon(claim) }
             }
             Spacer(minLength: 0)
@@ -245,32 +250,10 @@ struct ReimbursementsScreen: View {
         .font(Theme.Font.caption())
     }
 
-    // MARK: - Actions (chips fire directly — no native二次确认)
-
-    private func runSubmit(_ claim: ReimbursementClaimDTO) {
-        Task { await perform { try await reimModel.submit(claim.id) } }
-    }
-
-    private func runApprove(_ claim: ReimbursementClaimDTO) {
-        Task { await perform { try await reimModel.approve(claim.id) } }
-    }
-
-    private func runReject(_ claim: ReimbursementClaimDTO) {
-        Task { await perform { try await reimModel.reject(claim.id) } }
-    }
+    // MARK: - Actions
 
     private func runAbandon(_ claim: ReimbursementClaimDTO) {
         Task { await perform { try await reimModel.abandon(claim.id) } }
-    }
-
-    private func runReceive(_ claim: ReimbursementClaimDTO) {
-        Task {
-            await perform {
-                try await reimModel.markReceived(claim, accounts: model.accounts, categories: model.categories)
-                await model.loadAccounts()
-                await model.loadDashboard()
-            }
-        }
     }
 
     private func setReportView(_ view: String) {
@@ -288,14 +271,22 @@ struct ReimbursementsScreen: View {
         }
     }
 
-    // MARK: - Status → tone
+    // MARK: - Status display (reimbursement-specific copy)
+
+    private func reimbursementStatusTitle(_ status: String) -> String {
+        switch status {
+        case "pending": return "待回款"
+        case "received": return "已到账"
+        case "abandoned": return "已放弃"
+        default: return status.financeStatusTitle
+        }
+    }
 
     private func tone(for status: String) -> StatusBadge.Tone {
         switch status {
         case "received": return .positive
-        case "reimbursable", "submitted", "waiting_received", "approved", "partial_received": return .pending
-        case "invoice_pending": return .warning
-        case "rejected", "abandoned": return .negative
+        case "pending": return .pending
+        case "abandoned": return .negative
         default: return .neutral
         }
     }
@@ -341,6 +332,216 @@ struct ReimbursementsScreen: View {
                 SubtleToolbarButton(title: "新建报销") { showingNewClaim = true }
                     .padding(.top, 4)
             }
+        }
+    }
+}
+
+// MARK: - Receive confirmation sheet (D-T3: explicit account + category + date)
+
+// ReceiveConfirmSheet — 确认到账 (glass modal).
+//
+// Forces the user to SEE and CHOOSE where the reimbursement lands before any
+// balance moves: a balance-account picker (active, currency-matched), an income
+// category picker, and the actual received date (default today). The footer
+// echoes "将 +¥X 进入 <账户>" so there is no silent net-worth jump. Only on
+// submit does the caller build the income entry and POST mark-received.
+private struct ReceiveConfirmSheet: View {
+    let claim: ReimbursementClaimDTO
+    let accounts: [AccountDTO]
+    let categories: [CategoryDTO]
+    let onConfirm: (AccountDTO, CategoryDTO, Date) async throws -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var accountId: String?
+    @State private var categoryId: String?
+    @State private var receivedDate = Date()
+    @State private var isSubmitting = false
+    @State private var errorMessage: String?
+
+    private var selectedAccount: AccountDTO? {
+        guard let accountId else { return accounts.first }
+        return accounts.first { $0.id == accountId }
+    }
+
+    private var selectedCategory: CategoryDTO? {
+        guard let categoryId else { return categories.first }
+        return categories.first { $0.id == categoryId }
+    }
+
+    private var canSubmit: Bool {
+        !isSubmitting && selectedAccount != nil && selectedCategory != nil
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider().overlay(Theme.Color.divider)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    claimSummary
+                    field("入账账户") {
+                        if accounts.isEmpty {
+                            missingHint("没有匹配 \(claim.currency.rawValue) 的启用余额账户")
+                        } else {
+                            GlassMenuPicker(
+                                label: selectedAccount?.name ?? "选择账户",
+                                isPlaceholder: selectedAccount == nil
+                            ) {
+                                ForEach(accounts) { account in
+                                    Button(account.name) { accountId = account.id }
+                                }
+                            }
+                        }
+                    }
+                    field("收入分类") {
+                        if categories.isEmpty {
+                            missingHint("没有可用的收入分类")
+                        } else {
+                            GlassMenuPicker(
+                                label: selectedCategory?.name ?? "选择分类",
+                                isPlaceholder: selectedCategory == nil
+                            ) {
+                                ForEach(categories) { category in
+                                    Button(category.name) { categoryId = category.id }
+                                }
+                            }
+                        }
+                    }
+                    field("实际到账日期") {
+                        DatePicker("", selection: $receivedDate, displayedComponents: .date)
+                            .datePickerStyle(.field)
+                            .labelsHidden()
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .glassPanel(cornerRadius: Theme.Radius.button)
+                    }
+                    confirmationEcho
+                }
+                .padding(22)
+            }
+            Divider().overlay(Theme.Color.divider)
+            footer
+        }
+        .frame(width: 520, height: 560)
+        .background { BloomBackground(animated: false).opacity(0.9) }
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "checkmark.circle")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 34, height: 34)
+                .background(Theme.Color.brandGradient, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("确认到账")
+                    .font(Theme.Font.pageTitle())
+                    .foregroundStyle(Theme.Color.textPrimary)
+                Text("选择钱进入哪个账户，再确认到账")
+                    .font(Theme.Font.caption())
+                    .foregroundStyle(Theme.Color.textSecondary)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 16)
+    }
+
+    private var claimSummary: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(claim.payer)
+                    .font(Theme.Font.body(.medium))
+                    .foregroundStyle(Theme.Color.textPrimary)
+                Text("预计到账 \(FinanceFormatter.shortDate(claim.expectedDate))")
+                    .font(Theme.Font.caption())
+                    .foregroundStyle(Theme.Color.textSecondary)
+            }
+            Spacer()
+            AmountText(
+                value: claim.amount,
+                currency: claim.currency,
+                font: Theme.Font.subtitle(.bold),
+                color: Theme.Color.income
+            )
+        }
+        .padding(12)
+        .glassPanel(cornerRadius: Theme.Radius.button)
+    }
+
+    @ViewBuilder
+    private var confirmationEcho: some View {
+        if let account = selectedAccount {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.right.circle.fill")
+                    .foregroundStyle(Theme.Color.income)
+                Text("将 ")
+                    .foregroundStyle(Theme.Color.textSecondary)
+                + Text("+\(FinanceFormatter.money(claim.amount, currency: claim.currency))")
+                    .foregroundStyle(Theme.Color.income)
+                + Text(" 进入「\(account.name)」")
+                    .foregroundStyle(Theme.Color.textPrimary)
+            }
+            .font(Theme.Font.caption(.medium))
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassPanel(cornerRadius: Theme.Radius.button)
+        }
+    }
+
+    private var footer: some View {
+        HStack(spacing: 12) {
+            if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(Theme.Font.caption())
+                    .foregroundStyle(Theme.Color.expense)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            SubtleTextButton("取消") { dismiss() }
+                .keyboardShortcut(.cancelAction)
+            PrimaryDarkButton("确认到账", isLoading: isSubmitting) {
+                Task { await submit() }
+            }
+            .keyboardShortcut(.defaultAction)
+            .disabled(!canSubmit)
+            .opacity(canSubmit ? 1 : 0.5)
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 14)
+    }
+
+    @MainActor
+    private func submit() async {
+        guard let account = selectedAccount, let category = selectedCategory else { return }
+        isSubmitting = true
+        errorMessage = nil
+        defer { isSubmitting = false }
+        do {
+            try await onConfirm(account, category, receivedDate)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func missingHint(_ text: String) -> some View {
+        Text(text)
+            .font(Theme.Font.caption())
+            .foregroundStyle(Theme.Color.expense)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassPanel(cornerRadius: Theme.Radius.button)
+    }
+
+    private func field<Content: View>(_ label: String, @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(Theme.Font.caption(.medium))
+                .foregroundStyle(Theme.Color.textSecondary)
+            content()
         }
     }
 }

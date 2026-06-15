@@ -199,7 +199,9 @@ struct AddEntryMapper {
                 reimbursableFlag: input.reimbursable,
                 reimbursementPayer: input.reimbursable ? input.reimbursementPayer : nil,
                 reimbursementExpectedDate: input.reimbursable ? input.reimbursementExpectedDate : nil,
-                reimbursementStatus: input.reimbursable ? "reimbursable" : nil
+                // v2.1.0 P2: reimbursement collapsed to three states; a new
+                // reimbursable line starts as "pending" (server default).
+                reimbursementStatus: input.reimbursable ? "pending" : nil
             )
             let movement = AccountMovementCreateRequest(
                 accountId: accountId,

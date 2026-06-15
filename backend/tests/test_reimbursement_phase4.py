@@ -37,7 +37,7 @@ def create_reimbursable_entry(client, account, expense_category, status="confirm
                     "reimbursable_flag": True,
                     "reimbursement_payer": "company",
                     "reimbursement_expected_date": "2026-06-10",
-                    "reimbursement_status": "submitted",
+                    "reimbursement_status": "pending",
                 }
             ],
             "account_movements": [
@@ -100,7 +100,7 @@ def test_confirmed_reimbursable_entry_creates_claim_and_future_cash_flow(client)
     assert claim["currency"] == "CNY"
     assert claim["payer"] == "company"
     assert claim["expected_date"] == "2026-06-10"
-    assert claim["status"] == "submitted"
+    assert claim["status"] == "pending"
     assert claim["cash_flow_item_id"] is not None
 
     cash_flow = client.get(f"/api/v1/cash-flow-items/{claim['cash_flow_item_id']}").json()
@@ -188,19 +188,42 @@ def test_confirmed_reimbursable_entry_requires_expected_date(client) -> None:
     assert client.get("/api/v1/reimbursement-claims").json() == []
 
 
-def test_approve_claim_marks_reimbursement_cash_flow_confirmed(client) -> None:
+def test_submit_and_approve_endpoints_are_idempotent_noops(client) -> None:
+    # v2.1.0 P2 / D4: the approval ceremony is gone for single-user use, but the
+    # submit/approve endpoints are physically retained so old clients don't 404.
+    # They must be safe no-ops: the claim stays pending and never picks up a
+    # non-three-state value, and the linked cash flow stays expected.
     account = create_account(client, balance="1000")
     category = create_category(client)
     create_reimbursable_entry(client, account, category)
     claim = client.get("/api/v1/reimbursement-claims").json()[0]
 
-    approve_response = client.post(f"/api/v1/reimbursement-claims/{claim['id']}/approve")
+    submit_response = client.post(f"/api/v1/reimbursement-claims/{claim['id']}/submit")
+    assert submit_response.status_code == 200
+    assert submit_response.json()["status"] == "pending"
 
+    approve_response = client.post(f"/api/v1/reimbursement-claims/{claim['id']}/approve")
     assert approve_response.status_code == 200
     approved_claim = approve_response.json()
-    assert approved_claim["status"] == "approved"
+    assert approved_claim["status"] == "pending"
     cash_flow = client.get(f"/api/v1/cash-flow-items/{approved_claim['cash_flow_item_id']}").json()
-    assert cash_flow["status"] == "confirmed"
+    assert cash_flow["status"] == "expected"
+
+
+def test_reject_endpoint_maps_to_abandon(client) -> None:
+    # v2.1.0 P2 / D4: single-user has no "rejected" semantics, so the retained
+    # reject endpoint is mapped to abandon (pending -> abandoned), cancelling the
+    # linked cash flow. It must never write the legacy "rejected" value.
+    account = create_account(client, balance="1000")
+    category = create_category(client)
+    create_reimbursable_entry(client, account, category)
+    claim = client.get("/api/v1/reimbursement-claims").json()[0]
+
+    reject_response = client.post(f"/api/v1/reimbursement-claims/{claim['id']}/reject")
+    assert reject_response.status_code == 200
+    assert reject_response.json()["status"] == "abandoned"
+    cash_flow = client.get(f"/api/v1/cash-flow-items/{claim['cash_flow_item_id']}").json()
+    assert cash_flow["status"] == "cancelled"
 
 
 def test_mark_reimbursement_received_creates_income_entry_and_settles_cash_flow(client) -> None:
@@ -481,9 +504,206 @@ def test_reimbursement_center_can_filter_by_status(client) -> None:
     category = create_category(client)
     create_reimbursable_entry(client, account, category)
 
-    submitted_claims = client.get("/api/v1/reimbursement-claims?status=submitted").json()
-    approved_claims = client.get("/api/v1/reimbursement-claims?status=approved").json()
+    pending_claims = client.get("/api/v1/reimbursement-claims?status=pending").json()
+    received_claims = client.get("/api/v1/reimbursement-claims?status=received").json()
 
-    assert len(submitted_claims) == 1
-    assert approved_claims == []
-    assert Decimal(submitted_claims[0]["converted_cny_amount"]) == Decimal("500")
+    assert len(pending_claims) == 1
+    assert received_claims == []
+    assert Decimal(pending_claims[0]["converted_cny_amount"]) == Decimal("500")
+
+
+# ---------------------------------------------------------------------------
+# v2.1.0 P2 — three-state reimbursement (pending / received / abandoned)
+# ---------------------------------------------------------------------------
+
+
+def test_confirmed_reimbursable_entry_defaults_claim_to_pending(client) -> None:
+    # When a reimbursable line omits an explicit status, the auto-created claim
+    # defaults to "pending" and its cash flow to "expected".
+    account = create_account(client, balance="1000")
+    category = create_category(client)
+    response = client.post(
+        "/api/v1/entries",
+        json={
+            "title": "Client trip",
+            "date": "2026-05-16",
+            "status": "confirmed",
+            "category_lines": [
+                {
+                    "category_id": category["id"],
+                    "direction": "expense",
+                    "amount": "500",
+                    "currency": "CNY",
+                    "reimbursable_flag": True,
+                    "reimbursement_payer": "company",
+                    "reimbursement_expected_date": "2026-06-10",
+                }
+            ],
+            "account_movements": [
+                {
+                    "account_id": account["id"],
+                    "movement_type": "balance_out",
+                    "amount": "500",
+                    "currency": "CNY",
+                }
+            ],
+        },
+    )
+    assert response.status_code == 201
+    claim = client.get("/api/v1/reimbursement-claims").json()[0]
+    assert claim["status"] == "pending"
+    cash_flow = client.get(f"/api/v1/cash-flow-items/{claim['cash_flow_item_id']}").json()
+    assert cash_flow["status"] == "expected"
+
+
+def test_create_manual_claim_with_legacy_status_is_rejected(client) -> None:
+    # The status pattern is collapsed to ^(pending|received|abandoned)$; a legacy
+    # value such as "submitted" is now rejected at the schema layer (422) and no
+    # claim is created.
+    account = create_account(client, balance="1000")
+    category = create_category(client)
+    entry = create_plain_expense_entry(client, account, category)
+    line = entry["category_lines"][0]
+
+    response = client.post(
+        "/api/v1/reimbursement-claims",
+        json={
+            "linked_entry_id": entry["id"],
+            "linked_entry_line_id": line["id"],
+            "amount": "500",
+            "currency": "CNY",
+            "payer": "company",
+            "expected_date": "2026-06-10",
+            "status": "submitted",
+        },
+    )
+    assert response.status_code == 422
+    assert client.get("/api/v1/reimbursement-claims").json() == []
+
+
+def test_create_reimbursable_line_with_legacy_status_is_rejected(client) -> None:
+    # A reimbursable entry line may only pre-set status "pending"; a legacy value
+    # is rejected (422) and creates neither a claim nor a balance change.
+    account = create_account(client, balance="1000")
+    category = create_category(client)
+    response = client.post(
+        "/api/v1/entries",
+        json={
+            "title": "Client trip",
+            "date": "2026-05-16",
+            "status": "confirmed",
+            "category_lines": [
+                {
+                    "category_id": category["id"],
+                    "direction": "expense",
+                    "amount": "500",
+                    "currency": "CNY",
+                    "reimbursable_flag": True,
+                    "reimbursement_payer": "company",
+                    "reimbursement_expected_date": "2026-06-10",
+                    "reimbursement_status": "approved",
+                }
+            ],
+            "account_movements": [
+                {
+                    "account_id": account["id"],
+                    "movement_type": "balance_out",
+                    "amount": "500",
+                    "currency": "CNY",
+                }
+            ],
+        },
+    )
+    assert response.status_code == 422
+    assert client.get("/api/v1/reimbursement-claims").json() == []
+    assert client.get(f"/api/v1/accounts/{account['id']}").json()["current_balance"] == "1000.00"
+
+
+def test_abandon_endpoint_sets_abandoned_and_cancels_cash_flow(client) -> None:
+    account = create_account(client, balance="1000")
+    category = create_category(client)
+    create_reimbursable_entry(client, account, category)
+    claim = client.get("/api/v1/reimbursement-claims").json()[0]
+
+    abandon = client.post(f"/api/v1/reimbursement-claims/{claim['id']}/abandon")
+    assert abandon.status_code == 200
+    assert abandon.json()["status"] == "abandoned"
+    cash_flow = client.get(f"/api/v1/cash-flow-items/{claim['cash_flow_item_id']}").json()
+    assert cash_flow["status"] == "cancelled"
+
+
+def test_mark_received_without_matching_movement_is_rejected(client) -> None:
+    # mark-received requires the income entry to carry a matching balance_in
+    # movement; omitting it fails with 400 and leaves the claim pending.
+    account = create_account(client, balance="1000")
+    expense_category = create_category(client)
+    income_category = create_category(client, name="Reimbursement Income", category_type="income")
+    create_reimbursable_entry(client, account, expense_category)
+    claim = client.get("/api/v1/reimbursement-claims").json()[0]
+
+    response = client.post(
+        f"/api/v1/reimbursement-claims/{claim['id']}/mark-received",
+        json={
+            "actual_received_date": "2026-06-09",
+            "received_account_id": account["id"],
+            "entry": {
+                "title": "Company reimbursement",
+                "date": "2026-06-09",
+                "category_lines": [
+                    {
+                        "category_id": income_category["id"],
+                        "direction": "income",
+                        "amount": "500",
+                        "currency": "CNY",
+                    }
+                ],
+                "account_movements": [],
+            },
+        },
+    )
+    assert response.status_code == 400
+    assert "matching balance_in movement" in response.json()["detail"]
+    still_pending = client.get(f"/api/v1/reimbursement-claims/{claim['id']}").json()
+    assert still_pending["status"] == "pending"
+
+
+def test_received_claim_is_final_and_cannot_be_abandoned(client) -> None:
+    # received is a final state; attempting to abandon it fails (400).
+    account = create_account(client, balance="1000")
+    expense_category = create_category(client)
+    income_category = create_category(client, name="Reimbursement Income", category_type="income")
+    create_reimbursable_entry(client, account, expense_category)
+    claim = client.get("/api/v1/reimbursement-claims").json()[0]
+
+    receive = client.post(
+        f"/api/v1/reimbursement-claims/{claim['id']}/mark-received",
+        json={
+            "actual_received_date": "2026-06-09",
+            "received_account_id": account["id"],
+            "entry": {
+                "title": "Company reimbursement",
+                "date": "2026-06-09",
+                "category_lines": [
+                    {
+                        "category_id": income_category["id"],
+                        "direction": "income",
+                        "amount": "500",
+                        "currency": "CNY",
+                    }
+                ],
+                "account_movements": [
+                    {
+                        "account_id": account["id"],
+                        "movement_type": "balance_in",
+                        "amount": "500",
+                        "currency": "CNY",
+                    }
+                ],
+            },
+        },
+    )
+    assert receive.status_code == 200
+    assert receive.json()["reimbursement_claim"]["status"] == "received"
+
+    abandon = client.post(f"/api/v1/reimbursement-claims/{claim['id']}/abandon")
+    assert abandon.status_code == 400

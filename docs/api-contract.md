@@ -113,9 +113,9 @@ so production `/health` is the canonical "what is deployed" probe.
   - `GET /reimbursement-claims`
   - `POST /reimbursement-claims`
   - `GET /reimbursement-claims/{claim_id}`
-  - `POST /reimbursement-claims/{claim_id}/submit`
-  - `POST /reimbursement-claims/{claim_id}/approve`
-  - `POST /reimbursement-claims/{claim_id}/reject`
+  - `POST /reimbursement-claims/{claim_id}/submit` (v2.1.0: retained no-op; returns the claim unchanged — see below)
+  - `POST /reimbursement-claims/{claim_id}/approve` (v2.1.0: retained no-op; returns the claim unchanged)
+  - `POST /reimbursement-claims/{claim_id}/reject` (v2.1.0: retained, mapped to abandon)
   - `POST /reimbursement-claims/{claim_id}/abandon`
   - `POST /reimbursement-claims/{claim_id}/mark-received`
   - `GET /installment-plans`
@@ -221,14 +221,31 @@ so production `/health` is the canonical "what is deployed" probe.
 
 ## Reimbursement Rules Implemented
 
-- Confirmed reimbursable entry category lines auto-create reimbursement claims.
+**Status enum (v2.1.0 P2 — collapsed to three single-user states):**
+`pending` (待回款) / `received` (已到账) / `abandoned` (已放弃). The create
+schema pattern is `^(pending|received|abandoned)$` and defaults to `pending`;
+a reimbursable entry category line may pre-set only `reimbursement_status:
+"pending"` (pattern `^pending$`). Legacy values (`reimbursable`,
+`invoice_pending`, `submitted`, `approved`, `waiting_received`,
+`partial_received`, `rejected`) are rejected with `422`. Existing rows are
+remapped by Alembic migration `202606150001`
+(`reimbursable/invoice_pending/submitted/approved/waiting_received → pending`,
+`partial_received → received`, `rejected → abandoned`).
+
+- Confirmed reimbursable entry category lines auto-create reimbursement claims (status `pending`).
 - Reimbursable lines require `reimbursement_expected_date` before an entry can be confirmed.
 - Each claim creates a linked `reimbursement` cash-flow inflow.
-- Submitted/reimbursable claims keep the linked cash flow `expected`.
-- Approved/waiting-received claims mark the linked cash flow `confirmed`.
-- Received claims require a confirmed formal income entry payload via `mark-received`.
+- `pending` claims keep the linked cash flow `expected`; `received` settles it; `abandoned` cancels it.
+- `received` claims require a confirmed formal income entry payload via `mark-received`
+  (`pending → received`); the claim records the chosen `received_account_id`,
+  `actual_received_date`, and balancing income entry.
 - Received reimbursement entries must include a matching `balance_in` movement and matching income category line.
 - Voiding the original confirmed reimbursable expense abandons open claims and cancels their reimbursement cash flows.
+- `received` and `abandoned` are final; further status changes are rejected (`400`).
+- **Retained-endpoint semantics (v2.1.0 D4):** the single-user redesign drops the
+  approval ceremony but keeps the endpoints so old clients don't `404`. They never
+  write a non-three-state value: `submit`/`approve` are idempotent no-ops that return
+  the claim in its current state; `reject` is mapped to `abandon` (`pending → abandoned`).
 
 ## Installment And Subscription Rules Implemented
 
@@ -308,11 +325,19 @@ so production `/health` is the canonical "what is deployed" probe.
 - Cash-flow pressure responses include additive `daily_net_cny` rows for the next 30 days: `{date, inflow_cny, outflow_cny, net_cny}`.
 - Transfer-direction future cash flows, such as credit repayment and installments, count as outflow pressure.
 - Credit liability trend reports summarize statement cycles by statement date and include remaining original-currency and CNY amounts.
-- Reimbursement reports support `pre_reimbursement`, `expected_net`, `approved_net`, `received_net`, and `personal_net` views.
-- All five reimbursement views — including the `received_offset` accumulator — anchor on the
+- Reimbursement reports support three `view` values (v2.1.0 P2): `expected_net`,
+  `received_net`, and `personal_net` (default). Legacy views `pre_reimbursement`
+  and `approved_net` are removed; passing them fails query validation with `422`.
+  Under three states there is no separate "approved" stage, so the `expected`
+  offset counts both `pending` and `received` claims, and `personal_net` equals
+  `expected_net` (`gross - expected`). The response object still serializes the
+  legacy fields `pre_reimbursement_expense_cny` (= gross), `approved_offset_cny`
+  / `approved_net_expense_cny` (aliased to the expected offset / `expected_net`)
+  for the AI memo layer; only the *selectable* `view` set was collapsed.
+- All reimbursement views — including the `received_offset` accumulator — anchor on the
   claim's **original expense date** (the linked entry's date), not on the cash-received date
   (v1.3.0, audit 2.2). A claim contributes to a report window iff its original expense date
-  falls in `[date_from, date_to]`; gross, expected, approved, and received offsets are then all
+  falls in `[date_from, date_to]`; gross, expected, and received offsets are then all
   measured against that same window. This eliminates the prior cross-month mismatch where an
   expense in month M received in month M+1 produced a spurious negative net in M+1 (zero gross
   minus a dangling received offset). The monthly-overview reimbursement offsets follow the same

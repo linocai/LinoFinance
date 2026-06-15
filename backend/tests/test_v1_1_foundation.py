@@ -525,7 +525,7 @@ def test_reimbursement_status_dispatches_system_push(client, monkeypatch) -> Non
             "title": "Reimbursement push",
             "rule_type": "reimbursement",
             "channel": "system",
-            "trigger_payload": {"status": "approved"},
+            "trigger_payload": {"status": "received"},
         },
     )
     account = client.post(
@@ -551,7 +551,7 @@ def test_reimbursement_status_dispatches_system_push(client, monkeypatch) -> Non
                     "reimbursable_flag": True,
                     "reimbursement_payer": "company",
                     "reimbursement_expected_date": "2026-06-10",
-                    "reimbursement_status": "submitted",
+                    "reimbursement_status": "pending",
                 }
             ],
             "account_movements": [
@@ -564,12 +564,44 @@ def test_reimbursement_status_dispatches_system_push(client, monkeypatch) -> Non
             ],
         },
     ).json()
+    income_category = client.post(
+        "/api/v1/categories",
+        json={"name": "Reimbursement Income", "type": "income"},
+    ).json()
     claim = client.get("/api/v1/reimbursement-claims").json()[0]
     assert claim["linked_entry_line_id"] == entry["category_lines"][0]["id"]
 
-    approved = client.post(f"/api/v1/reimbursement-claims/{claim['id']}/approve")
+    # v2.1.0 P2: the dispatch trigger is now mark-received (the approval ceremony
+    # is gone); marking a claim received fires the reimbursement system push.
+    received = client.post(
+        f"/api/v1/reimbursement-claims/{claim['id']}/mark-received",
+        json={
+            "actual_received_date": "2026-06-09",
+            "received_account_id": account["id"],
+            "entry": {
+                "title": "Company reimbursement",
+                "date": "2026-06-09",
+                "category_lines": [
+                    {
+                        "category_id": income_category["id"],
+                        "direction": "income",
+                        "amount": "500",
+                        "currency": "CNY",
+                    }
+                ],
+                "account_movements": [
+                    {
+                        "account_id": account["id"],
+                        "movement_type": "balance_in",
+                        "amount": "500",
+                        "currency": "CNY",
+                    }
+                ],
+            },
+        },
+    )
 
-    assert approved.status_code == 200
+    assert received.status_code == 200
     rule = client.get("/api/v1/notification-rules", params={"rule_type": "reimbursement"}).json()[0]
     assert rule["last_triggered_at"] is not None
 

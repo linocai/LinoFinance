@@ -3,20 +3,24 @@ import SwiftUI
 
 #if os(macOS)
 
-// ReimbursementsModel — D6 报销 view-model.
+// ReimbursementsModel — v2.1.0 P2 报销 view-model (three-state).
 //
 // Owns the claim list + the report summary + the data the "new claim" form needs
-// (entries to link a claim onto). State machine (plan §D6):
-//   reimbursable → invoice_pending → submitted → approved → waiting_received → received
-// (+ side states rejected / abandoned / partial_received). The screen maps each
-// status onto its allowed actions; this model just wraps the client calls and
-// reloads on success.
+// (entries to link a claim onto). The status machine is collapsed to three
+// single-user states (PROJECT_PLAN §5.7 D1):
+//   pending (待回款) → received (已到账)   |   pending → abandoned (已放弃)
+// The screen surfaces only two row actions: 确认到账 (pending → received) and
+// 放弃 (pending → abandoned). The submit/approve/reject ceremony is gone.
 //
-// Business semantics carried over from v1 ReimbursementsView:
+// Business semantics:
 //   • create  — links a claim to an EXISTING confirmed entry + one of its
-//               category lines (amount/currency/rate inherited from the line).
-//   • receive — builds a confirmed *income* entry into a matching-currency
-//               balance account, then POSTs mark-received with that entry.
+//               category lines (amount/currency/rate inherited from the line);
+//               the server defaults the new claim to `pending`.
+//   • receive — the user EXPLICITLY picks the receiving balance account, the
+//               income category, and the actual received date in a sheet (D-T3);
+//               this model builds the confirmed *income* entry from those choices
+//               and POSTs mark-received with it. No silent "first matching
+//               account / first income category" guessing.
 @MainActor
 final class ReimbursementsModel: ObservableObject {
 
@@ -66,23 +70,10 @@ final class ReimbursementsModel: ObservableObject {
         report = try? await apiClient.reimbursementReport(view: reportView)
     }
 
-    // MARK: - State actions
+    // MARK: - State actions (three-state)
 
-    func submit(_ id: String) async throws {
-        _ = try await apiClient.submitReimbursementClaim(id)
-        await load()
-    }
-
-    func approve(_ id: String) async throws {
-        _ = try await apiClient.approveReimbursementClaim(id)
-        await load()
-    }
-
-    func reject(_ id: String) async throws {
-        _ = try await apiClient.rejectReimbursementClaim(id)
-        await load()
-    }
-
+    /// Give up an outstanding receivable (pending → abandoned). The linked
+    /// reimbursement cash flow is cancelled server-side.
     func abandon(_ id: String) async throws {
         _ = try await apiClient.abandonReimbursementClaim(id)
         await load()
@@ -114,28 +105,22 @@ final class ReimbursementsModel: ObservableObject {
         return claim
     }
 
-    // MARK: - Receive (builds an income settlement entry, plan §D6)
+    // MARK: - Receive (user-chosen account + category + date, D-T3)
 
-    /// Mark a claim received into a balance account whose currency matches the
-    /// claim. Throws a clear error if no matching account / income category exists.
+    /// Mark a claim received using the account / category / date the user
+    /// explicitly picked in the confirmation sheet. Builds a confirmed income
+    /// entry into `account` and POSTs mark-received with it (pending → received).
     func markReceived(
         _ claim: ReimbursementClaimDTO,
-        accounts: [AccountDTO],
-        categories: [CategoryDTO]
+        into account: AccountDTO,
+        incomeCategory category: CategoryDTO,
+        receivedDate: Date
     ) async throws {
-        guard let account = accounts.first(where: {
-            $0.type == .balance && $0.status == "active" && $0.currency == claim.currency
-        }) else {
-            throw ReimbursementError.noMatchingAccount(claim.currency)
-        }
-        guard let category = categories.first(where: { $0.isActive && $0.type == .income }) else {
-            throw ReimbursementError.noIncomeCategory
-        }
         // Greppable trace back to the originating claim (no claim_id FK on entries).
         let traceNote = "[claim:\(claim.id)] " + (claim.note ?? "")
         let entry = EntryCreateRequest(
             title: "报销到账",
-            date: Date(),
+            date: receivedDate,
             status: .confirmed,
             note: traceNote,
             categoryLines: [
@@ -163,7 +148,7 @@ final class ReimbursementsModel: ObservableObject {
             ]
         )
         let request = ReimbursementReceiveRequest(
-            actualReceivedDate: Date(),
+            actualReceivedDate: receivedDate,
             receivedAccountId: account.id,
             entry: entry
         )
@@ -171,25 +156,17 @@ final class ReimbursementsModel: ObservableObject {
         await load()
     }
 
-    /// Names the receiving account for the confirmation copy (or nil if none).
-    func receivingAccountName(for claim: ReimbursementClaimDTO, accounts: [AccountDTO]) -> String? {
-        accounts.first(where: {
+    /// Active balance accounts whose currency matches the claim — the only valid
+    /// receiving accounts for the confirmation sheet picker.
+    func eligibleAccounts(for claim: ReimbursementClaimDTO, accounts: [AccountDTO]) -> [AccountDTO] {
+        accounts.filter {
             $0.type == .balance && $0.status == "active" && $0.currency == claim.currency
-        })?.name
-    }
-}
-
-enum ReimbursementError: LocalizedError {
-    case noMatchingAccount(CurrencyCode)
-    case noIncomeCategory
-
-    var errorDescription: String? {
-        switch self {
-        case .noMatchingAccount(let currency):
-            return "标记到账需要一个启用的 \(currency.rawValue) 余额账户"
-        case .noIncomeCategory:
-            return "标记到账需要至少一个启用的收入分类"
         }
+    }
+
+    /// Active income categories — the valid options for the confirmation sheet.
+    func incomeCategories(_ categories: [CategoryDTO]) -> [CategoryDTO] {
+        categories.filter { $0.isActive && $0.type == .income }
     }
 }
 
