@@ -26,7 +26,11 @@ struct IOSTabScaffold<Overview: View, Accounts: View, CashFlow: View, Reports: V
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            BloomBackground()
+            // animated:false — the drifting blobs under .blur(60) recomposite the
+            // whole screen every frame forever, which made tab taps feel laggy /
+            // unresponsive on device. Static bloom composites once. (All the other
+            // iOS screens already pass animated:false; this layer had been missed.)
+            BloomBackground(animated: false)
 
             Group {
                 switch selection {
@@ -73,6 +77,8 @@ struct IOSTabScaffold<Overview: View, Accounts: View, CashFlow: View, Reports: V
     }
 
     private var tabBar: some View {
+        // Fixed height so the 4 tabs + raised center button lay out consistently
+        // (the center cell is exactly 60pt wide → the ➕ is true-centered).
         HStack(alignment: .center, spacing: 0) {
             tabButton(.overview, title: "总览", systemImage: "chart.pie")
             tabButton(.accounts, title: "账户", systemImage: "creditcard")
@@ -80,8 +86,9 @@ struct IOSTabScaffold<Overview: View, Accounts: View, CashFlow: View, Reports: V
             tabButton(.cashFlow, title: "现金流", systemImage: "arrow.left.arrow.right")
             tabButton(.reports, title: "报表", systemImage: "chart.bar")
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 10)
+        .frame(height: 54)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
         .glassPanel(cornerRadius: 26, shadow: Theme.Shadow.sidebar)
         .padding(.horizontal, 16)
         .padding(.bottom, 6)
@@ -99,8 +106,11 @@ struct IOSTabScaffold<Overview: View, Accounts: View, CashFlow: View, Reports: V
                     .font(.system(size: 10, weight: .medium))
             }
             .foregroundStyle(selected ? Theme.Color.brandEnd : Theme.Color.textSecondary)
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: 44)
+            // Fill the whole cell + contentShape so the ENTIRE cell is tappable
+            // (was icon/text-only → taps on the cell's blank area did nothing, so
+            // switching felt laggy / unresponsive).
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -110,14 +120,17 @@ struct IOSTabScaffold<Overview: View, Accounts: View, CashFlow: View, Reports: V
             Image(systemName: "plus")
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(.white)
-                .frame(width: 54, height: 54)
+                .frame(width: 52, height: 52)
                 .background(Theme.Color.brandGradient, in: Circle())
                 .overlay { Circle().strokeBorder(.white.opacity(0.25), lineWidth: 0.5) }
                 .themeShadow(Theme.Shadow.brandGlow)
+                // Hit area = just the circle, so the raised ➕ can't steal taps
+                // meant for the 账户 / 现金流 cells next to it.
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .offset(y: -14)   // raised above the bar
-        .frame(width: 64)
+        .frame(width: 60)
+        .offset(y: -16)   // raised above the bar
     }
 }
 
