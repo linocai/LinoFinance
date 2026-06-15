@@ -18,6 +18,7 @@ struct CashFlowIOSView: View {
     @StateObject private var cashFlowModel: CashFlowModel
 
     @State private var settleItem: CashFlowItemDTO?
+    @State private var repaymentItem: CashFlowItemDTO?
 
     init(model: AppModel) {
         self.model = model
@@ -41,6 +42,9 @@ struct CashFlowIOSView: View {
         .task { if cashFlowModel.items.isEmpty { await cashFlowModel.load() } }
         .sheet(item: $settleItem) { item in
             SettleCompletionSheetIOS(model: cashFlowModel, item: item)
+        }
+        .sheet(item: $repaymentItem) { item in
+            RepaymentConfirmSheetIOS(model: cashFlowModel, item: item)
         }
     }
 
@@ -140,7 +144,9 @@ struct CashFlowIOSView: View {
                 }
             }
             if item.canShowSettleAction {
-                TintedActionChip(title: "兑现", tone: .action) { settle(item) }
+                TintedActionChip(title: item.direction == "transfer" ? "确认还款" : "兑现", tone: .action) {
+                    settle(item)
+                }
             }
             TintedActionChip(title: "取消", tone: .neutral) {
                 Task { await cashFlowModel.cancel(item.id) }
@@ -154,6 +160,8 @@ struct CashFlowIOSView: View {
             switch await cashFlowModel.attemptSettle(item) {
             case .needsCompletion:
                 settleItem = item
+            case .needsRepaymentSource:
+                repaymentItem = item
             case .blocked(let message):
                 cashFlowModel.actionError = message
             case .settled:
@@ -355,6 +363,146 @@ private struct SettleCompletionSheetIOS: View {
         defer { isSubmitting = false }
         do {
             try await model.completeAndSettle(item, accountId: accountId, categoryId: categoryId)
+            errorMessage = nil
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func field<Content: View>(_ label: String, @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(Theme.Font.caption(.medium))
+                .foregroundStyle(Theme.Color.textSecondary)
+            content()
+        }
+    }
+}
+
+// MARK: - 确认还款 (iOS sheet · v2.1.0 P1)
+//
+// Shown when 确认还款 is tapped on a transfer (信用还款) item. Pick the repayment
+// SOURCE balance account + date, then settle via CashFlowModel.settleRepayment
+// (transfer_out on the source + credit_repayment on the credit account).
+
+private struct RepaymentConfirmSheetIOS: View {
+    @ObservedObject var model: CashFlowModel
+    let item: CashFlowItemDTO
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var sourceAccountId: String?
+    @State private var repaymentDate = Date()
+    @State private var isSubmitting = false
+    @State private var errorMessage: String?
+
+    init(model: CashFlowModel, item: CashFlowItemDTO) {
+        self.model = model
+        self.item = item
+        let sources = model.repaymentSourceAccounts(for: item)
+        _sourceAccountId = State(initialValue: sources.count == 1 ? sources.first?.id : nil)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                BloomBackground(animated: false).ignoresSafeArea()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        GlassCard {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(item.title)
+                                        .font(Theme.Font.subtitle(.semibold))
+                                        .foregroundStyle(Theme.Color.textPrimary)
+                                    Text("信用还款 · \(creditAccountName)")
+                                        .font(Theme.Font.caption())
+                                        .foregroundStyle(Theme.Color.textSecondary)
+                                }
+                                Spacer()
+                                AmountText(value: item.amount, currency: item.currency,
+                                           font: Theme.Font.subtitle(.semibold),
+                                           color: Theme.Color.expense)
+                            }
+                        }
+                        Text("选择还款来源余额账户和还款日期，确认后将从该账户扣款并冲减信用账户负债。")
+                            .font(Theme.Font.caption())
+                            .foregroundStyle(Theme.Color.textSecondary)
+                        field("还款来源账户") {
+                            GlassMenuPicker(
+                                label: selectedSourceName ?? "请选择",
+                                isPlaceholder: sourceAccountId == nil
+                            ) {
+                                ForEach(selectableSources) { account in
+                                    Button(account.name) { sourceAccountId = account.id }
+                                }
+                            }
+                        }
+                        field("还款日期") {
+                            DatePicker("", selection: $repaymentDate, displayedComponents: .date)
+                                .labelsHidden()
+                        }
+                        if let previewText {
+                            Text(previewText)
+                                .font(Theme.Font.caption(.medium))
+                                .foregroundStyle(Theme.Color.textPrimary)
+                        }
+                        if selectableSources.isEmpty {
+                            Label("没有与该现金流币种匹配的余额账户，请先创建。", systemImage: "exclamationmark.triangle.fill")
+                                .font(Theme.Font.caption())
+                                .foregroundStyle(Theme.Color.expense)
+                        }
+                        if let errorMessage {
+                            Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                                .font(Theme.Font.caption())
+                                .foregroundStyle(Theme.Color.expense)
+                                .lineLimit(2)
+                        }
+                    }
+                    .padding(16)
+                }
+            }
+            .navigationTitle("确认还款")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("确认还款") { Task { await submit() } }
+                        .disabled(isSubmitting || sourceAccountId == nil)
+                }
+            }
+        }
+    }
+
+    private var selectableSources: [AccountDTO] {
+        model.repaymentSourceAccounts(for: item)
+    }
+
+    private var selectedSourceName: String? {
+        sourceAccountId.flatMap { id in model.accounts.first(where: { $0.id == id })?.name }
+    }
+
+    private var creditAccountName: String {
+        model.repaidCreditAccount(for: item)?.name
+            ?? model.accountName(item.accountId)
+            ?? "信用账户"
+    }
+
+    private var previewText: String? {
+        guard let name = selectedSourceName else { return nil }
+        let amount = FinanceFormatter.money(item.amount, currency: item.currency)
+        return "将从「\(name)」还款 \(amount)"
+    }
+
+    @MainActor
+    private func submit() async {
+        guard let sourceAccountId else { return }
+        isSubmitting = true
+        defer { isSubmitting = false }
+        do {
+            try await model.settleRepayment(item, sourceAccountId: sourceAccountId, date: repaymentDate)
             errorMessage = nil
             dismiss()
         } catch {

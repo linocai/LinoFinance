@@ -7,13 +7,18 @@ import SwiftUI
 // Lists cash-flow items (cancelled hidden by default), drives the three per-row
 // actions (确认 / 兑现settle / 取消) and create / edit.
 //
-// SETTLE rules (mirrors v1 `CashFlowView` golden reference):
-//   • transfer items settle through the credit-repayment flow → no direct settle.
+// SETTLE rules (v2.1.0 P1 — transfer 信用还款直接结算放开):
+//   • transfer items (credit repayment) settle in-place via the 确认还款 sheet:
+//     pick the repayment SOURCE balance account + date → build a transfer-only
+//     entry (transfer_out on the source + credit_repayment on the credit account)
+//     and settle. The source account is distinct from `item.accountId` (which
+//     holds the CREDIT account for a system-generated repayment item), so we never
+//     PATCH it onto the item; the credit leg + statement cycle come from the item.
 //   • reimbursement-linked items settle only via the claim's mark-received →
 //     no direct settle (backend rejects a direct settle; audit 1.3).
-//   • a settle needs an `account_id` + `category_id`. If both already set we
-//     build the entry and settle in one shot; if missing, the UI gathers them
-//     (SettleCompletionSheet) and PATCHes them first, then settles.
+//   • an inflow/outflow settle needs an `account_id` + `category_id`. If both
+//     already set we build the entry and settle in one shot; if missing, the UI
+//     gathers them (SettleCompletionSheet) and PATCHes them first, then settles.
 
 @MainActor
 final class CashFlowModel: ObservableObject {
@@ -107,21 +112,26 @@ final class CashFlowModel: ObservableObject {
     }
 
     /// Settle outcome: either done, or needs the completion sheet (missing
-    /// account/category), or blocked (transfer / reimbursement-linked).
+    /// account/category for inflow/outflow), or needs the 确认还款 sheet (transfer),
+    /// or blocked (reimbursement-linked).
     enum SettleOutcome {
         case settled
         case needsCompletion
+        /// Transfer (credit repayment): caller opens the 确认还款 sheet to pick a
+        /// repayment source balance account + date.
+        case needsRepaymentSource
         case blocked(String)
     }
 
-    /// Attempt the one-shot settle. Returns `.needsCompletion` when the item is
-    /// missing its account or category so the caller can open the completion sheet.
+    /// Attempt the one-shot settle. Returns `.needsCompletion`/`.needsRepaymentSource`
+    /// when the caller must gather more input before settling.
     func attemptSettle(_ item: CashFlowItemDTO) async -> SettleOutcome {
-        if item.direction == "transfer" {
-            return .blocked("转账现金流请通过记账里的信用还款流程结算。")
-        }
         if item.linkedReimbursementId != nil {
             return .blocked("报销关联现金流请通过报销中心的「标记到账」结算。")
+        }
+        if item.direction == "transfer" {
+            // Transfer = 信用还款: always gather the repayment source via the sheet.
+            return .needsRepaymentSource
         }
         guard item.accountId != nil, item.categoryId != nil else {
             return .needsCompletion
@@ -189,14 +199,98 @@ final class CashFlowModel: ObservableObject {
         }
         try await settle(refreshed)
     }
+
+    // MARK: - Transfer (信用还款) direct settle (v2.1.0 P1)
+
+    /// Balance accounts in the item's currency, eligible as a repayment source.
+    func repaymentSourceAccounts(for item: CashFlowItemDTO) -> [AccountDTO] {
+        accounts
+            .filter { $0.type == .balance && $0.status == "active" && $0.currency == item.currency }
+            .sorted(by: AccountDTO.displayOrdered)
+    }
+
+    /// The credit account being repaid (the item's linked account for a
+    /// system-generated repayment item). Nil for a manual transfer with no link.
+    func repaidCreditAccount(for item: CashFlowItemDTO) -> AccountDTO? {
+        guard let id = item.accountId else { return nil }
+        return accounts.first { $0.id == id && $0.type == .credit }
+    }
+
+    /// Settle a transfer (信用还款) item directly: build a transfer-only entry that
+    /// moves money out of the chosen source balance account and pays down the
+    /// credit account's liability + statement cycle, then settle. The source
+    /// account is NOT written onto the item (it would clobber the credit link).
+    ///
+    /// Entry shape (matches the canonical credit-repayment double entry):
+    ///   category_lines: []  (backend rejects category lines on a transfer settle)
+    ///   account_movements:
+    ///     • transfer_out on the source balance account (reduces its balance)
+    ///     • credit_repayment on the credit account, carrying the item's
+    ///       linked_statement_cycle_id (reduces liability + cycle paid amount)
+    /// Falls back to a plain transfer_out/transfer_in when the item is a manual
+    /// transfer with no statement cycle (no credit leg available).
+    func settleRepayment(_ item: CashFlowItemDTO, sourceAccountId: String, date: Date) async throws {
+        let creditLeg: AccountMovementCreateRequest
+        if let cycleId = item.linkedStatementCycleId, let creditAccountId = item.accountId {
+            creditLeg = AccountMovementCreateRequest(
+                accountId: creditAccountId,
+                statementCycleId: cycleId,
+                movementType: .creditRepayment,
+                amount: item.amount,
+                currency: item.currency,
+                exchangeRateId: item.exchangeRateId,
+                convertedCnyAmount: item.convertedCnyAmount,
+                note: item.note
+            )
+        } else if let destinationAccountId = item.accountId {
+            // Manual transfer with no credit cycle → plain transfer into the linked account.
+            creditLeg = AccountMovementCreateRequest(
+                accountId: destinationAccountId,
+                statementCycleId: nil,
+                movementType: .transferIn,
+                amount: item.amount,
+                currency: item.currency,
+                exchangeRateId: item.exchangeRateId,
+                convertedCnyAmount: item.convertedCnyAmount,
+                note: item.note
+            )
+        } else {
+            throw CashFlowError.noRepaymentTarget
+        }
+
+        let sourceLeg = AccountMovementCreateRequest(
+            accountId: sourceAccountId,
+            statementCycleId: nil,
+            movementType: .transferOut,
+            amount: item.amount,
+            currency: item.currency,
+            exchangeRateId: item.exchangeRateId,
+            convertedCnyAmount: item.convertedCnyAmount,
+            note: item.note
+        )
+
+        let entry = EntryCreateRequest(
+            title: item.title,
+            entryType: "transfer",
+            date: date,
+            status: .confirmed,
+            note: item.note,
+            categoryLines: [],
+            accountMovements: [sourceLeg, creditLeg]
+        )
+        _ = try await apiClient.settleCashFlowItem(item.id, request: CashFlowSettleRequest(entry: entry))
+        await load()
+    }
 }
 
 enum CashFlowError: LocalizedError {
     case itemGone
+    case noRepaymentTarget
 
     var errorDescription: String? {
         switch self {
         case .itemGone: "结算失败：现金流已不在列表中。"
+        case .noRepaymentTarget: "结算失败：这条转账现金流没有可还款的目标账户。"
         }
     }
 }
@@ -204,11 +298,12 @@ enum CashFlowError: LocalizedError {
 // MARK: - Display vocabulary
 
 extension CashFlowItemDTO {
-    /// Whether the generic 兑现(settle) action may be offered (matches v1
-    /// `canShowSettleAction`): transfers and reimbursement-linked receivables
-    /// settle through their own flows, so the entry point is hidden here.
+    /// Whether the settle action may be offered. Reimbursement-linked receivables
+    /// settle through the claim's mark-received, so the entry point is hidden here.
+    /// Transfers (信用还款) ARE settleable in-place now (v2.1.0 P1) — they route
+    /// to the 确认还款 sheet instead of the generic completion sheet.
     var canShowSettleAction: Bool {
-        direction != "transfer" && linkedReimbursementId == nil
+        linkedReimbursementId == nil
     }
 
     var statusTitle: String {

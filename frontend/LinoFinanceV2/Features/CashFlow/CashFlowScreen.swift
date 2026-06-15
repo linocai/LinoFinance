@@ -28,6 +28,7 @@ struct CashFlowScreen: View {
 
     @State private var formMode: CashFlowFormSheet.Mode?
     @State private var settleItem: CashFlowItemDTO?
+    @State private var repaymentItem: CashFlowItemDTO?
 
     init(model: AppModel) {
         self.model = model
@@ -54,6 +55,9 @@ struct CashFlowScreen: View {
         }
         .sheet(item: $settleItem) { item in
             SettleCompletionSheet(model: cashFlowModel, item: item) {}
+        }
+        .sheet(item: $repaymentItem) { item in
+            RepaymentConfirmSheet(model: cashFlowModel, item: item) {}
         }
     }
 
@@ -123,6 +127,7 @@ struct CashFlowScreen: View {
             canEdit: actionable,
             canConfirm: actionable && item.status == "expected",
             canSettle: actionable && item.canShowSettleAction,
+            settleTitle: item.direction == "transfer" ? "确认还款" : "兑现",
             canCancel: actionable,
             edit: { formMode = .edit(item) },
             confirm: { Task { await cashFlowModel.confirm(item.id) } },
@@ -138,6 +143,8 @@ struct CashFlowScreen: View {
             switch await cashFlowModel.attemptSettle(item) {
             case .needsCompletion:
                 settleItem = item
+            case .needsRepaymentSource:
+                repaymentItem = item
             case .blocked(let message):
                 cashFlowModel.actionError = message
             case .settled:
@@ -197,6 +204,8 @@ struct CashFlowRowActions {
     var canEdit: Bool
     var canConfirm: Bool
     var canSettle: Bool
+    /// Settle chip label — "确认还款" for transfers (信用还款), "兑现" otherwise.
+    var settleTitle: String = "兑现"
     var canCancel: Bool
     var edit: () -> Void
     var confirm: () -> Void
@@ -247,7 +256,7 @@ private struct CashFlowRow: View {
                 TintedActionChip(title: "确认", tone: .positive, action: actions.confirm)
             }
             if actions.canSettle {
-                TintedActionChip(title: "兑现", tone: .action, action: actions.settle)
+                TintedActionChip(title: actions.settleTitle, tone: .action, action: actions.settle)
             }
             if actions.canCancel {
                 TintedActionChip(title: "取消", tone: .neutral, action: actions.cancel)
