@@ -539,11 +539,12 @@ private struct ConflictRow: View {
                     .foregroundStyle(Theme.Color.textPrimary)
                 Spacer(minLength: 8)
                 if let delta = conflict.delta, delta.value != 0 {
+                    // 用该 conflict 的币种渲染（外币卡才不会误标 ¥；reviewer B2）。
                     AmountText(
                         value: delta,
-                        currency: .cny,
+                        currency: conflict.currency ?? .cny,
                         showsPositiveSign: true,
-                        showsSymbol: false,
+                        showsSymbol: true,
                         font: Theme.Font.caption(.medium),
                         color: Theme.Color.expense
                     )

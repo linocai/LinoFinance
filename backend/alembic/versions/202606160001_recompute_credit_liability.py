@@ -14,11 +14,20 @@ and parks the drift in a traceable trail.
 
 For each credit account where ``stored ≠ Σcycle``:
   1. ``UPDATE accounts SET current_liability = Σcycle``;
-  2. INSERT an ``account_adjustments`` row (``source='liability_recompute'``,
+  2. INSERT an ``account_adjustments`` row (``source='liability_recompute_migration'``,
      ``delta_amount = Σcycle − stored``, ``balance_before = stored``,
      ``balance_after = Σcycle``) so the抹平 amount is auditable;
-  3. INSERT an ``audit_logs`` row (``action_type='account.liability_recompute'``)
+  3. INSERT an ``audit_logs`` row (``action_type='account.liability_recompute_migration'``)
      with before/after snapshots.
+
+The migration uses a **dedicated source/action marker** (``*_migration``) distinct
+from the runtime "重算此账户" API (``app.services.reconciliation.recompute_credit_account``,
+which writes ``source='liability_recompute'`` / ``action_type='account.liability_recompute'``).
+This keeps the two trails isolated: ``downgrade`` only deletes/restores **its own**
+migration rows and never touches API-produced adjustments. So the sequence
+「升级 → 用户在对账界面点重算(API) → downgrade」 correctly undoes only the migration's
+change (liability back to the **pre-migration** value via this row's ``balance_before``),
+leaves the user's API adjustment intact, and removes only the migration adjustment.
 
 The default policy抹平 the delta as an opening mis-entry (PROJECT_PLAN §5.7 D1:
 用户已确认花呗真实=600=Σcycle、stored 1400 的 800 是开账误录). Per §5.7, the
@@ -31,8 +40,10 @@ them untouched (delta 0).
 Postgres/SQLite-compatible: pure data UPDATE + INSERT via ``sa.text``, no DDL,
 no dialect branch. Idempotent: re-running matches 0 drifted accounts once the
 column already equals ``Σcycle``. Reversible: ``downgrade`` restores each
-account's original ``current_liability`` from the recorded ``balance_before`` and
-removes the migration's adjustment/audit rows.
+account's pre-migration ``current_liability`` from this migration's own
+``balance_before`` and removes only the migration's adjustment/audit rows —
+runtime API recompute adjustments (bare ``liability_recompute`` source) are left
+untouched (reviewer Y1).
 """
 import json
 from decimal import Decimal
@@ -46,8 +57,13 @@ down_revision = "202606150001"
 branch_labels = None
 depends_on = None
 
-ADJUSTMENT_SOURCE = "liability_recompute"
-AUDIT_ACTION = "account.liability_recompute"
+# Dedicated migration markers — must stay DISTINCT from the runtime recompute API
+# (``app.services.reconciliation.recompute_credit_account`` uses bare
+# ``liability_recompute`` / ``account.liability_recompute``). The ``*_migration``
+# suffix lets ``downgrade`` delete/restore only this migration's rows and never
+# touch API-produced adjustments (reviewer Y1).
+ADJUSTMENT_SOURCE = "liability_recompute_migration"
+AUDIT_ACTION = "account.liability_recompute_migration"
 ADJUSTMENT_REASON = "v2.2.0 P1 credit liability recompute"
 # Mirror app.services.ledger.CREDIT_LIABILITY_EXCLUDED_CYCLE_STATUSES.
 EXCLUDED_CYCLE_STATUSES = ("voided",)
@@ -153,9 +169,17 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Restore each account's pre-migration ``current_liability``.
 
-    The original value is the ``balance_before`` recorded on this migration's
-    ``account_adjustments`` rows. After restoring, the migration's adjustment and
-    audit rows are removed so the trail is clean.
+    The original value is the ``balance_before`` recorded on **this migration's**
+    ``account_adjustments`` rows (``source=ADJUSTMENT_SOURCE`` = the dedicated
+    ``liability_recompute_migration`` marker). After restoring, only the
+    migration's adjustment and audit rows are removed.
+
+    Crucially, the filters key on the migration-specific marker, so runtime
+    "重算此账户" API adjustments (bare ``source='liability_recompute'`` /
+    ``action_type='account.liability_recompute'``) are NEVER deleted or used as a
+    restore source. The sequence 「升级 → API 重算 → downgrade」 therefore returns
+    the account to its true pre-migration value and keeps the user's API
+    adjustment intact (reviewer Y1).
     """
     bind = op.get_bind()
     rows = bind.execute(

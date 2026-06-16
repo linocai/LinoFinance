@@ -21,8 +21,12 @@ from app.db.base import Base
 
 PRIOR_HEAD = "202606150001"
 RECOMPUTE_HEAD = "202606160001"
-ADJUSTMENT_SOURCE = "liability_recompute"
-AUDIT_ACTION = "account.liability_recompute"
+# Migration-specific markers (reviewer Y1: distinct from the runtime API).
+ADJUSTMENT_SOURCE = "liability_recompute_migration"
+AUDIT_ACTION = "account.liability_recompute_migration"
+# Runtime "重算此账户" API markers — must survive downgrade untouched.
+API_ADJUSTMENT_SOURCE = "liability_recompute"
+API_AUDIT_ACTION = "account.liability_recompute"
 
 
 def _build_engine(tmp_path, monkeypatch):
@@ -193,6 +197,114 @@ def test_recompute_downgrade_restores_original_liability(tmp_path, monkeypatch) 
             {"act": AUDIT_ACTION},
         )
         == 0
+    )
+
+    get_settings.cache_clear()
+
+
+def test_downgrade_after_api_recompute_isolates_migration_trail(
+    tmp_path, monkeypatch
+) -> None:
+    """Reviewer Y1: 「升级 → 用户在对账界面点重算(API) → downgrade」 must undo only the
+    migration's change, keep the API adjustment, and restore the *pre-migration*
+    original value — not the API intermediate state.
+
+    Repro: stored 1400 / Σcycle 600 (the 花呗 800 误录). Migration抹平 1400→600 and
+    parks a migration adjustment (balance_before=1400). The stored field then
+    drifts again to 700 (legacy data); the user clicks "重算此账户" (the real API
+    service), which writes its own adjustment 700→600 with the **bare**
+    ``liability_recompute`` source. On downgrade, the migration trail is removed
+    and liability is restored to 1400 (the migration's balance_before), while the
+    API adjustment survives untouched.
+    """
+    from sqlalchemy.orm import sessionmaker
+
+    from app.services.reconciliation import recompute_credit_account
+
+    engine = _build_engine(tmp_path, monkeypatch)
+    cfg = _alembic_config()
+    command.stamp(cfg, PRIOR_HEAD)
+
+    drifted = _insert_credit_account(engine, "花呗", "1400")
+    _insert_cycle(engine, drifted, statement_amount="600", paid_amount="0")
+
+    command.upgrade(cfg, "head")
+    assert _liability(engine, drifted) == Decimal("600.00")
+
+    # Simulate post-migration legacy drift back to 700, then the user clicks the
+    # 对账界面 "重算此账户" button → the real runtime API recompute service.
+    with engine.begin() as conn:
+        conn.execute(
+            text("UPDATE accounts SET current_liability = '700' WHERE id = :id"),
+            {"id": drifted},
+        )
+    SessionForTest = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    with SessionForTest() as db:
+        result = recompute_credit_account(db, drifted, created_by="user")
+    assert result.delta == Decimal("-100.00")  # 700 → 600
+    assert _liability(engine, drifted) == Decimal("600.00")
+
+    # Pre-downgrade: one migration adjustment + one API adjustment coexist.
+    assert (
+        _count(
+            engine,
+            "account_adjustments",
+            "account_id = :aid AND source = :src",
+            {"aid": drifted, "src": ADJUSTMENT_SOURCE},
+        )
+        == 1
+    )
+    assert (
+        _count(
+            engine,
+            "account_adjustments",
+            "account_id = :aid AND source = :src",
+            {"aid": drifted, "src": API_ADJUSTMENT_SOURCE},
+        )
+        == 1
+    )
+
+    command.downgrade(cfg, PRIOR_HEAD)
+
+    # liability restored to the migration's balance_before (1400) — the TRUE
+    # pre-migration original, NOT the 700/600 API intermediate.
+    assert _liability(engine, drifted) == Decimal("1400.00")
+
+    # Migration trail removed.
+    assert (
+        _count(
+            engine, "account_adjustments", "source = :src", {"src": ADJUSTMENT_SOURCE}
+        )
+        == 0
+    )
+    assert (
+        _count(engine, "audit_logs", "action_type = :act", {"act": AUDIT_ACTION}) == 0
+    )
+
+    # API adjustment + audit SURVIVE untouched (its own balance_before still 700).
+    assert (
+        _count(
+            engine,
+            "account_adjustments",
+            "source = :src",
+            {"src": API_ADJUSTMENT_SOURCE},
+        )
+        == 1
+    )
+    with engine.connect() as conn:
+        api_before = conn.execute(
+            text(
+                "SELECT balance_before FROM account_adjustments "
+                "WHERE account_id = :aid AND source = :src"
+            ),
+            {"aid": drifted, "src": API_ADJUSTMENT_SOURCE},
+        ).scalar_one()
+    assert Decimal(api_before) == Decimal("700.00")
+    assert (
+        _count(
+            engine, "audit_logs", "action_type = :act", {"act": API_AUDIT_ACTION}
+        )
+        == 1
     )
 
     get_settings.cache_clear()

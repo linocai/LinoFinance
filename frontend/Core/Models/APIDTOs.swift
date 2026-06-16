@@ -492,6 +492,8 @@ struct ReconciliationConflictDTO: Decodable, Equatable, Hashable, Identifiable {
     let externalActual: DecimalValue?
     // stored − expected（R1） / stored − external_actual（R3）.
     let delta: DecimalValue?
+    // 该 delta 的币种（外币卡按此渲染符号，nil 时回退 .cny）.
+    let currency: CurrencyCode?
     let detail: String?
     let offending: [ReconciliationPointerDTO]
     let fix: ReconciliationFix

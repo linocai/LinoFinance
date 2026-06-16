@@ -314,6 +314,7 @@ def _check_credit_three_way(
             unbilled_charges=unbilled,
             expected_liability=expected,
             delta=delta,
+            currency=account.currency,
             detail=(
                 f"本期待还 {current_due}，其他期未还 {other_due}，"
                 f"合计 {sum_open}，但账户记录欠款 {stored}（差 {delta}）。"
@@ -333,6 +334,7 @@ def _check_credit_three_way(
         unbilled_charges=unbilled,
         expected_liability=expected,
         delta=delta,
+        currency=account.currency,
         detail=f"本期待还 {current_due}，其他期未还 {other_due}，合计 {sum_open}。",
         offending=offending,
         fix="none",
@@ -367,6 +369,7 @@ def _check_statement_cashflow(
                     severity="conflict",
                     title="账单缺对应还款现金流",
                     delta=remaining,
+                    currency=account.currency,
                     detail=f"{_cycle_label(cycle)} 未还 {remaining}，但没有关联的还款现金流。",
                     offending=[
                         ConflictPointer(
@@ -386,6 +389,7 @@ def _check_statement_cashflow(
                     severity="conflict",
                     title="账单关联的还款现金流已取消",
                     delta=remaining,
+                    currency=account.currency,
                     detail=f"{_cycle_label(cycle)} 未还 {remaining}，但关联现金流已取消。",
                     offending=[
                         ConflictPointer(
@@ -403,6 +407,7 @@ def _check_statement_cashflow(
                     severity="conflict",
                     title="账单与还款现金流金额不符",
                     delta=quantize_money(linked.amount - remaining),
+                    currency=account.currency,
                     detail=(
                         f"{_cycle_label(cycle)} 未还 {remaining}，"
                         f"但关联现金流金额 {quantize_money(linked.amount)}。"
@@ -477,6 +482,7 @@ def _check_balance_external(
         stored_balance=stored,
         external_actual=external,
         delta=delta,
+        currency=account.currency,
         detail=f"系统余额 {stored}，上次录入真实余额 {external}（差 {delta}）。",
         offending=[ConflictPointer(type="account", id=account.id, label=account.name)],
         fix="external_actual",
@@ -558,6 +564,7 @@ def _check_orphans(db: Session) -> List[ReconciliationConflict]:
                 severity="conflict",
                 title="未还账单缺还款现金流",
                 delta=remaining,
+                currency=cycle.currency,
                 detail=f"{_cycle_label(cycle)} 未还 {remaining}，但没有关联的还款现金流。",
                 offending=[
                     ConflictPointer(

@@ -69,6 +69,8 @@ class ReconciliationConflict(BaseModel):
     external_actual: Optional[Decimal] = None
     # stored − expected（R1） / stored − external_actual（R3），其他项可省。
     delta: Optional[Decimal] = None
+    # 该冲突 delta 的币种（前端按此渲染符号，外币卡才不会误标 ¥；reviewer B2）。
+    currency: Optional[str] = None
     detail: Optional[str] = None
     offending: List[ConflictPointer] = Field(default_factory=list)
     # internal_recompute | jump_record | external_actual | none
