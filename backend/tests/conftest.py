@@ -33,6 +33,10 @@ def client() -> Generator[TestClient, None, None]:
     app.dependency_overrides[get_db] = override_get_db
 
     with TestClient(app) as test_client:
+        # Expose the shared sessionmaker so tests can manufacture direct DB state
+        # (e.g. orphan rows the API path won't normally produce) against the same
+        # in-memory engine the client uses.
+        test_client.session_factory = testing_session_local  # type: ignore[attr-defined]
         yield test_client
 
     app.dependency_overrides.clear()
