@@ -408,6 +408,16 @@ struct LinoAPIClient {
         try await get("reconciliation/accounts")
     }
 
+    /// v2.2.0 — read-only multi-dimension consistency/conflict detector.
+    func reconciliationCheck() async throws -> ReconciliationCheckResponseDTO {
+        try await get("reconciliation/check")
+    }
+
+    /// v2.2.0 — re-derive a credit account's liability to ``Σcycle`` (R1 内部纠错).
+    func recomputeCreditLiability(accountID: String) async throws -> CreditRecomputeResponseDTO {
+        try await post("reconciliation/recompute-credit/\(accountID)")
+    }
+
     func createAccountAdjustment(_ request: AccountAdjustmentCreateRequest) async throws -> AccountAdjustmentDTO {
         try await post("reconciliation/adjustments", body: request)
     }

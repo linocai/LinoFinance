@@ -2,35 +2,29 @@ import SwiftUI
 
 #if os(macOS)
 
-// ReconciliationScreen — D9 对账 (macOS · self-contained · presentable as a sheet).
+// ReconciliationScreen — v2.2.0 对账「一致性/冲突检测器」(macOS, sheet).
 //
-// Presented FROM AccountsScreen (P3) because reconciliation is the ONLY path a
-// balance account's balance can change (plan §D9). Self-contained: owns its own
-// title + close button + @StateObject ReconciliationModel, so it drops cleanly
-// into a `.sheet { }` without the host supplying chrome.
+// 推倒重做（删旧「系统余额 vs 当前余额」那套——两个恒等内部数相减、永远「无需调整」、
+// 还掩盖信用欠款 −1400 真 bug）。新理念（用户原话）：对账 =「快捷找到哪些账户有冲突 →
+// 我定夺哪个对 → 一键纠错」。
 //
-// Flow (plan §D9): select 账户 → 系统余额 (read-only) → 实际余额 (input) → 差额
-// (auto-computed) → 说明 → 「生成对账调整」. Balances only change here.
+// 结构：
+//   顶部冲突横幅（X 个账户有问题 / N 条孤儿，全平时绿色「一切对得上」）
+//   ├─ 孤儿区（R4，跨对象，红标，给「去处理」跳转）
+//   └─ 逐账户区（有冲突置顶红标）：
+//        • 信用账户 → R1 三数拆解卡（本期待还 / 其他期未还 / 合计），漂移时「重算此账户」
+//          + R2 账单↔还款现金流冲突逐条「去处理」跳转
+//        • 余额/投资账户 → R3「录真实余额」inline 表单，一键以真实为准记调整对平
 //
-// Data:
-//   • listReconciliationAccounts() → ReconciliationAccountsResponseDTO
-//       (.items[ReconciliationAccountDTO] each carrying expected/current/delta)
-//   • createAccountAdjustment(AccountAdjustmentCreateRequest(accountId:
-//       actualAmount:reason:note:))
+// 纠错三路：R1 internalRecompute（recompute 接口）/ R3 externalActual（adjustments 接口）/
+// R2·R4 jumpRecord（前端导航到现金流 / 周期 / 报销 section）。
 struct ReconciliationScreen: View {
     @ObservedObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
 
     @StateObject private var reconModel: ReconciliationModel
 
-    // Adjustment form state
-    @State private var selectedAccountId: String?
-    @State private var actualText = ""
-    @State private var reason = ""
-    @State private var note = ""
-    @State private var isSubmitting = false
-    @State private var errorMessage: String?
-    @State private var successMessage: String?
+    @State private var globalError: String?
 
     init(model: AppModel) {
         self.model = model
@@ -42,21 +36,39 @@ struct ReconciliationScreen: View {
             header
             Divider().overlay(Theme.Color.divider)
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 16) {
                     switch reconModel.state {
                     case .idle, .loading:
                         loadingState
                     case .failed(let message):
                         failedState(message)
                     case .loaded:
-                        overviewSection
-                        adjustmentForm
+                        summaryBanner
+                        if let globalError {
+                            Label(globalError, systemImage: "exclamationmark.triangle.fill")
+                                .font(Theme.Font.caption())
+                                .foregroundStyle(Theme.Color.expense)
+                        }
+                        if !reconModel.orphans.isEmpty {
+                            orphansSection
+                        }
+                        ForEach(reconModel.sortedAccounts) { account in
+                            AccountConflictCard(
+                                account: account,
+                                reconModel: reconModel,
+                                onJump: jump(to:),
+                                onError: { globalError = $0 }
+                            )
+                        }
+                        if reconModel.accounts.isEmpty && reconModel.orphans.isEmpty {
+                            emptyState
+                        }
                     }
                 }
                 .padding(22)
             }
         }
-        .frame(width: 620, height: 720)
+        .frame(width: 640, height: 740)
         .background {
             BloomBackground(animated: false).opacity(0.9)
         }
@@ -78,11 +90,14 @@ struct ReconciliationScreen: View {
                 Text("对账")
                     .font(Theme.Font.pageTitle())
                     .foregroundStyle(Theme.Color.textPrimary)
-                Text("系统记录余额 vs 实际余额 · 账户余额只经此处变动")
+                Text("找出对不上的账户 · 你定夺真相 · 一键纠错")
                     .font(Theme.Font.caption())
                     .foregroundStyle(Theme.Color.textSecondary)
             }
             Spacer()
+            SubtleToolbarButton(title: "刷新", systemImage: "arrow.clockwise") {
+                Task { await reconModel.load() }
+            }
             Button {
                 dismiss()
             } label: {
@@ -97,236 +112,94 @@ struct ReconciliationScreen: View {
         .padding(.vertical, 16)
     }
 
-    // MARK: - Overview (system vs actual)
+    // MARK: - Summary banner
 
-    private var overviewSection: some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("账户对账总览")
+    private var summaryBanner: some View {
+        let accountConflicts = reconModel.conflictAccountCount
+        let orphanConflicts = reconModel.orphanConflictCount
+        let clean = !reconModel.hasConflicts
+        return GlassCard {
+            HStack(spacing: 12) {
+                Image(systemName: clean ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(clean ? Theme.Color.income : Theme.fixed(0xE08A1F))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(clean ? "一切对得上" : "发现需要核对的冲突")
                         .font(Theme.Font.subtitle(.semibold))
                         .foregroundStyle(Theme.Color.textPrimary)
-                    Spacer()
-                    Text("阈值 \(FinanceFormatter.money(reconModel.snapshot?.threshold ?? DecimalValue(0)))")
-                        .font(Theme.Font.badge())
-                        .foregroundStyle(Theme.Color.textTertiary)
-                }
-                if reconModel.rows.isEmpty {
-                    Text("没有可对账的账户。")
+                    Text(clean
+                         ? "所有账户与账单 / 现金流 / 真实余额一致。"
+                         : conflictSummaryText(accountConflicts, orphanConflicts))
                         .font(Theme.Font.caption())
-                        .foregroundStyle(Theme.Color.textTertiary)
-                } else {
-                    ForEach(reconModel.rows) { row in
-                        reconRow(row)
-                        if row.id != reconModel.rows.last?.id {
-                            Divider().overlay(Theme.Color.divider)
-                        }
-                    }
+                        .foregroundStyle(Theme.Color.textSecondary)
                 }
+                Spacer()
             }
         }
     }
 
-    private func reconRow(_ row: ReconciliationAccountDTO) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(row.accountName)
-                        .font(Theme.Font.body(.medium))
-                        .foregroundStyle(Theme.Color.textPrimary)
-                    StatusBadge(text: row.accountType.title, tone: .neutral)
-                    if row.needsAdjustment {
-                        StatusBadge(text: "需调整", tone: .warning)
-                    }
-                }
-                Text("系统余额 \(FinanceFormatter.money(row.expectedAmount, currency: row.currency)) · 实际 \(FinanceFormatter.money(row.currentAmount, currency: row.currency))")
-                    .font(Theme.Font.caption())
-                    .foregroundStyle(Theme.Color.textSecondary)
-            }
-            Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 3) {
-                Text("差额")
-                    .font(Theme.Font.badge())
-                    .foregroundStyle(Theme.Color.textTertiary)
-                AmountText(
-                    value: row.deltaAmount,
-                    currency: row.currency,
-                    showsPositiveSign: true,
-                    font: Theme.Font.subtitle(.semibold),
-                    color: deltaColor(row.deltaAmount)
-                )
-                TintedActionChip(title: "对此账户调整", tone: .action) {
-                    selectAccount(row)
-                }
-            }
-        }
-        .padding(.vertical, 4)
+    private func conflictSummaryText(_ accounts: Int, _ orphans: Int) -> String {
+        var parts: [String] = []
+        if accounts > 0 { parts.append("\(accounts) 个账户有问题") }
+        if orphans > 0 { parts.append("\(orphans) 条记录孤儿") }
+        return parts.isEmpty ? "见下方拆解。" : parts.joined(separator: " · ")
     }
 
-    private func deltaColor(_ value: DecimalValue) -> Color {
-        if value.value == 0 { return Theme.Color.textTertiary }
-        return value.value < 0 ? Theme.Color.expense : Theme.Color.income
-    }
+    // MARK: - Orphans (R4)
 
-    // MARK: - Adjustment form
-
-    private var adjustmentForm: some View {
+    private var orphansSection: some View {
         GlassCard {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("生成对账调整")
-                    .font(Theme.Font.subtitle(.semibold))
-                    .foregroundStyle(Theme.Color.textPrimary)
-
-                field("账户") {
-                    GlassMenuPicker(
-                        label: reconModel.rows.first { $0.accountId == selectedAccountId }?.accountName
-                            ?? (reconModel.rows.isEmpty ? "无可对账账户" : "未选择"),
-                        isPlaceholder: selectedAccountId == nil,
-                        disabled: reconModel.rows.isEmpty
-                    ) {
-                        ForEach(reconModel.rows) { row in
-                            Button(row.accountName) { selectedAccountId = row.accountId }
-                        }
-                    }
-                    .onChange(of: selectedAccountId) { _, _ in
-                        syncActualToSystem()
-                    }
-                }
-
-                if let row = selectedRow {
-                    field("系统余额（只读）") {
-                        AmountText(
-                            value: row.expectedAmount,
-                            currency: row.currency,
-                            font: Theme.Font.cardNumber(),
-                            color: Theme.Color.textPrimary
-                        )
-                    }
-                    field("实际余额") {
-                        HStack(spacing: 10) {
-                            TextField("0.00", text: $actualText)
-                                .textFieldStyle(.roundedBorder)
-                                .font(Theme.Font.cardNumber().monospacedDigit())
-                            Text(row.currency.rawValue)
-                                .font(Theme.Font.body(.medium))
-                                .foregroundStyle(Theme.Color.textSecondary)
-                        }
-                    }
-                    field("差额（自动算）") {
-                        if let actual = parsedActual {
-                            let delta = DecimalValue(actual.value - row.expectedAmount.value)
-                            AmountText(
-                                value: delta,
-                                currency: row.currency,
-                                showsPositiveSign: true,
-                                font: Theme.Font.subtitle(.semibold),
-                                color: deltaColor(delta)
-                            )
-                        } else {
-                            Text("输入实际余额后自动计算")
-                                .font(Theme.Font.caption())
-                                .foregroundStyle(Theme.Color.textTertiary)
-                        }
-                    }
-                    field("说明") {
-                        TextField("如：核对支付宝余额", text: $reason)
-                            .textFieldStyle(.roundedBorder)
-                    }
-                    field("备注（可选）") {
-                        TextField("补充说明", text: $note)
-                            .textFieldStyle(.roundedBorder)
-                    }
-                } else {
-                    Text("先选择一个账户开始对账。")
-                        .font(Theme.Font.caption())
-                        .foregroundStyle(Theme.Color.textTertiary)
-                }
-
-                if let errorMessage {
-                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                        .font(Theme.Font.caption())
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "link.badge.plus")
                         .foregroundStyle(Theme.Color.expense)
+                    Text("跨对象孤儿")
+                        .font(Theme.Font.subtitle(.semibold))
+                        .foregroundStyle(Theme.Color.textPrimary)
+                    StatusBadge(text: "\(reconModel.orphans.count)", tone: .negative)
+                    Spacer()
                 }
-                if let successMessage {
-                    Label(successMessage, systemImage: "checkmark.circle.fill")
-                        .font(Theme.Font.caption())
-                        .foregroundStyle(Theme.Color.income)
+                Text("这些记录缺少应有的关联，需补/改对应记录。")
+                    .font(Theme.Font.caption())
+                    .foregroundStyle(Theme.Color.textTertiary)
+                ForEach(reconModel.orphans) { conflict in
+                    ConflictRow(conflict: conflict, onJump: jump(to:))
+                    if conflict.id != reconModel.orphans.last?.id {
+                        Divider().overlay(Theme.Color.divider)
+                    }
                 }
-
-                PrimaryDarkButton("生成对账调整", fullWidth: true, isLoading: isSubmitting) {
-                    Task { await submit() }
-                }
-                .disabled(isSubmitting || !canSubmit)
-                .opacity((isSubmitting || !canSubmit) ? 0.5 : 1)
             }
         }
     }
 
-    // MARK: - Selection / gating
+    // MARK: - Navigation (R2/R4 jump)
 
-    private var selectedRow: ReconciliationAccountDTO? {
-        guard let selectedAccountId else { return nil }
-        return reconModel.rows.first { $0.accountId == selectedAccountId }
-    }
-
-    private var parsedActual: DecimalValue? {
-        guard let decimal = parseDecimalAmount(actualText) else { return nil }
-        return DecimalValue(decimal)
-    }
-
-    private var canSubmit: Bool {
-        guard selectedRow != nil, parsedActual != nil else { return false }
-        return !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private func selectAccount(_ row: ReconciliationAccountDTO) {
-        selectedAccountId = row.accountId
-        errorMessage = nil
-        successMessage = nil
-        syncActualToSystem()
-    }
-
-    /// Pre-fill 实际余额 with the system balance so the user only edits the delta.
-    private func syncActualToSystem() {
-        guard let row = selectedRow else { return }
-        actualText = FinanceFormatter.money(row.currentAmount, currency: row.currency)
-            .replacingOccurrences(of: row.currency.symbol, with: "")
-            .replacingOccurrences(of: ",", with: "")
-            .trimmingCharacters(in: .whitespaces)
-    }
-
-    @MainActor
-    private func submit() async {
-        guard let row = selectedRow, let actual = parsedActual else { return }
-        isSubmitting = true
-        errorMessage = nil
-        successMessage = nil
-        defer { isSubmitting = false }
-        do {
-            _ = try await reconModel.submitAdjustment(
-                accountId: row.accountId,
-                actualAmount: actual,
-                reason: reason.trimmingCharacters(in: .whitespacesAndNewlines),
-                note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note
-            )
-            successMessage = "已生成对账调整，账户余额已更新。"
-            reason = ""
-            note = ""
-            // Refresh the host app's account cache so AccountsScreen reflects it.
-            await model.loadAccounts()
-            await model.loadDashboard()
-        } catch {
-            errorMessage = error.localizedDescription
+    /// Jump to the offending record. No per-item deep-link exists in v2 yet, so we
+    /// navigate to the owning section and dismiss the sheet; the conflict row已清楚
+    /// 标出「哪条记录、什么问题」让用户在目标 section 找到它。
+    private func jump(to pointer: ReconciliationPointerDTO) {
+        switch pointer.type {
+        case "cash_flow_item":
+            model.selection = .cashFlow
+        case "credit_statement_cycle":
+            model.selection = .cycles
+        case "reimbursement_claim":
+            model.selection = .reimbursements
+        case "account":
+            model.selection = .accounts
+        default:
+            return
         }
+        dismiss()
     }
 
-    // MARK: - States & helpers
+    // MARK: - States
 
     private var loadingState: some View {
         GlassCard {
             HStack(spacing: 12) {
                 ProgressView().controlSize(.small)
-                Text("正在加载对账数据…")
+                Text("正在核对账户一致性…")
                     .font(Theme.Font.body())
                     .foregroundStyle(Theme.Color.textSecondary)
             }
@@ -349,13 +222,345 @@ struct ReconciliationScreen: View {
         }
     }
 
-    private func field<Content: View>(_ label: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label)
+    private var emptyState: some View {
+        GlassCard {
+            Text("没有可对账的账户。")
+                .font(Theme.Font.caption())
+                .foregroundStyle(Theme.Color.textTertiary)
+        }
+    }
+}
+
+// MARK: - Per-account conflict card
+
+private struct AccountConflictCard: View {
+    let account: ReconciliationCheckAccountDTO
+    @ObservedObject var reconModel: ReconciliationModel
+    let onJump: (ReconciliationPointerDTO) -> Void
+    let onError: (String) -> Void
+
+    @State private var isRecomputing = false
+    @State private var recomputeMessage: String?
+
+    var body: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 12) {
+                headerRow
+                if account.accountType == .credit {
+                    creditBody
+                } else {
+                    balanceBody
+                }
+            }
+        }
+    }
+
+    private var headerRow: some View {
+        HStack(spacing: 8) {
+            Text(account.accountName)
+                .font(Theme.Font.subtitle(.semibold))
+                .foregroundStyle(Theme.Color.textPrimary)
+            StatusBadge(text: account.accountType.title, tone: .neutral)
+            if account.hasConflicts {
+                StatusBadge(text: "需核对", tone: .warning)
+            } else {
+                StatusBadge(text: "已对平", tone: .positive)
+            }
+            Spacer()
+        }
+    }
+
+    // MARK: Credit — R1 three-number breakdown + recompute + R2 jumps
+
+    @ViewBuilder
+    private var creditBody: some View {
+        if let breakdown = account.breakdown {
+            CreditBreakdownCard(breakdown: breakdown, currency: account.currency)
+        }
+        // R1 漂移（fix=internalRecompute）→ recompute 按钮。
+        if let drift = account.conflicts.first(where: {
+            $0.code == "credit_three_way" && $0.fix == .internalRecompute
+        }) {
+            recomputeBlock(drift)
+        }
+        // R2 账单↔还款现金流冲突逐条「去处理」。
+        ForEach(account.conflicts.filter { $0.code == "statement_cashflow" }) { conflict in
+            ConflictRow(conflict: conflict, onJump: onJump)
+        }
+    }
+
+    @ViewBuilder
+    private func recomputeBlock(_ drift: ReconciliationConflictDTO) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(drift.title, systemImage: "exclamationmark.triangle.fill")
+                .font(Theme.Font.body(.medium))
+                .foregroundStyle(Theme.fixed(0xE08A1F))
+            if let detail = drift.detail {
+                Text(detail)
+                    .font(Theme.Font.caption())
+                    .foregroundStyle(Theme.Color.textSecondary)
+            }
+            if let recomputeMessage {
+                Label(recomputeMessage, systemImage: "checkmark.circle.fill")
+                    .font(Theme.Font.caption())
+                    .foregroundStyle(Theme.Color.income)
+            }
+            HStack {
+                TintedActionChip(
+                    title: isRecomputing ? "重算中…" : "重算此账户",
+                    systemImage: "arrow.triangle.2.circlepath",
+                    tone: .action
+                ) {
+                    Task { await recompute() }
+                }
+                .disabled(isRecomputing)
+                .opacity(isRecomputing ? 0.5 : 1)
+                Text("以账单为准（合计 = Σ未还账单）重算欠款")
+                    .font(Theme.Font.badge())
+                    .foregroundStyle(Theme.Color.textTertiary)
+            }
+        }
+        .padding(12)
+        .background(
+            Theme.fixed(0xE08A1F).opacity(0.08),
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+        )
+    }
+
+    @MainActor
+    private func recompute() async {
+        isRecomputing = true
+        recomputeMessage = nil
+        defer { isRecomputing = false }
+        do {
+            let result = try await reconModel.recompute(accountID: account.accountId)
+            recomputeMessage = "已重算：欠款 \(FinanceFormatter.money(result.recomputedLiability, currency: account.currency))"
+                + "（调整 \(FinanceFormatter.money(result.delta, currency: account.currency))）"
+        } catch {
+            onError(error.localizedDescription)
+        }
+    }
+
+    // MARK: Balance / investment — R3 record-real-balance
+
+    @ViewBuilder
+    private var balanceBody: some View {
+        if let r3 = account.conflicts.first(where: { $0.code == "balance_external" }) {
+            BalanceExternalForm(
+                account: account,
+                conflict: r3,
+                reconModel: reconModel,
+                onError: onError
+            )
+        } else {
+            Text("账户余额与上次录入的真实余额一致。")
+                .font(Theme.Font.caption())
+                .foregroundStyle(Theme.Color.textTertiary)
+        }
+    }
+}
+
+// MARK: - Credit R1 three-number breakdown card
+
+private struct CreditBreakdownCard: View {
+    let breakdown: ReconciliationBreakdownDTO
+    let currency: CurrencyCode
+
+    /// 本期待还 = 合计 − 其他期；信息由 detail 已给，这里把「合计 vs 账户存的欠款」拆开。
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("信用欠款拆解")
                 .font(Theme.Font.caption(.medium))
                 .foregroundStyle(Theme.Color.textSecondary)
-            content()
+            HStack(spacing: 0) {
+                numberCell(
+                    "未还账单合计",
+                    breakdown.openStatementsTotal,
+                    color: Theme.Color.textPrimary
+                )
+                cellDivider
+                numberCell(
+                    "未出账消费",
+                    breakdown.unbilledCharges,
+                    color: Theme.Color.textSecondary
+                )
+                cellDivider
+                numberCell(
+                    "账户记录欠款",
+                    breakdown.storedLiability,
+                    color: storedColor
+                )
+            }
         }
+        .padding(12)
+        .background(
+            Theme.Color.glassFill,
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+        )
+    }
+
+    private var storedColor: Color {
+        breakdown.storedLiability == breakdown.openStatementsTotal
+            ? Theme.Color.income
+            : Theme.Color.expense
+    }
+
+    private func numberCell(_ label: String, _ value: DecimalValue, color: Color) -> some View {
+        VStack(spacing: 4) {
+            Text(label)
+                .font(Theme.Font.badge())
+                .foregroundStyle(Theme.Color.textTertiary)
+                .multilineTextAlignment(.center)
+            AmountText(
+                value: value,
+                currency: currency,
+                font: Theme.Font.subtitle(.semibold),
+                color: color
+            )
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var cellDivider: some View {
+        Rectangle()
+            .fill(Theme.Color.divider)
+            .frame(width: 0.5, height: 34)
+    }
+}
+
+// MARK: - R3 record-real-balance inline form
+
+private struct BalanceExternalForm: View {
+    let account: ReconciliationCheckAccountDTO
+    let conflict: ReconciliationConflictDTO
+    @ObservedObject var reconModel: ReconciliationModel
+    let onError: (String) -> Void
+
+    @State private var actualText = ""
+    @State private var isSubmitting = false
+    @State private var successMessage: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // 现状对比（系统 vs 上次真实）。
+            if let detail = conflict.detail {
+                Text(detail)
+                    .font(Theme.Font.caption())
+                    .foregroundStyle(conflict.isConflict ? Theme.Color.expense : Theme.Color.textSecondary)
+            }
+            HStack(spacing: 10) {
+                Text("录真实余额")
+                    .font(Theme.Font.caption(.medium))
+                    .foregroundStyle(Theme.Color.textSecondary)
+                TextField("0.00", text: $actualText)
+                    .textFieldStyle(.roundedBorder)
+                    .font(Theme.Font.cardNumber().monospacedDigit())
+                    .frame(maxWidth: 160)
+                Text(account.currency.rawValue)
+                    .font(Theme.Font.body(.medium))
+                    .foregroundStyle(Theme.Color.textSecondary)
+            }
+            if let parsed = parsedActual, let stored = conflict.storedBalance {
+                let delta = DecimalValue(parsed.value - stored.value)
+                HStack(spacing: 6) {
+                    Text("将记调整")
+                        .font(Theme.Font.badge())
+                        .foregroundStyle(Theme.Color.textTertiary)
+                    AmountText(
+                        value: delta,
+                        currency: account.currency,
+                        showsPositiveSign: true,
+                        font: Theme.Font.caption(.medium),
+                        color: delta.value == 0 ? Theme.Color.textTertiary
+                            : (delta.value < 0 ? Theme.Color.expense : Theme.Color.income)
+                    )
+                    Text("对平")
+                        .font(Theme.Font.badge())
+                        .foregroundStyle(Theme.Color.textTertiary)
+                }
+            }
+            if let successMessage {
+                Label(successMessage, systemImage: "checkmark.circle.fill")
+                    .font(Theme.Font.caption())
+                    .foregroundStyle(Theme.Color.income)
+            }
+            TintedActionChip(
+                title: isSubmitting ? "对平中…" : "以真实为准对平",
+                systemImage: "equal.circle",
+                tone: .action
+            ) {
+                Task { await submit() }
+            }
+            .disabled(isSubmitting || parsedActual == nil)
+            .opacity((isSubmitting || parsedActual == nil) ? 0.5 : 1)
+        }
+    }
+
+    private var parsedActual: DecimalValue? {
+        guard let decimal = parseDecimalAmount(actualText) else { return nil }
+        return DecimalValue(decimal)
+    }
+
+    @MainActor
+    private func submit() async {
+        guard let actual = parsedActual else { return }
+        isSubmitting = true
+        successMessage = nil
+        defer { isSubmitting = false }
+        do {
+            _ = try await reconModel.submitAdjustment(
+                accountId: account.accountId,
+                actualAmount: actual,
+                reason: "对账：录真实余额",
+                note: nil
+            )
+            successMessage = "已对平，账户余额已更新。"
+            actualText = ""
+        } catch {
+            onError(error.localizedDescription)
+        }
+    }
+}
+
+// MARK: - Generic conflict row (R2 / R4 jump_record)
+
+private struct ConflictRow: View {
+    let conflict: ReconciliationConflictDTO
+    let onJump: (ReconciliationPointerDTO) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: conflict.isConflict ? "exclamationmark.circle.fill" : "info.circle")
+                    .font(.system(size: 13))
+                    .foregroundStyle(conflict.isConflict ? Theme.Color.expense : Theme.Color.textTertiary)
+                Text(conflict.title)
+                    .font(Theme.Font.body(.medium))
+                    .foregroundStyle(Theme.Color.textPrimary)
+                Spacer(minLength: 8)
+                if let delta = conflict.delta, delta.value != 0 {
+                    AmountText(
+                        value: delta,
+                        currency: .cny,
+                        showsPositiveSign: true,
+                        showsSymbol: false,
+                        font: Theme.Font.caption(.medium),
+                        color: Theme.Color.expense
+                    )
+                }
+            }
+            if let detail = conflict.detail {
+                Text(detail)
+                    .font(Theme.Font.caption())
+                    .foregroundStyle(Theme.Color.textSecondary)
+            }
+            if conflict.fix == .jumpRecord, let pointer = conflict.offending.first {
+                TintedActionChip(title: "去处理", systemImage: "arrow.up.right", tone: .action) {
+                    onJump(pointer)
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
 

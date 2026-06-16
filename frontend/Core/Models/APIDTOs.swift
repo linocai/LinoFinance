@@ -443,6 +443,102 @@ struct AccountAdjustmentDTO: Identifiable, Decodable, Equatable, Hashable {
     let createdBy: String
 }
 
+// --- v2.2.0 P3 · 对账一致性/冲突检测器 (GET /reconciliation/check) -----------
+//
+// The new reconciliation surface (replaces the misleading "系统余额 vs 当前余额"
+// pair, which were two internal恒等数). The detector returns per-account conflicts
+// plus a top-level orphan list. Each conflict carries a `fix` telling the UI which
+// correction路径 to offer (重算 / 跳转记录 / 录真实数).
+
+/// How the UI should let the user correct a conflict.
+enum ReconciliationFix: String, Decodable, Hashable {
+    /// R1 信用欠款漂移 → 调 POST /reconciliation/recompute-credit/{id} 重算对平.
+    case internalRecompute = "internal_recompute"
+    /// R2/R4 → 跳转到 offending 记录（账单周期 / 还款现金流 / 报销）让用户改/补.
+    case jumpRecord = "jump_record"
+    /// R3 余额↔真实 → 录真实余额 → POST /reconciliation/adjustments 对平.
+    case externalActual = "external_actual"
+    /// 仅展示拆解，无需纠错.
+    case none
+
+    /// Unknown future fix codes degrade to `.none` (never break decoding).
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = ReconciliationFix(rawValue: raw) ?? .none
+    }
+}
+
+/// A jump-to pointer at the offending record (前端导航用).
+struct ReconciliationPointerDTO: Decodable, Equatable, Hashable, Identifiable {
+    /// credit_statement_cycle | cash_flow_item | reimbursement_claim | account
+    let type: String
+    let id: String
+    let label: String
+}
+
+struct ReconciliationConflictDTO: Decodable, Equatable, Hashable, Identifiable {
+    /// credit_three_way | statement_cashflow | balance_external | orphan
+    let code: String
+    /// conflict（红） | info（仅展示拆解）
+    let severity: String
+    let title: String
+    // R1 信用三数拆解（仅 credit_three_way 填）.
+    let storedLiability: DecimalValue?
+    let sumOpenStatements: DecimalValue?
+    let unbilledCharges: DecimalValue?
+    let expectedLiability: DecimalValue?
+    // R3 余额外部真相（仅 balance_external 填）.
+    let storedBalance: DecimalValue?
+    let externalActual: DecimalValue?
+    // stored − expected（R1） / stored − external_actual（R3）.
+    let delta: DecimalValue?
+    let detail: String?
+    let offending: [ReconciliationPointerDTO]
+    let fix: ReconciliationFix
+
+    // Conflicts have no server id; identify by the value content (stable within a
+    // single check snapshot).
+    var id: String { "\(code)|\(title)|\(offending.map(\.id).joined(separator: ","))" }
+
+    var isConflict: Bool { severity == "conflict" }
+}
+
+/// R1 三数拆解（界面三数展示用，仅信用账户填）.
+struct ReconciliationBreakdownDTO: Decodable, Equatable, Hashable {
+    let storedLiability: DecimalValue
+    let openStatementsTotal: DecimalValue
+    let unbilledCharges: DecimalValue
+}
+
+struct ReconciliationCheckAccountDTO: Decodable, Equatable, Hashable, Identifiable {
+    let accountId: String
+    let accountName: String
+    let accountType: AccountType
+    let currency: CurrencyCode
+    let hasConflicts: Bool
+    let conflicts: [ReconciliationConflictDTO]
+    let breakdown: ReconciliationBreakdownDTO?
+
+    var id: String { accountId }
+}
+
+struct ReconciliationCheckResponseDTO: Decodable, Equatable, Hashable {
+    let checkedAt: Date
+    let hasConflicts: Bool
+    let accounts: [ReconciliationCheckAccountDTO]
+    /// R4 孤儿/状态一致性 — 不绑某一账户的全局孤儿（现金流 / 报销 / 周期）.
+    let orphans: [ReconciliationConflictDTO]
+}
+
+struct CreditRecomputeResponseDTO: Decodable, Equatable, Hashable {
+    let accountId: String
+    let accountName: String
+    let storedLiabilityBefore: DecimalValue
+    let recomputedLiability: DecimalValue
+    let delta: DecimalValue
+    let adjustmentId: String?
+}
+
 struct DailyPnLReadDTO: Decodable, Equatable, Hashable {
     let adjustmentId: String
     let accountId: String

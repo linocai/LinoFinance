@@ -5,9 +5,9 @@ import SwiftUI
 // MoreIOSView — 「更多」入口 (iOS · 决策门 B 核心 5 屏先行).
 //
 // The core 5 screens (总览 / 账户 / 记一笔 / 现金流 / 报表) live in the bottom
-// TabBar. The remaining features reach via 「更多」: 流水 is a real basic list
-// (LedgerModel, read-only), the rest (报销 / 周期 / 对账 / 设置) are reachable
-// placeholders marked 「iOS 版后续」 — their full iOS screens land after the core 5.
+// TabBar. The remaining features reach via 「更多」: 流水 (read-only list) and 对账
+// (v2.2.0 简版：只读冲突清单 + 信用三数拆解 + 重算) are real screens; the rest
+// (报销 / 周期 / 设置) are reachable placeholders marked 「iOS 版后续」.
 
 struct MoreIOSView: View {
     @ObservedObject var model: AppModel
@@ -31,7 +31,12 @@ struct MoreIOSView: View {
                                 Divider().overlay(Theme.Color.divider)
                                 placeholderRow(title: "周期", systemImage: "arrow.triangle.2.circlepath")
                                 Divider().overlay(Theme.Color.divider)
-                                placeholderRow(title: "对账", systemImage: "checklist")
+                                NavigationLink {
+                                    ReconciliationIOSView(model: model)
+                                } label: {
+                                    moreRow(title: "对账", subtitle: "找出对不上的账户 · 信用欠款拆解", systemImage: "checklist", ready: true)
+                                }
+                                .buttonStyle(.plain)
                                 Divider().overlay(Theme.Color.divider)
                                 placeholderRow(title: "设置", systemImage: "gearshape")
                             }

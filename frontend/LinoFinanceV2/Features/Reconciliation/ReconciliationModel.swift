@@ -3,15 +3,16 @@ import SwiftUI
 
 #if os(macOS)
 
-// ReconciliationModel — D9 对账 view-model.
+// ReconciliationModel — v2.2.0 对账「一致性/冲突检测器」view-model (macOS).
 //
-// Owns the reconciliation snapshot (`GET /reconciliation/accounts`) and submits
-// adjustments (`POST /reconciliation/adjustments`). Account balances change ONLY
-// through here (plan §D9), so this is the single mutation path for a balance.
+// v2.2.0 推倒重做：旧 model 拿 `GET /reconciliation/accounts`（两个恒等内部数相减、
+// 永远「无需调整」）。现在改驱动 `GET /reconciliation/check`——逐账户 + 跨对象孤儿的
+// 多维冲突清单，每条 conflict 带 `fix`（重算 / 跳转记录 / 录真实数）指明纠错路径。
 //
-// `AccountAdjustmentCreateRequest.actualAmount` is the user's *actual* observed
-// balance; the backend computes the delta against the system-of-record balance,
-// so the screen does NOT send a delta — it sends the target actual amount.
+// 三条纠错动作：
+//   • R1 信用欠款漂移 → recompute(accountID:)  → POST /reconciliation/recompute-credit/{id}
+//   • R3 余额↔真实    → submitAdjustment(...)   → POST /reconciliation/adjustments
+//   • R2/R4 跳转       → 纯前端导航（screen 自己处理），无 model 动作
 @MainActor
 final class ReconciliationModel: ObservableObject {
 
@@ -22,7 +23,7 @@ final class ReconciliationModel: ObservableObject {
         case failed(String)
     }
 
-    @Published private(set) var snapshot: ReconciliationAccountsResponseDTO?
+    @Published private(set) var snapshot: ReconciliationCheckResponseDTO?
     @Published private(set) var state: LoadState = .idle
 
     private let apiClient: LinoAPIClient
@@ -31,21 +32,42 @@ final class ReconciliationModel: ObservableObject {
         self.apiClient = apiClient
     }
 
-    var rows: [ReconciliationAccountDTO] { snapshot?.items ?? [] }
+    var accounts: [ReconciliationCheckAccountDTO] { snapshot?.accounts ?? [] }
+    var orphans: [ReconciliationConflictDTO] { snapshot?.orphans ?? [] }
+    var hasConflicts: Bool { snapshot?.hasConflicts ?? false }
+
+    /// 有冲突的账户（红标）置顶，无冲突在后；孤儿单列展示。
+    var sortedAccounts: [ReconciliationCheckAccountDTO] {
+        accounts.sorted { lhs, rhs in
+            if lhs.hasConflicts != rhs.hasConflicts { return lhs.hasConflicts }
+            return lhs.accountName < rhs.accountName
+        }
+    }
+
+    var conflictAccountCount: Int { accounts.filter(\.hasConflicts).count }
+    var orphanConflictCount: Int { orphans.filter(\.isConflict).count }
 
     func load() async {
         state = .loading
         do {
-            snapshot = try await apiClient.listReconciliationAccounts()
+            snapshot = try await apiClient.reconciliationCheck()
             state = .loaded
         } catch {
             state = .failed(error.localizedDescription)
         }
     }
 
-    /// Generate a balance adjustment for `accountId` so its system balance matches
-    /// the user-observed `actualAmount`. Reloads the snapshot on success so the
-    /// delta column zeroes out. Throws so the caller can surface a visible error.
+    /// R1 信用欠款重算对平：`current_liability := Σcycle`，差额记 adjustment。重算后
+    /// 刷新快照让冲突归正。抛出底层错误供 caller 显示。
+    @discardableResult
+    func recompute(accountID: String) async throws -> CreditRecomputeResponseDTO {
+        let result = try await apiClient.recomputeCreditLiability(accountID: accountID)
+        await load()
+        return result
+    }
+
+    /// R3 余额账户「录真实余额」对平：用户填真实数，后端算 delta、写 AccountAdjustment、
+    /// 设账户余额。重新加载快照让 R3 归零。
     @discardableResult
     func submitAdjustment(
         accountId: String,

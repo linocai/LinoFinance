@@ -266,6 +266,14 @@ struct FinanceRepository {
         try await apiClient.listReconciliationAccounts()
     }
 
+    func reconciliationCheck() async throws -> ReconciliationCheckResponseDTO {
+        try await apiClient.reconciliationCheck()
+    }
+
+    func recomputeCreditLiability(accountID: String) async throws -> CreditRecomputeResponseDTO {
+        try await apiClient.recomputeCreditLiability(accountID: accountID)
+    }
+
     func createAccountAdjustment(_ request: AccountAdjustmentCreateRequest) async throws -> AccountAdjustmentDTO {
         try await apiClient.createAccountAdjustment(request)
     }
