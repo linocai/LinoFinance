@@ -36,7 +36,10 @@ struct AccountsIOSView: View {
         }
         .task { if accountsModel.accounts.isEmpty { await accountsModel.load() } }
         .sheet(item: $pnlAccount) { account in
-            DailyPnLSheetIOS(model: accountsModel, account: account)
+            DailyPnLSheetIOS(model: accountsModel, account: account) {
+                // 记盈亏已自刷 accountsModel；同步刷 AppModel.dashboard 让总览跟上。
+                Task { await model.refreshAll() }
+            }
         }
     }
 
@@ -343,6 +346,8 @@ private struct CreditRowIOS: View {
 private struct DailyPnLSheetIOS: View {
     @ObservedObject var model: AccountsModel
     let account: AccountDTO
+    /// 记盈亏成功后回调，让宿主刷新 AppModel.dashboard（总览）。
+    var onRecorded: () -> Void
     @Environment(\.dismiss) private var dismiss
 
     @State private var newBalanceText = ""
@@ -440,6 +445,7 @@ private struct DailyPnLSheetIOS: View {
                 )
             )
             errorMessage = nil
+            onRecorded()
             dismiss()
         } catch {
             errorMessage = error.localizedDescription

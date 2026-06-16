@@ -53,10 +53,11 @@ struct AddEntryPage: View {
         }
         .frame(maxWidth: 720, alignment: .leading)
         .task {
-            // Ensure accounts / categories / rates are loaded for the pickers.
-            if model.accounts.isEmpty { await model.loadAccounts() }
-            if model.categories.isEmpty { await model.loadCategories() }
-            if model.rates.isEmpty { await model.loadRates() }
+            // 每次打开记一笔都重取，确保设置里新加的分类 / 账户 / 汇率即时可见
+            // （只在空时取会读到旧缓存）。
+            await model.loadAccounts()
+            await model.loadCategories()
+            await model.loadRates()
         }
         .onChange(of: segment) { _, _ in
             categoryId = nil
@@ -297,7 +298,9 @@ struct AddEntryPage: View {
         switch segment {
         case .creditCharge:
             base = model.accounts.activeCreditAccounts
-        case .expense, .income, .transfer:
+        case .transfer:
+            base = model.accounts.activeTransferAccounts
+        case .expense, .income:
             base = model.accounts.activeBalanceAccounts
         }
         return base.filter { $0.currency == currency }

@@ -42,10 +42,16 @@ struct AccountsScreen: View {
         }
         .task { if accountsModel.accounts.isEmpty { await accountsModel.load() } }
         .sheet(item: $formMode) { mode in
-            AccountFormSheet(model: accountsModel, mode: mode) {}
+            AccountFormSheet(model: accountsModel, mode: mode) {
+                // 新建 / 改账户已自刷 accountsModel；同步刷 AppModel.dashboard 让总览跟上。
+                Task { await model.refreshAll() }
+            }
         }
         .sheet(item: $pnlAccount) { account in
-            DailyPnLSheet(model: accountsModel, account: account) {}
+            DailyPnLSheet(model: accountsModel, account: account) {
+                // 记盈亏已自刷 accountsModel；同步刷 AppModel.dashboard 让总览跟上。
+                Task { await model.refreshAll() }
+            }
         }
         .sheet(isPresented: $showReconciliation) {
             ReconciliationScreen(model: model)

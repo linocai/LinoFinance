@@ -197,6 +197,12 @@ extension Array where Element == AccountDTO {
         filter { $0.type == .credit && $0.status == "active" }
             .sorted(by: AccountDTO.displayOrdered)
     }
+
+    /// 可转账账户：现金余额 + 投资（credit 走专门的还款流程，不在此）。
+    var activeTransferAccounts: [AccountDTO] {
+        filter { ($0.type == .balance || $0.type == .investment) && $0.status == "active" }
+            .sorted(by: AccountDTO.displayOrdered)
+    }
 }
 
 extension AccountDTO {
