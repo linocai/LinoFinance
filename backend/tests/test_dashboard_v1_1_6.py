@@ -17,17 +17,37 @@ def _create_account(client, name, account_type="balance", currency="CNY", balanc
 
 
 def _create_credit_account(client, name, currency="CNY", liability="0"):
+    # v2.2.0 P1 (D1=甲): credit ``current_liability`` is derived from statement
+    # cycles, not a free opening number. To stand up an account with an opening
+    # liability the test expresses it as an opening statement cycle whose
+    # ``statement_amount`` equals the desired liability — exactly the new single
+    # source of truth (``current_liability ≡ Σcycle``).
     response = client.post(
         "/api/v1/accounts",
         json={
             "name": name,
             "type": "credit",
             "currency": currency,
-            "current_liability": liability,
         },
     )
     assert response.status_code == 201, response.text
-    return response.json()
+    account = response.json()
+    if Decimal(liability) != 0:
+        cycle = client.post(
+            "/api/v1/credit-statement-cycles",
+            json={
+                "credit_account_id": account["id"],
+                "cycle_start_date": "2026-05-01",
+                "cycle_end_date": "2026-05-31",
+                "statement_date": "2026-06-01",
+                "due_date": "2026-06-20",
+                "currency": currency,
+                "statement_amount": liability,
+            },
+        )
+        assert cycle.status_code == 201, cycle.text
+        account = client.get(f"/api/v1/accounts/{account['id']}").json()
+    return account
 
 
 def _create_category(client, name="Salary", category_type="income"):

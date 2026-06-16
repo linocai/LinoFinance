@@ -10,6 +10,7 @@ from app.services.ledger import (
     LedgerNotFoundError,
     LedgerValidationError,
     quantize_money,
+    recompute_credit_liability,
     sync_credit_statement_cash_flow,
 )
 
@@ -33,6 +34,11 @@ def create_statement_cycle(
     db.flush()
     if cycle.statement_amount > 0:
         sync_credit_statement_cash_flow(db, cycle)
+    # ``current_liability`` is derived from cycles (v2.2.0 P1): a non-zero opening
+    # statement immediately raises the account's liability via the single source
+    # of truth, so an opening balance is *expressed as a cycle* and can never
+    # drift away from ``Σcycle``.
+    recompute_credit_liability(db, account)
     db.commit()
     db.refresh(cycle)
     result = CreditStatementCycleRead.from_model(cycle)

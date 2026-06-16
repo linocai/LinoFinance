@@ -410,6 +410,12 @@ def _validate_confirmable(
 
 def _apply_movements(db: Session, movements: Iterable[AccountMovement], sign: Decimal) -> set[str]:
     generated_statement_cycle_ids: set[str] = set()
+    # Credit accounts touched in this batch — their ``current_liability`` is a
+    # *derived* value (v2.2.0 P1, single source of truth) and is recomputed from
+    # cycles once, after all cycle mutations land, rather than independently
+    # accumulated per movement (the old path that let the field drift from
+    # ``Σcycle``; see PROJECT_PLAN §5.2 病灶 A/C).
+    touched_credit_accounts: dict[str, Account] = {}
     for movement in movements:
         account = db.get(Account, movement.account_id)
         if account is None:
@@ -420,16 +426,16 @@ def _apply_movements(db: Session, movements: Iterable[AccountMovement], sign: De
             account.current_balance = quantize_money(account.current_balance + signed_amount)
         elif movement.movement_type in {"balance_out", "transfer_out"}:
             account.current_balance = quantize_money(account.current_balance - signed_amount)
-        elif movement.movement_type == "credit_charge":
-            account.current_liability = quantize_money(account.current_liability + signed_amount)
+        elif movement.movement_type in {"credit_charge", "credit_repayment"}:
             if cycle_id := _apply_statement_cycle_movement(db, movement, sign):
                 generated_statement_cycle_ids.add(cycle_id)
-        elif movement.movement_type == "credit_repayment":
-            account.current_liability = quantize_money(account.current_liability - signed_amount)
-            if cycle_id := _apply_statement_cycle_movement(db, movement, sign):
-                generated_statement_cycle_ids.add(cycle_id)
+            touched_credit_accounts[account.id] = account
         else:
             raise LedgerValidationError("Unsupported account movement type")
+
+    # ``current_liability`` ≡ Σ(non-voided cycle: statement_amount − paid_amount).
+    for account in touched_credit_accounts.values():
+        recompute_credit_liability(db, account)
     return generated_statement_cycle_ids
 
 
@@ -561,6 +567,52 @@ def _abandon_reimbursement_claims_for_entry(db: Session, entry_id: str) -> None:
     from app.services.reimbursement import abandon_claims_for_entry
 
     abandon_claims_for_entry(db, entry_id)
+
+
+# Cycle statuses that no longer represent an outstanding receivable from the
+# card. ``voided`` cycles are reversed/discarded and never count toward the
+# liability; everything else (``open`` / ``statement_generated`` /
+# ``partially_paid`` / ``paid``) contributes its ``statement_amount −
+# paid_amount`` remainder (a fully ``paid`` cycle contributes 0 naturally, so it
+# is harmless to include).
+CREDIT_LIABILITY_EXCLUDED_CYCLE_STATUSES = {"voided"}
+
+
+def sum_open_statement_total(db: Session, credit_account_id: str) -> Decimal:
+    """The single source of truth for a credit account's liability.
+
+    ``current_liability`` ≡ ``Σ(non-voided cycle: statement_amount −
+    paid_amount)`` (v2.2.0 P1, PROJECT_PLAN §5.2 公式 / D1=甲). The current data
+    model has no "unbilled charges" concept (every credit_charge is forced into a
+    cycle at creation, see ``_resolve_statement_cycle_for_movement``), so this
+    cycle sum is the whole truth. Used by both the ledger recompute writer and
+    the reconciliation reader so the two can never disagree.
+    """
+    total = Decimal("0")
+    rows: Iterable[CreditStatementCycle] = db.execute(
+        select(CreditStatementCycle).where(
+            CreditStatementCycle.credit_account_id == credit_account_id
+        )
+    ).scalars()
+    for cycle in rows:
+        if cycle.status in CREDIT_LIABILITY_EXCLUDED_CYCLE_STATUSES:
+            continue
+        total = quantize_money(total + cycle.statement_amount - cycle.paid_amount)
+    return total
+
+
+def recompute_credit_liability(db: Session, account: Account) -> Decimal:
+    """Re-derive and persist ``account.current_liability`` from its cycles.
+
+    The stored ``current_liability`` column is a cache of ``sum_open_statement_total``
+    — never independently accumulated — so it can never drift (病灶 A/C 根治).
+    No-op for non-credit accounts. Returns the recomputed liability.
+    """
+    if account.type != "credit":
+        return quantize_money(account.current_liability)
+    total = sum_open_statement_total(db, account.id)
+    account.current_liability = total
+    return total
 
 
 def quantize_money(value: Decimal) -> Decimal:

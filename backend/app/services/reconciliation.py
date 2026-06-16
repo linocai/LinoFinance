@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from app.models.account import Account
 from app.models.audit_log import AuditLog
-from app.models.credit_statement_cycle import CreditStatementCycle
 from app.models.entry import AccountMovement
 from app.models.reconciliation import AccountAdjustment
 from app.schemas.reconciliation import (
@@ -14,7 +13,12 @@ from app.schemas.reconciliation import (
     ReconciliationAccountRead,
     ReconciliationAccountsResponse,
 )
-from app.services.ledger import LedgerNotFoundError, LedgerValidationError, quantize_money
+from app.services.ledger import (
+    LedgerNotFoundError,
+    LedgerValidationError,
+    quantize_money,
+    sum_open_statement_total,
+)
 
 RECONCILIATION_THRESHOLD = Decimal("0.01")
 
@@ -31,6 +35,18 @@ def create_adjustment(db: Session, payload: AccountAdjustmentCreate) -> AccountA
     account = db.get(Account, payload.account_id)
     if account is None:
         raise LedgerNotFoundError("Account not found")
+
+    # v2.2.0 P1 (D1=甲): credit ``current_liability`` is a derived value
+    # (``Σcycle``), so the legacy "set the field to an observed actual amount"
+    # path would immediately violate the single source of truth and be
+    # overwritten on the next movement. Credit corrections must go through the
+    # cycle / recompute path instead, so直接对账信用账户余额走旧机制一律拒绝.
+    if account.type == "credit":
+        raise LedgerValidationError(
+            "Credit accounts cannot be reconciled by setting an actual liability; "
+            "their liability is derived from statement cycles — correct the cycles "
+            "or use credit recompute instead"
+        )
 
     expected_before = _expected_amount(db, account)
     current_before = _current_amount(account)
@@ -51,10 +67,8 @@ def create_adjustment(db: Session, payload: AccountAdjustmentCreate) -> AccountA
         created_by=payload.created_by,
     )
     db.add(adjustment)
-    if account.type == "credit":
-        account.current_liability = observed_amount
-    else:
-        account.current_balance = observed_amount
+    # Credit accounts are rejected above; only balance/investment reach here.
+    account.current_balance = observed_amount
     db.flush()
     db.add(
         AuditLog(
@@ -101,14 +115,14 @@ def _reconciliation_row(db: Session, account: Account) -> ReconciliationAccountR
 
 
 def _expected_amount(db: Session, account: Account) -> Decimal:
+    if account.type == "credit":
+        # v2.2.0 P1: credit liability has a single source of truth —
+        # ``Σ(non-voided cycle: statement_amount − paid_amount)``. The stored
+        # ``current_liability`` is a cache of exactly this, so expected and
+        # current can never disagree (no more恒等-but-drifting double truth).
+        return _credit_cycle_total(db, account.id)
     movements = _movement_totals(db, account.id)
     adjustments = _adjustment_total(db, account.id)
-    if account.type == "credit":
-        credit_cycles = _credit_cycle_total(db, account.id)
-        movement_total = movements["credit_charge"] - movements["credit_repayment"]
-        if movement_total == 0 and credit_cycles != 0:
-            movement_total = credit_cycles
-        return quantize_money(movement_total + adjustments)
     return quantize_money(
         movements["balance_in"]
         + movements["transfer_in"]
@@ -150,14 +164,8 @@ def _adjustment_total(db: Session, account_id: str) -> Decimal:
 
 
 def _credit_cycle_total(db: Session, account_id: str) -> Decimal:
-    total = Decimal("0")
-    rows: Iterable[CreditStatementCycle] = db.execute(
-        select(CreditStatementCycle).where(CreditStatementCycle.credit_account_id == account_id)
-    ).scalars()
-    for cycle in rows:
-        if cycle.status not in {"paid", "closed", "voided"}:
-            total = quantize_money(total + cycle.statement_amount - cycle.paid_amount)
-    return total
+    # Single source of truth shared with the ledger recompute writer (v2.2.0 P1).
+    return sum_open_statement_total(db, account_id)
 
 
 def _current_amount(account: Account) -> Decimal:

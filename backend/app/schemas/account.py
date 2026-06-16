@@ -1,7 +1,7 @@
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class AccountCreate(BaseModel):
@@ -19,9 +19,29 @@ class AccountCreate(BaseModel):
     minimum_payment: Optional[Decimal] = None
     notes: Optional[str] = None
 
+    @model_validator(mode="after")
+    def _credit_liability_is_derived(self) -> "AccountCreate":
+        # v2.2.0 P1 (D1=甲): ``current_liability`` is a *derived* value computed
+        # from the account's statement cycles, never a free opening number. An
+        # opening credit balance must be expressed by creating an opening
+        # statement cycle (so it is covered by ``Σcycle`` and can never drift —
+        # PROJECT_PLAN §5.2 病灶 A). A non-zero opening liability on a credit
+        # account is therefore rejected.
+        if self.type == "credit" and self.current_liability != Decimal("0"):
+            raise ValueError(
+                "Credit accounts cannot be created with a non-zero "
+                "current_liability; express an opening balance by creating an "
+                "opening statement cycle instead"
+            )
+        return self
+
     def model_dump(self, *args, **kwargs):
         data = super().model_dump(*args, **kwargs)
         data["currency"] = data["currency"].upper()
+        # Credit liability is always derived from cycles, never seeded; force the
+        # stored column to 0 at creation regardless of input default.
+        if data.get("type") == "credit":
+            data["current_liability"] = Decimal("0")
         return data
 
 
