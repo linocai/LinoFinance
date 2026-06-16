@@ -31,7 +31,7 @@
 ```bash
 # 后端
 cd backend && source .venv/bin/activate
-.venv/bin/pytest            # 当前 172 通过（main = v2.1.0 施工中，未发布；线上仍 v2.0.0）
+.venv/bin/pytest            # 当前 203 通过（main = v2.2.0 施工完成·待审查，未 push/部署；线上仍 v2.1.0）
 .venv/bin/ruff check .
 .venv/bin/alembic upgrade head
 python scripts/run_local_sqlite.py     # 本地 SQLite API，端口 6868
