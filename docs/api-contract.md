@@ -103,6 +103,9 @@ so production `/health` is the canonical "what is deployed" probe.
   - `GET /credit-statement-cycles`
   - `POST /credit-statement-cycles`
   - `GET /credit-statement-cycles/{cycle_id}`
+  - `PATCH /credit-statement-cycles/{cycle_id}` (v2.3.0)
+  - `POST /credit-statement-cycles/{cycle_id}/mark-paid` (v2.3.0)
+  - `POST /credit-statement-cycles/{cycle_id}/void` (v2.3.0)
   - `GET /cash-flow-items`
   - `POST /cash-flow-items`
   - `GET /cash-flow-items/{item_id}`
@@ -192,6 +195,26 @@ so production `/health` is the canonical "what is deployed" probe.
   `new_start <= other_end AND other_start <= new_end`. This keeps the credit-charge
   auto-assignment (which picks the most recent cycle by `cycle_start_date`) unambiguous;
   the auto-assignment logic itself is unchanged.
+- **`PATCH /credit-statement-cycles/{cycle_id}` (v2.3.0)** — partial update of a cycle.
+  All body fields optional (`model_fields_set` sentinel): `cycle_start_date`,
+  `cycle_end_date`, `statement_date`, `due_date`, `statement_amount`, `minimum_payment`,
+  `paid_amount`, `note`. `currency` and the owning account cannot be changed. Validation:
+  `paid_amount <= statement_amount`; date order `start <= end`, `statement >= end`,
+  `due >= statement`; the (possibly edited) `[start, end]` interval must not overlap another
+  non-`voided` cycle on the same account (the cycle never overlaps itself). On success the
+  linked repayment cash flow is re-synced and `current_liability` is re-derived from
+  `Σ(non-voided cycle: statement − paid)` so the invariant always holds. Errors → `400`;
+  editing a `voided` cycle → `400`; missing cycle → `404`. Returns `200 CreditStatementCycleRead`.
+- **`POST /credit-statement-cycles/{cycle_id}/mark-paid` (v2.3.0)** — sets
+  `paid_amount := statement_amount`, status `paid`, re-syncs the linked repayment cash flow
+  (settled to 0) and re-derives `current_liability` (the cycle's contribution becomes 0). This
+  only mutates the cycle + recomputes — it produces **no** `credit_repayment` movement, so it
+  never double-decrements against the settle-via-cash-flow repayment path. A `voided` cycle →
+  `400`; missing cycle → `404`. Returns `200 CreditStatementCycleRead`.
+- **`POST /credit-statement-cycles/{cycle_id}/void` (v2.3.0)** — sets status `voided` (excluded
+  from `Σcycle` so it no longer contributes to liability), cancels the linked repayment cash
+  flow, and re-derives `current_liability`. Idempotent: voiding an already-`voided` cycle
+  returns it unchanged (`200`). Missing cycle → `404`. Returns `200 CreditStatementCycleRead`.
 
 ## Cash Flow Rules Implemented
 

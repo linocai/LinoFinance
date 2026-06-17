@@ -4,7 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.schemas.credit_statement_cycle import CreditStatementCycleCreate, CreditStatementCycleRead
+from app.schemas.credit_statement_cycle import (
+    CreditStatementCycleCreate,
+    CreditStatementCycleRead,
+    CreditStatementCycleUpdate,
+)
 from app.services import credit
 from app.services.ledger import LedgerNotFoundError, LedgerValidationError
 
@@ -37,4 +41,44 @@ def get_statement_cycle(cycle_id: str, db: Session = Depends(get_db)) -> CreditS
         return credit.get_statement_cycle(db, cycle_id)
     except LedgerNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.patch("/{cycle_id}", response_model=CreditStatementCycleRead)
+def update_statement_cycle(
+    cycle_id: str,
+    payload: CreditStatementCycleUpdate,
+    db: Session = Depends(get_db),
+) -> CreditStatementCycleRead:
+    try:
+        return credit.update_statement_cycle(db, cycle_id, payload)
+    except LedgerNotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LedgerValidationError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/{cycle_id}/mark-paid", response_model=CreditStatementCycleRead)
+def mark_cycle_paid(cycle_id: str, db: Session = Depends(get_db)) -> CreditStatementCycleRead:
+    try:
+        return credit.mark_cycle_paid(db, cycle_id)
+    except LedgerNotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LedgerValidationError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/{cycle_id}/void", response_model=CreditStatementCycleRead)
+def void_cycle(cycle_id: str, db: Session = Depends(get_db)) -> CreditStatementCycleRead:
+    try:
+        return credit.void_cycle(db, cycle_id)
+    except LedgerNotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LedgerValidationError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

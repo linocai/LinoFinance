@@ -30,6 +30,26 @@ class CreditStatementCycleCreate(BaseModel):
         return data
 
 
+class CreditStatementCycleUpdate(BaseModel):
+    """Partial update for a credit statement cycle (v2.3.0 P1).
+
+    All fields are optional; ``model_fields_set`` is the sentinel that
+    distinguishes "field absent" (leave unchanged) from a supplied value.
+    ``currency``/``credit_account_id`` are intentionally absent — currency
+    is pinned to the account and the cycle cannot be reassigned. ``note`` is
+    the only optional column that may be explicitly cleared via ``null``.
+    """
+
+    cycle_start_date: Optional[DateType] = None
+    cycle_end_date: Optional[DateType] = None
+    statement_date: Optional[DateType] = None
+    due_date: Optional[DateType] = None
+    statement_amount: Optional[Decimal] = Field(default=None, ge=0)
+    minimum_payment: Optional[Decimal] = Field(default=None, ge=0)
+    paid_amount: Optional[Decimal] = Field(default=None, ge=0)
+    note: Optional[str] = None
+
+
 class CreditStatementCycleRead(BaseModel):
     id: str
     credit_account_id: str
