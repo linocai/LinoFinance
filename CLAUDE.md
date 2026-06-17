@@ -31,7 +31,10 @@
 ```bash
 # 后端
 cd backend && source .venv/bin/activate
-.venv/bin/pytest            # 当前 203 通过（main = v2.2.0 施工完成·待审查，未 push/部署；线上仍 v2.1.0）
+.venv/bin/pytest            # main = v2.3.0 施工完成·待审查（未 push/部署；线上仍 v2.2.0）。P1 新增 15 cycle 纠错测试。
+                            # 注：全量 pytest 现有 11 个迁移类测试 fail = pre-existing（发布后两个 fail-closed 一次性数据迁移
+                            #     花呗 202606160002/白条 202606160003 断言生产专属行，打断迁移测试的 upgrade(cfg,"head")），
+                            #     非 v2.3.0 引入；已起后台任务单独修。非迁移测试全绿（含 P1 15 新增）。
 .venv/bin/ruff check .
 .venv/bin/alembic upgrade head
 python scripts/run_local_sqlite.py     # 本地 SQLite API，端口 6868
