@@ -7,11 +7,12 @@ User-confirmed (2026-06-16) manual correction of production data:
     cash flow), keep 161.33 (August), recompute 花呗 current_liability = Σ未还cycle = 1237.66.
   - Also delete the cross-object orphan: the single settled cash flow with no linked entry.
 
-FAIL-CLOSED: every match is asserted to hit exactly the expected row count; any mismatch raises
-and aborts the migration (deploy fails, pre-migration backup intact, nothing changed). Guarded by
-account name, so on any DB without this exact 花呗 data it raises rather than silently mis-acting —
-acceptable because this migration is only ever meant to run against the one production DB. Local
-test DBs use create_all (not alembic upgrade), so this never runs in CI/tests.
+GUARDED ONE-OFF (PostgreSQL prod only): this corrects specific rows in the single production DB
+(Postgres). It is a NO-OP on any non-Postgres dialect (SQLite test/dev DBs use create_all but the
+migration-chain tests still run `alembic upgrade head`), so the chain stays green everywhere. On
+Postgres every match is asserted to hit exactly the expected row count; any mismatch raises and
+aborts (deploy fails, pre-migration backup intact, nothing changed) — fail-closed for the real prod
+application. Already applied to prod and never re-runs there.
 
 The proper fix (a 对账 correction tool so this never needs a hand migration) is in PROJECT_PLAN §6
 backlog.
@@ -37,6 +38,10 @@ def _one(conn, sql, **params):
 
 def upgrade() -> None:
     conn = op.get_bind()
+    if conn.dialect.name != "postgresql":
+        # One-off production (Postgres) data fix; no-op on SQLite test/dev DBs so the
+        # `alembic upgrade head` migration-chain stays green. Prod already applied this.
+        return
 
     # 1. locate the single 花呗 credit account ---------------------------------
     accs = _one(
@@ -115,9 +120,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Irreversible data fix. The deleted orphan cash flow cannot be reconstructed;
-    # the July amount / June void are not auto-restored. Roll back via the
-    # pre-migration backup (deploy-api.sh / production_migrate.py takes one).
-    raise RuntimeError(
-        "202606160002 is a one-off data correction; restore the pre-migration backup to revert."
-    )
+    # No-op on non-Postgres (test/dev) so downgrade chains pass. On prod this is an
+    # irreversible data fix — the deleted orphan cash flow cannot be reconstructed and the
+    # July amount / June void are not auto-restored; roll back via the pre-migration backup
+    # (deploy-api.sh / production_migrate.py takes one).
+    if op.get_bind().dialect.name == "postgresql":
+        raise RuntimeError(
+            "202606160002 is a one-off data correction; restore the pre-migration backup to revert."
+        )

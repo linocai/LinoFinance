@@ -4,10 +4,11 @@ User-confirmed: 白条 8月账单 real outstanding should be 4031.18 (system had
 already correct and must NOT be touched. So: set the single unpaid 389.74 白条 cycle (= August)
 → 4031.18, sync its repayment cash flow, recompute 白条 current_liability = Σ未还cycle.
 
-FAIL-CLOSED: matches exactly one 白条 account and exactly one unpaid 389.74 cycle; any other count
-raises and aborts (deploy fails, pre-migration backup intact, nothing changed). Guarded by account
-name + amount, so it only ever acts on the one production row. Local tests use create_all (no
-alembic upgrade), so this never runs in CI.
+GUARDED ONE-OFF (PostgreSQL prod only): corrects one row in the single production DB (Postgres).
+NO-OP on any non-Postgres dialect (SQLite test/dev), so `alembic upgrade head` stays green
+everywhere (CI / migration-chain tests). On Postgres it matches exactly one unpaid 389.74 cycle;
+any other count raises and aborts (deploy fails, pre-migration backup intact, nothing changed) —
+fail-closed for the real prod application. Already applied to prod; never re-runs there.
 
 Revision ID: 202606160003
 Revises: 202606160002
@@ -29,6 +30,10 @@ NEW_AUGUST = Decimal("4031.18")
 
 def upgrade() -> None:
     conn = op.get_bind()
+    if conn.dialect.name != "postgresql":
+        # One-off production (Postgres) data fix; no-op on SQLite test/dev DBs so the
+        # `alembic upgrade head` migration-chain stays green. Prod already applied this.
+        return
 
     accs = conn.execute(
         sa.text("SELECT id FROM accounts WHERE type = 'credit' AND name LIKE :n"),
@@ -81,6 +86,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise RuntimeError(
-        "202606160003 is a one-off data correction; restore the pre-migration backup to revert."
-    )
+    # No-op on non-Postgres (test/dev) so downgrade chains pass. On prod this is an
+    # irreversible data fix; roll back via the pre-migration backup.
+    if op.get_bind().dialect.name == "postgresql":
+        raise RuntimeError(
+            "202606160003 is a one-off data correction; restore the pre-migration backup to revert."
+        )
