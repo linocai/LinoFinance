@@ -29,6 +29,7 @@ struct CyclesScreen: View {
     @State private var showingNewSubscription = false
     @State private var showingNewInstallment = false
     @State private var showingNewStatementCycle = false
+    @State private var editingCycle: CreditStatementCycleDTO?
     @State private var actionError: String?
 
     init(model: AppModel) {
@@ -75,6 +76,11 @@ struct CyclesScreen: View {
         }
         .sheet(isPresented: $showingNewStatementCycle) {
             NewStatementCycleSheet(model: model, cyclesModel: cyclesModel)
+        }
+        .sheet(item: $editingCycle) { cycle in
+            EditStatementCycleSheet(cyclesModel: cyclesModel, cycle: cycle) {
+                Task { await model.refreshAll() }
+            }
         }
     }
 
@@ -275,6 +281,22 @@ struct CyclesScreen: View {
                     metaChip("最低还款", FinanceFormatter.money(cycle.minimumPayment, currency: cycle.currency))
                     metaChip("已还", FinanceFormatter.money(cycle.paidAmount, currency: cycle.currency))
                     metaChip("剩余", FinanceFormatter.money(cycle.remainingAmount, currency: cycle.currency))
+                }
+                // 纠错动作 (v2.3.0 P2 · D2). voided 周期锁定 (改源已无意义).
+                if cycle.status != "voided" {
+                    Divider().overlay(Theme.Color.divider)
+                    HStack(spacing: 8) {
+                        TintedActionChip(title: "编辑", tone: .neutral) { editingCycle = cycle }
+                        if cycle.remainingAmount.value > 0 {
+                            TintedActionChip(title: "标记已还", tone: .positive) {
+                                run { try await cyclesModel.markStatementCyclePaid(cycle.id); await model.refreshAll() }
+                            }
+                        }
+                        TintedActionChip(title: "作废", tone: .destructive) {
+                            run { try await cyclesModel.voidStatementCycle(cycle.id); await model.refreshAll() }
+                        }
+                        Spacer(minLength: 0)
+                    }
                 }
             }
         }

@@ -285,6 +285,95 @@ struct NewStatementCycleSheet: View {
     }
 }
 
+// MARK: - 编辑账单周期 (v2.3.0 P2 — 对账纠错)
+
+/// Edit an existing credit statement cycle (PATCH). Seeds from the cycle DTO.
+/// Unlike create, this exposes 已还 (paid_amount) so a wrong bill can be
+/// corrected; the account currency is fixed (cannot be changed). On save the
+/// backend re-syncs the linked repayment cash flow and re-derives liability.
+struct EditStatementCycleSheet: View {
+    @ObservedObject var cyclesModel: CyclesModel
+    let cycle: CreditStatementCycleDTO
+    var onSaved: () -> Void = {}
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var cycleStart: Date
+    @State private var cycleEnd: Date
+    @State private var statementDate: Date
+    @State private var dueDate: Date
+    @State private var statementAmountText: String
+    @State private var minimumText: String
+    @State private var paidText: String
+    @State private var isSubmitting = false
+    @State private var errorMessage: String?
+
+    init(cyclesModel: CyclesModel, cycle: CreditStatementCycleDTO, onSaved: @escaping () -> Void = {}) {
+        self.cyclesModel = cyclesModel
+        self.cycle = cycle
+        self.onSaved = onSaved
+        _cycleStart = State(initialValue: cycle.cycleStartDate)
+        _cycleEnd = State(initialValue: cycle.cycleEndDate)
+        _statementDate = State(initialValue: cycle.statementDate)
+        _dueDate = State(initialValue: cycle.dueDate)
+        _statementAmountText = State(initialValue: NSDecimalNumber(decimal: cycle.statementAmount.value).stringValue)
+        _minimumText = State(initialValue: NSDecimalNumber(decimal: cycle.minimumPayment.value).stringValue)
+        _paidText = State(initialValue: NSDecimalNumber(decimal: cycle.paidAmount.value).stringValue)
+    }
+
+    var body: some View {
+        CycleSheetScaffold(
+            title: "编辑账单周期",
+            icon: "calendar.badge.exclamationmark",
+            subtitle: "纠正出账金额 / 已还 / 日期（\(cycle.currency.rawValue)）",
+            isSubmitting: isSubmitting,
+            canSubmit: true,
+            errorMessage: errorMessage,
+            submitTitle: "保存",
+            onCancel: { dismiss() },
+            onSubmit: { await submit() }
+        ) {
+            HStack(spacing: 12) {
+                labeledField("周期开始") { glassDateField($cycleStart) }
+                labeledField("周期结束") { glassDateField($cycleEnd) }
+            }
+            HStack(spacing: 12) {
+                labeledField("出账日") { glassDateField($statementDate) }
+                labeledField("还款日") { glassDateField($dueDate) }
+            }
+            labeledField("出账金额") {
+                TextField("0.00", text: $statementAmountText).textFieldStyle(.roundedBorder).font(Theme.Font.body().monospacedDigit())
+            }
+            labeledField("最低还款") {
+                TextField("0.00", text: $minimumText).textFieldStyle(.roundedBorder).font(Theme.Font.body().monospacedDigit())
+            }
+            labeledField("已还金额") {
+                TextField("0.00", text: $paidText).textFieldStyle(.roundedBorder).font(Theme.Font.body().monospacedDigit())
+            }
+        }
+    }
+
+    private func submit() async {
+        isSubmitting = true; errorMessage = nil
+        defer { isSubmitting = false }
+        let request = CreditStatementCycleUpdateRequest(
+            cycleStartDate: cycleStart,
+            cycleEndDate: cycleEnd,
+            statementDate: statementDate,
+            dueDate: dueDate,
+            statementAmount: parseDecimalAmount(statementAmountText).map(DecimalValue.init) ?? DecimalValue(0),
+            minimumPayment: parseDecimalAmount(minimumText).map(DecimalValue.init) ?? DecimalValue(0),
+            paidAmount: parseDecimalAmount(paidText).map(DecimalValue.init) ?? DecimalValue(0)
+        )
+        do {
+            _ = try await cyclesModel.updateStatementCycle(cycle.id, request: request)
+            onSaved()
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
 // MARK: - Shared scaffold + small builders
 
 struct CycleSheetScaffold<Content: View>: View {
@@ -294,6 +383,7 @@ struct CycleSheetScaffold<Content: View>: View {
     let isSubmitting: Bool
     let canSubmit: Bool
     let errorMessage: String?
+    var submitTitle: String = "创建"
     let onCancel: () -> Void
     let onSubmit: () async -> Void
     @ViewBuilder var content: () -> Content
@@ -329,7 +419,7 @@ struct CycleSheetScaffold<Content: View>: View {
                 }
                 Spacer(minLength: 8)
                 SubtleTextButton("取消", action: onCancel).keyboardShortcut(.cancelAction)
-                PrimaryDarkButton("创建", isLoading: isSubmitting) {
+                PrimaryDarkButton(submitTitle, isLoading: isSubmitting) {
                     Task { await onSubmit() }
                 }
                 .keyboardShortcut(.defaultAction)

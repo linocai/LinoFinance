@@ -135,6 +135,18 @@ struct FinanceRepository {
         try await apiClient.createStatementCycle(request)
     }
 
+    func updateStatementCycle(_ id: String, request: CreditStatementCycleUpdateRequest) async throws -> CreditStatementCycleDTO {
+        try await apiClient.updateStatementCycle(id, request: request)
+    }
+
+    func markStatementCyclePaid(_ id: String) async throws -> CreditStatementCycleDTO {
+        try await apiClient.markStatementCyclePaid(id)
+    }
+
+    func voidStatementCycle(_ id: String) async throws -> CreditStatementCycleDTO {
+        try await apiClient.voidStatementCycle(id)
+    }
+
     func installmentPlans() async throws -> [InstallmentPlanDTO] {
         try await apiClient.listInstallmentPlans()
     }

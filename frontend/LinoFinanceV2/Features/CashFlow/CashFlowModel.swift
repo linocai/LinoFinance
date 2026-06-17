@@ -306,6 +306,18 @@ extension CashFlowItemDTO {
         linkedReimbursementId == nil
     }
 
+    /// Whether this item is generated from / linked to a source object (a credit
+    /// statement cycle, an installment plan, a reimbursement claim, or a
+    /// subscription rule). Such rows are re-synced from their source — a direct
+    /// edit here would be overwritten and de-link the item, so the edit chip is
+    /// hidden and the user is steered to the source instead (v2.3.0 D1=甲).
+    var isSystemLinked: Bool {
+        linkedStatementCycleId != nil
+            || linkedInstallmentPlanId != nil
+            || linkedReimbursementId != nil
+            || linkedSubscriptionRuleId != nil
+    }
+
     var statusTitle: String {
         switch status {
         case "expected": "预计"

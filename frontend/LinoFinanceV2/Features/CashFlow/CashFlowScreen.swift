@@ -124,7 +124,10 @@ struct CashFlowScreen: View {
     private func rowActions(for item: CashFlowItemDTO) -> CashFlowRowActions {
         let actionable = item.status == "expected" || item.status == "confirmed"
         return CashFlowRowActions(
-            canEdit: actionable,
+            // D1=甲: editable only for non-system-linked items. Cycle/installment/
+            // reimbursement/subscription rows are re-synced from their source — a
+            // direct edit would be overwritten, so steer the user to the source.
+            canEdit: actionable && !item.isSystemLinked,
             canConfirm: actionable && item.status == "expected",
             canSettle: actionable && item.canShowSettleAction,
             settleTitle: item.direction == "transfer" ? "确认还款" : "兑现",
@@ -252,6 +255,9 @@ private struct CashFlowRow: View {
     @ViewBuilder
     private var actionChips: some View {
         HStack(spacing: 8) {
+            if actions.canEdit {
+                TintedActionChip(title: "编辑", tone: .neutral, action: actions.edit)
+            }
             if actions.canConfirm {
                 TintedActionChip(title: "确认", tone: .positive, action: actions.confirm)
             }

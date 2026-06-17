@@ -242,6 +242,18 @@ struct LinoAPIClient {
         try await post("credit-statement-cycles", body: request)
     }
 
+    func updateStatementCycle(_ id: String, request: CreditStatementCycleUpdateRequest) async throws -> CreditStatementCycleDTO {
+        try await patch("credit-statement-cycles/\(id)", body: request)
+    }
+
+    func markStatementCyclePaid(_ id: String) async throws -> CreditStatementCycleDTO {
+        try await post("credit-statement-cycles/\(id)/mark-paid")
+    }
+
+    func voidStatementCycle(_ id: String) async throws -> CreditStatementCycleDTO {
+        try await post("credit-statement-cycles/\(id)/void")
+    }
+
     func listInstallmentPlans() async throws -> [InstallmentPlanDTO] {
         try await get("installment-plans")
     }

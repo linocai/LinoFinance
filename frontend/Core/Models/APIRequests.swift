@@ -198,6 +198,20 @@ struct CreditStatementCycleCreateRequest: Encodable {
     var note: String?
 }
 
+/// Partial update for a credit statement cycle (v2.3.0 P1). Omit a field to
+/// leave it unchanged; `currency` and the owning account cannot be changed.
+struct CreditStatementCycleUpdateRequest: Encodable {
+    var cycleStartDate: Date?
+    var cycleEndDate: Date?
+    var statementDate: Date?
+    var dueDate: Date?
+    var statementAmount: DecimalValue?
+    var minimumPayment: DecimalValue?
+    var paidAmount: DecimalValue?
+    /// Use `.value(text)` to set, `.null` to clear, omit to leave alone.
+    var note: Nullable<String>?
+}
+
 struct InstallmentPlanCreateRequest: Encodable {
     var linkedEntryId: String
     var creditAccountId: String

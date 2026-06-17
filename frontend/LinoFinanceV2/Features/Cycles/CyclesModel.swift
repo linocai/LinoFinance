@@ -101,13 +101,30 @@ final class CyclesModel: ObservableObject {
         return plan
     }
 
-    // MARK: - Statement cycles (read + create only)
+    // MARK: - Statement cycles (read + create + correct, v2.3.0 P1/P2)
 
     @discardableResult
     func createStatementCycle(_ request: CreditStatementCycleCreateRequest) async throws -> CreditStatementCycleDTO {
         let cycle = try await apiClient.createStatementCycle(request)
         statementCycles = (try? await apiClient.listStatementCycles()) ?? statementCycles
         return cycle
+    }
+
+    @discardableResult
+    func updateStatementCycle(_ id: String, request: CreditStatementCycleUpdateRequest) async throws -> CreditStatementCycleDTO {
+        let cycle = try await apiClient.updateStatementCycle(id, request: request)
+        statementCycles = (try? await apiClient.listStatementCycles()) ?? statementCycles
+        return cycle
+    }
+
+    func markStatementCyclePaid(_ id: String) async throws {
+        _ = try await apiClient.markStatementCyclePaid(id)
+        statementCycles = (try? await apiClient.listStatementCycles()) ?? statementCycles
+    }
+
+    func voidStatementCycle(_ id: String) async throws {
+        _ = try await apiClient.voidStatementCycle(id)
+        statementCycles = (try? await apiClient.listStatementCycles()) ?? statementCycles
     }
 }
 
