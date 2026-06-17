@@ -45,7 +45,7 @@ xcodebuild -project LinoFinance.xcodeproj -scheme LinoFinanceV2 \
   -configuration Debug -destination 'platform=macOS' \
   -derivedDataPath .derivedData CODE_SIGNING_ALLOWED=NO build
 # iOS 验证：-destination 'generic/platform=iOS Simulator'（或具名 iPhone 17/OS=26.5）
-# CODE_SIGNING_ALLOWED=NO：v2 entitlements 含 App Group/aps/SIWA,三 capability 须开发者后台
+# CODE_SIGNING_ALLOWED=NO：v2 entitlements 含 aps/SIWA（App Group 已 2026-06-17 摘除,见「部署&发版」）,这两 capability 须开发者后台
 #   为正式 id（com.lino.linofinance / .widgets）注册才能签名；注册前本地签名会失败。
 #   模拟器 build 本就不签名、可不加。已签好的 macOS Release 已装 /Applications/LinoF.app。
 ```
@@ -80,7 +80,7 @@ xcodebuild -project LinoFinance.xcodeproj -scheme LinoFinanceV2 \
 - 部署前 `scripts/deploy-api.sh --dry-run` 必须干净。**live 部署 / tag / push 由用户手动**。
 - **macOS 装机路径是 `/Applications/LinoF.app`**（历史 v1.1.5/6 plan 一度误写 `/Users/linotsai/Applications/...`，别再犯）。换包前旧 bundle 备份成 `LinoF.app.bak-<UTC>`。拷 `.app` 用 `ditto` 不用 `cp -R`。
 - 付费 Apple 团队 Team ID `HX73DFL88G`；改 team 要同步 pbxproj 里 4 处 `DEVELOPMENT_TEAM`（v2 app + widget × Debug/Release）。真机签名走 automatic signing。
-- **bundle id 现状（v1 已删,只剩 v2 两 target）**：app = `com.lino.linofinance`（macOS 顶替线上 v1 原地升级；iOS 与已下线的 v1 `.ios` 不同 id → 是新 app）；widget = `com.lino.linofinance.widgets`；App Group = `group.com.lino.linofinance`（entitlements + `V2WidgetSnapshot`/`WidgetsBundle` 常量）。`aps-environment` 暂留 development（真正 Archive 上架时翻 production）。**App Group/SIWA/Push capability 须用户在开发者后台为正式 id 注册才能签名**（注册前本地 v2 构建须 `CODE_SIGNING_ALLOWED=NO`）；macOS 已有签好的 Release 装在 `/Applications/LinoF.app`。
+- **bundle id 现状（v1 已删,只剩 v2 两 target）**：app = `com.lino.linofinance`（macOS 顶替线上 v1 原地升级；iOS 与已下线的 v1 `.ios` 不同 id → 是新 app）；widget = `com.lino.linofinance.widgets`；App Group = `group.com.lino.linofinance` **已于 2026-06-17 从 app+widget 两处 entitlements 摘除**（commit `b582bb1`）——修 macOS 26 每次启动弹「LinoF 想访问其他 App 的数据」（`kTCCServiceSystemPolicyAppData`）：开发签名（`get-task-allow`）+ 本地 ditto 安装下,TCC 对 App Group 共享容器的授权**记不牢、每次重弹**,点「允许」也不持久。代价 = 桌面 **Widget 不再拿实时数据**（`V2WidgetSnapshot` 写 / `WidgetsBundle` 读仍用 `UserDefaults(suiteName:)`,但无 entitlement 时自动降级 `.standard`/`guard let` 占位,不崩不弹,无需改代码）。**别再把 `application-groups` 加回 entitlements**,除非改走 Developer ID + 公证（稳定身份才能让 TCC 授权持久）。`aps-environment` 暂留 development（真正 Archive 上架时翻 production）。**SIWA/Push capability 须用户在开发者后台为正式 id 注册才能签名**（注册前本地 v2 构建须 `CODE_SIGNING_ALLOWED=NO`）；macOS 已有签好的 Release 装在 `/Applications/LinoF.app`。
 - 版本号源（发版统一改）：`backend/pyproject.toml`、`backend/app/core/config.py` 的 `app_version`、`scripts/deploy-api.sh` 的 `EXPECTED_VERSION`、pbxproj 里 8 处（`MARKETING_VERSION` 4 + `CURRENT_PROJECT_VERSION` 4）。
 - 范围铁律：只动 LinoFinance，不碰 hz 上的 LA / Qbot / 主页 / 100j。
 
