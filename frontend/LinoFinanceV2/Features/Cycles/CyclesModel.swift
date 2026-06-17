@@ -23,6 +23,11 @@ final class CyclesModel: ObservableObject {
     @Published private(set) var subscriptions: [SubscriptionRuleDTO] = []
     @Published private(set) var installments: [InstallmentPlanDTO] = []
     @Published private(set) var statementCycles: [CreditStatementCycleDTO] = []
+    /// Installment-plan id → settled period count (the REAL progress; v2.3.0 P3).
+    /// `generatedCashFlowCount` is the *total* periods generated up front (≈ M),
+    /// so it cannot be the "已还 N". We derive N from the plan's installment cash
+    /// flows whose status is "settled".
+    @Published private(set) var installmentSettledCounts: [String: Int] = [:]
     @Published private(set) var state: LoadState = .idle
 
     private let apiClient: LinoAPIClient
@@ -39,13 +44,31 @@ final class CyclesModel: ObservableObject {
             async let subs = apiClient.listSubscriptionRules()
             async let plans = apiClient.listInstallmentPlans()
             async let cycles = apiClient.listStatementCycles()
+            async let cashFlows = apiClient.listCashFlowItems()
             subscriptions = try await subs
             installments = try await plans
             statementCycles = try await cycles
+            installmentSettledCounts = Self.settledCounts(from: (try? await cashFlows) ?? [])
             state = .loaded
         } catch {
             state = .failed(error.localizedDescription)
         }
+    }
+
+    /// Real "已还 N" per plan = count of its installment cash flows already settled.
+    private static func settledCounts(from cashFlows: [CashFlowItemDTO]) -> [String: Int] {
+        var counts: [String: Int] = [:]
+        for item in cashFlows
+        where item.cashFlowType == "installment" && item.status == "settled" {
+            if let planID = item.linkedInstallmentPlanId {
+                counts[planID, default: 0] += 1
+            }
+        }
+        return counts
+    }
+
+    func settledInstallmentCount(_ planID: String) -> Int {
+        installmentSettledCounts[planID] ?? 0
     }
 
     // MARK: - Subscriptions

@@ -20,6 +20,7 @@ struct AccountsScreen: View {
 
     @State private var formMode: AccountFormSheet.Mode?
     @State private var pnlAccount: AccountDTO?
+    @State private var detailAccount: AccountDTO?
     @State private var showReconciliation = false
 
     init(model: AppModel) {
@@ -56,6 +57,13 @@ struct AccountsScreen: View {
         .sheet(isPresented: $showReconciliation) {
             ReconciliationScreen(model: model)
                 .frame(minWidth: 720, minHeight: 560)
+        }
+        .sheet(item: $detailAccount) { account in
+            // 单账户流水专屏 (v2.3.0 P3, D6=甲). 行点击从「进编辑」改为「进详情」;
+            // 编辑入口移到详情头部，回调重开编辑 sheet。
+            AccountDetailScreen(accountsModel: accountsModel, account: account) {
+                formMode = .edit(account)
+            }
         }
     }
 
@@ -147,7 +155,7 @@ struct AccountsScreen: View {
                         HStack(alignment: .center, spacing: 10) {
                             row(account)
                                 .contentShape(Rectangle())
-                                .onTapGesture { formMode = .edit(account) }
+                                .onTapGesture { detailAccount = account }
                             trailing(account)
                         }
                         .padding(.vertical, 10)

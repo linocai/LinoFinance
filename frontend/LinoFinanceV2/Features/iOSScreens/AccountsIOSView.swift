@@ -15,6 +15,7 @@ struct AccountsIOSView: View {
     @StateObject private var accountsModel: AccountsModel
 
     @State private var pnlAccount: AccountDTO?
+    @State private var detailAccount: AccountDTO?
 
     init(model: AppModel) {
         self.model = model
@@ -40,6 +41,10 @@ struct AccountsIOSView: View {
                 // 记盈亏已自刷 accountsModel；同步刷 AppModel.dashboard 让总览跟上。
                 Task { await model.refreshAll() }
             }
+        }
+        .sheet(item: $detailAccount) { account in
+            // 单账户流水专屏 · iOS 简版只读 (v2.3.0 P3, D7).
+            AccountDetailIOSView(apiClient: model.apiClient, account: account)
         }
     }
 
@@ -121,6 +126,10 @@ struct AccountsIOSView: View {
                 if index > 0 { Divider().overlay(Theme.Color.divider) }
                 row(account)
                     .padding(.vertical, 10)
+                    .contentShape(Rectangle())
+                    // 点击进单账户流水专屏 (P3, D7). 投资行的「记盈亏」chip 是 Button,
+                    // 自吞点击不触发整行。
+                    .onTapGesture { detailAccount = account }
             }
         }
     }

@@ -30,6 +30,10 @@ final class AccountsModel: ObservableObject {
 
     private let apiClient: LinoAPIClient
 
+    /// Exposed so the single-account detail screen (v2.3.0 P3) can build its own
+    /// AccountDetailModel on the same Core client without touching AppModel.
+    var apiClientForDetail: LinoAPIClient { apiClient }
+
     init(apiClient: LinoAPIClient) {
         self.apiClient = apiClient
     }

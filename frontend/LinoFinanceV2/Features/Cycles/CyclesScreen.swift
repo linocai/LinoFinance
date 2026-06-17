@@ -192,7 +192,9 @@ struct CyclesScreen: View {
     }
 
     private func installmentCard(_ plan: InstallmentPlanDTO) -> some View {
-        let paid = plan.generatedCashFlowCount
+        // 已还 N = settled period count (v2.3.0 P3 fix). 之前误用 generatedCashFlowCount
+        // (= 一次性生成的总期数 ≈ M)，进度恒满。
+        let paid = cyclesModel.settledInstallmentCount(plan.id)
         let total = plan.numberOfPayments
         let progress = total > 0 ? Double(paid) / Double(total) : 0
         let remainingCount = max(total - paid, 0)
