@@ -31,10 +31,10 @@
 ```bash
 # 后端
 cd backend && source .venv/bin/activate
-.venv/bin/pytest            # main = v2.3.0 施工完成·待审查（未 push/部署；线上仍 v2.2.0）。P1 新增 15 cycle 纠错测试。
-                            # 注：全量 pytest 现有 11 个迁移类测试 fail = pre-existing（发布后两个 fail-closed 一次性数据迁移
-                            #     花呗 202606160002/白条 202606160003 断言生产专属行，打断迁移测试的 upgrade(cfg,"head")），
-                            #     非 v2.3.0 引入；已起后台任务单独修。非迁移测试全绿（含 P1 15 新增）。
+.venv/bin/pytest            # 当前 221 全绿（main = v2.3.0 审查完成+评审修补完成·待用户侧收尾，未 push/部署；线上仍 v2.2.0）。
+                            # v2.3.0 含 P1 15 cycle 纠错测试 + 评审修补 2 新测（重要-1 voided cycle 不吸附 charge / 重要-2 mark-paid 无假孤儿）。
+                            # 注：发布后两个一次性数据迁移（花呗 202606160002/白条 202606160003）曾在 SQLite 测试链 fail，
+                            #     已由快修 7cbb4da 加 dialect 守卫（非 postgresql no-op）修复，迁移测试恢复全绿。
 .venv/bin/ruff check .
 .venv/bin/alembic upgrade head
 python scripts/run_local_sqlite.py     # 本地 SQLite API，端口 6868

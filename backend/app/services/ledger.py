@@ -114,7 +114,17 @@ def sync_credit_statement_cash_flow(db: Session, cycle: CreditStatementCycle) ->
         if existing is not None:
             existing.amount = Decimal("0")
             existing.converted_cny_amount = Decimal("0")
-            existing.status = "settled"
+            # Distinguish "mark-paid full-clear" (no linked entry — the future
+            # repayment never needs fulfilling, so cancel it) from "settle reached
+            # 0" (has a linked_entry_id — a real settlement, keep it settled).
+            # Leaving the mark-paid placeholder as ``settled`` with no linked entry
+            # makes the R4① detector ("已结算现金流缺记账") flag a self-made
+            # orphan on every mark-paid, polluting reconciliation trust
+            # (v2.3.0 评审修补 重要-2).
+            if existing.linked_entry_id is None:
+                existing.status = "cancelled"
+            else:
+                existing.status = "settled"
         return
 
     converted_cny_amount, exchange_rate_id = convert_to_cny(
@@ -306,10 +316,19 @@ def _resolve_statement_cycle_for_movement(
         return None
 
     if movement_type == "credit_charge" and statement_cycle_id is None:
+        # Exclude voided cycles from auto-assignment: a voided cycle is excluded
+        # from ``sum_open_statement_total`` (liability) and from the R1/R2/R4
+        # reconciliation scans, so letting a new charge land on a voided cycle
+        # would make the consumption silently vanish (v2.3.0 评审修补 重要-1).
+        # ``void_cycle`` first lets users create voided cycles at runtime, so this
+        # filter is now load-bearing. With no *valid* cycle covering the date the
+        # existing "requires a matching statement cycle" raise still fires (422),
+        # prompting the user to create a valid cycle first.
         statement_cycle = db.execute(
             select(CreditStatementCycle)
             .where(
                 CreditStatementCycle.credit_account_id == account.id,
+                CreditStatementCycle.status != "voided",
                 CreditStatementCycle.cycle_start_date <= entry_date,
                 CreditStatementCycle.cycle_end_date >= entry_date,
             )

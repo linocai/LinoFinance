@@ -183,7 +183,7 @@ so production `/health` is the canonical "what is deployed" probe.
 - **Credit `current_liability` is a derived value (v2.2.0 P1, D1=甲): it always equals `Σ(non-voided statement cycle: statement_amount − paid_amount)`.** The stored `accounts.current_liability` column is a cache of exactly this sum, recomputed after every cycle/charge/repayment mutation, so it can never drift from the cycle total (root-cause fix for the historical "opening liability number that no cycle covered"). There is no "unbilled charges" concept in the current model (every `credit_charge` is forced into a cycle at creation), so the cycle sum is the whole truth.
 - **`POST /accounts` rejects a non-zero `current_liability` on a credit account with `422` (v2.2.0 P1).** Opening credit debt must be expressed by creating an opening statement cycle (so it is covered by `Σcycle`), never as a bare opening number on the account. A credit account is always created with `current_liability = 0`; the column then tracks `Σcycle`.
 - Credit card charges must belong to a `CreditStatementCycle`.
-- If a credit charge omits `statement_cycle_id`, the backend auto-assigns the matching cycle by account and entry date.
+- If a credit charge omits `statement_cycle_id`, the backend auto-assigns the matching **non-`voided`** cycle by account and entry date. A `voided` cycle never absorbs a new charge (it is excluded from liability and reconciliation scans, so a charge landing on it would silently vanish); with no valid covering cycle the charge is rejected with `400` "Credit charge requires a matching statement cycle", prompting the user to create a valid cycle first (v2.3.0 评审修补 重要-1).
 - Credit card repayments must explicitly provide `statement_cycle_id`.
 - Credit card charges increase a cycle's `statement_amount`; repayments increase its `paid_amount`.
 - Voiding confirmed credit charges or repayments rolls back both account balances and cycle amounts.
@@ -207,9 +207,14 @@ so production `/health` is the canonical "what is deployed" probe.
   editing a `voided` cycle → `400`; missing cycle → `404`. Returns `200 CreditStatementCycleRead`.
 - **`POST /credit-statement-cycles/{cycle_id}/mark-paid` (v2.3.0)** — sets
   `paid_amount := statement_amount`, status `paid`, re-syncs the linked repayment cash flow
-  (settled to 0) and re-derives `current_liability` (the cycle's contribution becomes 0). This
-  only mutates the cycle + recomputes — it produces **no** `credit_repayment` movement, so it
-  never double-decrements against the settle-via-cash-flow repayment path. A `voided` cycle →
+  and re-derives `current_liability` (the cycle's contribution becomes 0). The linked repayment
+  cash flow has no settlement entry (mark-paid records no movement), so it is **cancelled** to 0
+  rather than left as a `settled`-with-no-`linked_entry_id` row — that would otherwise be flagged
+  as an R4① orphan ("已结算现金流缺记账"); v2.3.0 评审修补 重要-2.
+  The double-decrement safety comes from the **assignment** `paid := statement` (not an
+  accumulation) combined with `current_liability` being a `Σcycle`-derived quantity: even the
+  settle-via-cash-flow path mutates `cycle.paid` then re-derives, so the two paths converge on the
+  correct liability and never double-count. A `voided` cycle →
   `400`; missing cycle → `404`. Returns `200 CreditStatementCycleRead`.
 - **`POST /credit-statement-cycles/{cycle_id}/void` (v2.3.0)** — sets status `voided` (excluded
   from `Σcycle` so it no longer contributes to liability), cancels the linked repayment cash
@@ -230,7 +235,11 @@ so production `/health` is the canonical "what is deployed" probe.
   blocked to prevent a second, double-counted entry (v1.3.0, audit 1.3).
 - Only the settled formal entry affects account balances and reports.
 - Credit statement cycles generate `credit_repayment` cash-flow items.
-- Fully repaid credit statement cycles mark the linked repayment cash flow as `settled`.
+- When a credit statement cycle's remaining reaches 0 the linked repayment cash flow is settled to
+  0 **only if it already carries a `linked_entry_id`** (a real settlement); otherwise (mark-paid,
+  or a direct `credit_repayment` movement that zeroes the cycle) the auto-generated repayment
+  placeholder is **cancelled** to 0, so it is never left as a `settled`-with-no-entry R4① orphan
+  (v2.3.0 评审修补 重要-2).
 - `GET /cash-flow-items` hides `cancelled` items by default (v1.1.5); pass
   `include_cancelled=true` to include them. An explicit `status` filter wins and
   ignores `include_cancelled`.

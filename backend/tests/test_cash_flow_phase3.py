@@ -354,7 +354,10 @@ def test_credit_charge_generates_and_repayment_settles_repayment_cash_flow(clien
     settled_cash_flow = client.get(f"/api/v1/cash-flow-items/{cash_flow_id}").json()
     assert settled_cash_flow["amount"] == "0"
     assert settled_cash_flow["converted_cny_amount"] == "0"
-    assert settled_cash_flow["status"] == "settled"
+    # The cycle was paid off via a direct credit_repayment movement, so the
+    # auto-generated repayment placeholder (no linked_entry_id) is cancelled, not
+    # left as a settled-with-no-entry R4① orphan (v2.3.0 评审修补 重要-2).
+    assert settled_cash_flow["status"] == "cancelled"
     assert Decimal(client.get(f"/api/v1/accounts/{credit_account['id']}").json()["current_liability"]) == Decimal("0")
 
 
