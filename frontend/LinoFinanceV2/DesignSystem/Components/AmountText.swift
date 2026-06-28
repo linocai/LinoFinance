@@ -30,10 +30,24 @@ struct AmountText: View {
     }
 
     private var formatted: String {
+        Self.plainString(
+            value: value, currency: currency,
+            showsPositiveSign: showsPositiveSign, showsSymbol: showsSymbol
+        )
+    }
+
+    /// String formatter shared with non-View callers (e.g. inline sub-lines).
+    /// Same rules as the view body: monospaced grouping, ASCII sign, currency symbol.
+    static func plainString(
+        value: DecimalValue,
+        currency: CurrencyCode = .cny,
+        showsPositiveSign: Bool = false,
+        showsSymbol: Bool = true
+    ) -> String {
         let decimal = value.value
         let isNegative = decimal < 0
         let magnitude = isNegative ? -decimal : decimal
-        let number = Self.grouping.string(from: NSDecimalNumber(decimal: magnitude))
+        let number = grouping.string(from: NSDecimalNumber(decimal: magnitude))
             ?? "\(magnitude)"
         let symbol = showsSymbol ? currency.symbol : ""
         let sign: String

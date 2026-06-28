@@ -31,7 +31,7 @@
 ```bash
 # 后端
 cd backend && source .venv/bin/activate
-.venv/bin/pytest            # 当前 221 全绿（main = v2.3.0 审查完成+评审修补完成·待用户侧收尾，未 push/部署；线上仍 v2.2.0）。
+.venv/bin/pytest            # 当前 221 全绿（v2.3.0 已发布上线：push+tag+部署生产 health 2.3.0/ok+装机；v2.3.1 报表数字化纯前端、没动后端，pytest 数不变）。
                             # v2.3.0 含 P1 15 cycle 纠错测试 + 评审修补 2 新测（重要-1 voided cycle 不吸附 charge / 重要-2 mark-paid 无假孤儿）。
                             # 注：发布后两个一次性数据迁移（花呗 202606160002/白条 202606160003）曾在 SQLite 测试链 fail，
                             #     已由快修 7cbb4da 加 dialect 守卫（非 postgresql no-op）修复，迁移测试恢复全绿。
@@ -40,6 +40,7 @@ cd backend && source .venv/bin/activate
 python scripts/run_local_sqlite.py     # 本地 SQLite API，端口 6868
 
 # 前端（仅 v2 两 target；SwiftPM/swift test 已退役）
+# 版本现状：前端 pbxproj = 2.3.1（v2.3.1 报表数字化纯前端补丁,2026-06-28 本地 main 未 push）；后端仍 2.3.0（v2.3.1 没动后端,有意分叉）。
 cd frontend
 xcodebuild -project LinoFinance.xcodeproj -scheme LinoFinanceV2 \
   -configuration Debug -destination 'platform=macOS' \

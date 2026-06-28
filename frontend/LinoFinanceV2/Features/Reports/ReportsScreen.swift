@@ -28,6 +28,7 @@ struct ReportsScreen: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             header
+            rangePicker
             switch reportsModel.state {
             case .idle, .loading:
                 loadingState
@@ -59,6 +60,18 @@ struct ReportsScreen: View {
                 Task { await reportsModel.load() }
             }
         }
+    }
+
+    // v2.3.1: 时间范围选择器 — drives category / monthly / pressure reports.
+    private var rangePicker: some View {
+        SegmentedPill(
+            options: ReportsModel.DateRange.allCases,
+            selection: Binding(
+                get: { reportsModel.range },
+                set: { newValue in Task { await reportsModel.select(newValue) } }
+            )
+        ) { $0.title }
+        .frame(maxWidth: 460)
     }
 
     // MARK: - Grid (2 columns)
@@ -93,6 +106,10 @@ struct ReportsScreen: View {
                 }
                 .frame(height: chartHeight)
                 .chartYAxis { AxisMarks(position: .leading) }
+                // v2.3.1: per-bar numbers (precise DTO decimals, not chart doubles).
+                ReportValueRow(label: "收入", value: r.incomeCny, color: Theme.Color.income)
+                ReportValueRow(label: "支出", value: r.expenseCny, color: Theme.Color.expense)
+                ReportValueRow(label: "净收入", value: r.netIncomeCny)
                 summaryLine("个人净支出", DecimalValue(r.personalNetExpenseCny.value))
             } else {
                 noData
@@ -106,7 +123,8 @@ struct ReportsScreen: View {
     private var categoryCard: some View {
         reportCard("分类支出", subtitle: "支出占比靠前的分类", systemImage: "chart.pie") {
             if let r = reportsModel.categoryExpenses, !r.rows.isEmpty {
-                let top = Array(r.rows.sorted { $0.expenseCny.value > $1.expenseCny.value }.prefix(7))
+                let sorted = r.rows.sorted { $0.expenseCny.value > $1.expenseCny.value }
+                let top = Array(sorted.prefix(7))
                 Chart(top) { row in
                     BarMark(
                         x: .value("金额", dbl(row.expenseCny)),
@@ -117,7 +135,8 @@ struct ReportsScreen: View {
                 }
                 .frame(height: chartHeight)
                 .chartXAxis { AxisMarks(position: .bottom) }
-                summaryLine("合计支出", DecimalValue(r.totalExpenseCny.value))
+                // v2.3.1: readable list below the bars — name · amount · share.
+                CategoryExpenseList(rows: sorted, totalCny: r.totalExpenseCny)
             } else {
                 noData
             }
@@ -150,6 +169,10 @@ struct ReportsScreen: View {
             } else {
                 noData
             }
+            // v2.3.1: window numbers (流入/流出/净) per 7/30/90 天 window.
+            if let r = reportsModel.cashFlowPressure, !r.windows.isEmpty {
+                CashFlowWindowList(windows: r.windows)
+            }
         }
     }
 
@@ -170,6 +193,8 @@ struct ReportsScreen: View {
                 }
                 .frame(height: chartHeight)
                 .chartYAxis { AxisMarks(position: .leading) }
+                // v2.3.1: per-cycle numbers — account · 账单额 / 剩余.
+                CreditCycleList(rows: rows)
                 summaryLine("剩余负债合计", DecimalValue(r.totalRemainingCny.value))
             } else {
                 noData
@@ -193,6 +218,10 @@ struct ReportsScreen: View {
                 }
                 .frame(height: chartHeight)
                 .chartYAxis { AxisMarks(position: .leading) }
+                // v2.3.1: per-status numbers (金额 + 笔数).
+                ForEach(r.statusBreakdown) { row in
+                    ReportValueRow(label: row.status.financeStatusTitle, value: row.amountCny)
+                }
                 summaryLine("个人净支出", DecimalValue(r.personalNetExpenseCny.value))
             } else {
                 noData
@@ -218,6 +247,10 @@ struct ReportsScreen: View {
                 }
                 .frame(height: chartHeight)
                 .chartYAxis { AxisMarks(position: .leading) }
+                // v2.3.1: per-bar numbers.
+                ReportValueRow(label: "月度", value: r.monthlyTotalCny)
+                ReportValueRow(label: "年度", value: r.annualTotalCny)
+                ReportValueRow(label: "未来30天", value: r.upcoming30DaysCny)
                 summaryLine("启用订阅", count: r.activeSubscriptionCount)
             } else {
                 noData
