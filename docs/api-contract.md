@@ -252,6 +252,26 @@ so production `/health` is the canonical "what is deployed" probe.
   `cancelled` are locked. When the patched currency is non-CNY the request must
   carry a valid `exchange_rate_id`; the backend recomputes `converted_cny_amount`
   from the resolved rate. Zero migration.
+- `PATCH /cash-flow-items/{item_id}` rejects direct edits to **system-linked**
+  items with `400` (v2.4.0 #2). An item is system-linked when any of
+  `linked_statement_cycle_id` / `linked_installment_plan_id` /
+  `linked_reimbursement_id` / `linked_subscription_rule_id` is set — it is
+  generated and kept in sync by an upstream source object, so a direct edit would
+  be silently overwritten by the next source-side sync (and, for statement
+  cycles, would detach the row and flag the R2 reconciliation detector). The
+  guard lives in the service layer (`update_cash_flow_item`), so it also covers
+  admin-token and AI callers, not just the UI. Message:
+  `系统联动现金流不可直接编辑，请修改其背后的账单周期 / 分期 / 报销源；订阅项仅可补账户/分类以便结算`.
+  The one exception: a **subscription-linked** item
+  (`linked_subscription_rule_id` set) may be patched with a subset of
+  `{account_id, category_id}` and nothing else — this feeds the client's
+  "fill the missing account, then settle" flow (subscription cash flows are
+  one-shot generated with no persistent source-side overwrite, so the patched
+  account/category survives to settlement). Any other patch to a
+  subscription-linked item — or any patch at all to a cycle/installment/
+  reimbursement-linked item — returns `400`. `settled` / `cancelled` items are
+  still locked first. `linked_entry_id` is a settlement product, not a source
+  link, and does not trigger the guard. Zero migration.
 
 ## Reimbursement Rules Implemented
 

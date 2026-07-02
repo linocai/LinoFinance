@@ -156,6 +156,7 @@ def update_cash_flow_item(
         )
 
     provided = payload.model_fields_set
+    _guard_system_linked_edit(item, provided)
 
     if "title" in provided:
         item.title = payload.title
@@ -219,6 +220,55 @@ def update_cash_flow_item(
     db.flush()
     db.commit()
     return get_cash_flow_item(db, item_id)
+
+
+# A cash flow item is "system-linked" when any of these four columns is set —
+# it is generated and kept in sync by an upstream source object (statement
+# cycle / installment plan / reimbursement claim / subscription rule). Editing
+# it directly would be silently overwritten by the next source-side sync (and, for
+# statement cycles, would also detach the row and light up the R2 reconciliation
+# detector). ``linked_entry_id`` is a *settlement product*, not a source link, so
+# it is intentionally excluded (v2.4.0 #2, PROJECT_PLAN §5.3).
+_SYSTEM_LINK_COLUMNS = (
+    "linked_statement_cycle_id",
+    "linked_installment_plan_id",
+    "linked_reimbursement_id",
+    "linked_subscription_rule_id",
+)
+# The only fields a subscription-linked item may be patched with — just enough to
+# feed ``completeAndSettle``'s "fill the missing account/category, then settle"
+# flow. Subscription cash flows are one-shot generated (no persistent
+# source-side overwrite), so this narrow patch survives to settlement (v2.4.0
+# #2, PROJECT_PLAN §5.3 甲案安全性核实).
+_SUBSCRIPTION_PATCH_ALLOWED = frozenset({"account_id", "category_id"})
+
+_SYSTEM_LINKED_EDIT_MESSAGE = (
+    "系统联动现金流不可直接编辑，请修改其背后的账单周期 / 分期 / 报销源；"
+    "订阅项仅可补账户/分类以便结算"
+)
+
+
+def _guard_system_linked_edit(item: CashFlowItem, provided: set) -> None:
+    """Reject direct edits to system-linked cash flow items (v2.4.0 #2, D1=甲).
+
+    Defence-in-depth in the service layer so *any* caller is covered — admin
+    token / AI actions / anything bypassing the UI. Opens exactly one narrow
+    door: a subscription-linked item may be patched with ``{account_id,
+    category_id}`` (a subset thereof) and nothing else, so the client can fill
+    the account before settling. Every other linked-item edit → 400.
+    """
+    is_system_linked = any(
+        getattr(item, column) is not None for column in _SYSTEM_LINK_COLUMNS
+    )
+    if not is_system_linked:
+        return
+
+    allowed = (
+        item.linked_subscription_rule_id is not None
+        and provided.issubset(_SUBSCRIPTION_PATCH_ALLOWED)
+    )
+    if not allowed:
+        raise LedgerValidationError(_SYSTEM_LINKED_EDIT_MESSAGE)
 
 
 def _validate_update_links(db: Session, item: CashFlowItem) -> None:
