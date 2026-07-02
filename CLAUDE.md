@@ -40,7 +40,7 @@ cd backend && source .venv/bin/activate
 python scripts/run_local_sqlite.py     # 本地 SQLite API，端口 6868
 
 # 前端（仅 v2 两 target；SwiftPM/swift test 已退役）
-# 版本现状：前端 pbxproj = 2.3.1（v2.3.1 报表数字化纯前端补丁,2026-06-28 本地 main 未 push）；后端仍 2.3.0（v2.3.1 没动后端,有意分叉）。
+# 版本现状：前端 pbxproj = 2.3.1（v2.3.1 报表数字化纯前端补丁,2026-06-28,已 push origin/main + tag v2.3.1 commit e214c04；macOS 未装 2.3.1 包,装机留用户）；后端仍 2.3.0（v2.3.1 没动后端,有意分叉）。
 cd frontend
 xcodebuild -project LinoFinance.xcodeproj -scheme LinoFinanceV2 \
   -configuration Debug -destination 'platform=macOS' \
