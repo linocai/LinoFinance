@@ -24,6 +24,7 @@ def list_cash_flow_items(
     date_from: Optional[DateType] = Query(default=None),
     date_to: Optional[DateType] = Query(default=None),
     include_cancelled: bool = Query(default=False),
+    account_id: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
 ) -> List[CashFlowItemRead]:
     return cash_flow.list_cash_flow_items(
@@ -32,6 +33,7 @@ def list_cash_flow_items(
         date_from=date_from,
         date_to=date_to,
         include_cancelled=include_cancelled,
+        account_id=account_id,
     )
 
 

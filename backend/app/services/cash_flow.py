@@ -41,6 +41,7 @@ def list_cash_flow_items(
     date_from: Optional[DateType] = None,
     date_to: Optional[DateType] = None,
     include_cancelled: bool = False,
+    account_id: Optional[str] = None,
 ) -> List[CashFlowItemRead]:
     statement = select(CashFlowItem)
     if status is not None:
@@ -52,6 +53,10 @@ def list_cash_flow_items(
         statement = statement.where(CashFlowItem.expected_date >= date_from)
     if date_to is not None:
         statement = statement.where(CashFlowItem.expected_date <= date_to)
+    if account_id is not None:
+        # Cash flow items carry a single account column — a plain equality
+        # filter suffices (no EXISTS needed, v2.4.0 #3-b).
+        statement = statement.where(CashFlowItem.account_id == account_id)
 
     items = db.execute(
         statement.order_by(CashFlowItem.expected_date.asc(), CashFlowItem.created_at.asc())

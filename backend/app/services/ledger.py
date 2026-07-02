@@ -2,7 +2,7 @@ from datetime import date as DateType
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Iterable, List, Optional, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from app.core.constants import BASE_CURRENCY, SUPPORTED_CURRENCIES
@@ -70,11 +70,58 @@ def create_entry(db: Session, payload: EntryCreate, commit: bool = True) -> Entr
     return get_entry(db, entry.id)
 
 
-def list_entries(db: Session) -> List[EntryRead]:
-    entries = db.execute(
-        select(FinancialEntry).order_by(FinancialEntry.date.desc(), FinancialEntry.created_at.desc())
-    ).scalars()
-    return [get_entry(db, entry.id) for entry in entries]
+def list_entries(
+    db: Session,
+    *,
+    account_id: Optional[str] = None,
+    limit: Optional[int] = None,
+    offset: int = 0,
+) -> List[EntryRead]:
+    """List entries, newest first, optionally filtered/paginated (v2.4.0 #3).
+
+    - ``account_id`` — return whole entries that have *any* movement on the
+      account, using an EXISTS subquery (a bare JOIN would duplicate an entry
+      with multiple movements on the same account). Filter is status-agnostic
+      (voided entries are returned too; the client self-filters). The full
+      movement set is preserved on each entry — we never trim to a subset.
+    - ``limit=None`` — no LIMIT/OFFSET at all, i.e. a *true* full scan that is
+      byte-for-byte equal to the old per-row path (the three full-scan callers
+      rely on this). Only when ``limit`` is passed do we slice, after filtering.
+    - N+1 is eliminated: after selecting the entry ids we load *all* their
+      category lines and movements in two batch ``IN`` queries (there is no ORM
+      relationship on ``FinancialEntry`` to ``selectinload``), each ordered by
+      ``created_at ASC, id ASC`` so the assembled ``EntryRead`` is identical to
+      the old ``_load_entry_parts`` output (whose insertion order was only an
+      unguaranteed coincidence — Postgres ``IN`` gives no ordering; the frontend
+      ``kind(of:)`` reads ``categoryLines.first.direction``).
+    """
+    statement = select(FinancialEntry).order_by(
+        FinancialEntry.date.desc(), FinancialEntry.created_at.desc()
+    )
+    if account_id is not None:
+        statement = statement.where(
+            exists().where(
+                AccountMovement.entry_id == FinancialEntry.id,
+                AccountMovement.account_id == account_id,
+            )
+        )
+    if limit is not None:
+        statement = statement.limit(limit).offset(offset)
+
+    entries = list(db.execute(statement).scalars())
+    if not entries:
+        return []
+
+    entry_ids = [entry.id for entry in entries]
+    lines_by_entry, movements_by_entry = _load_entry_parts_bulk(db, entry_ids)
+    return [
+        EntryRead.from_models(
+            entry,
+            lines_by_entry.get(entry.id, []),
+            movements_by_entry.get(entry.id, []),
+        )
+        for entry in entries
+    ]
 
 
 def get_entry(db: Session, entry_id: str) -> EntryRead:
@@ -528,17 +575,61 @@ def _load_entry_parts(
     db: Session,
     entry_id: str,
 ) -> Tuple[List[EntryCategoryLine], List[AccountMovement]]:
+    # Order matches the batch loader (``_load_entry_parts_bulk``) so the
+    # single-entry ``get_entry`` output is byte-for-byte identical to the list
+    # endpoint's — a deterministic ``created_at ASC, id ASC`` order that replaces
+    # the former no-ORDER-BY reliance on coincidental insertion order (which
+    # Postgres never guaranteed; v2.4.0 #3, PROJECT_PLAN §5.5 风险1).
     lines = list(
         db.execute(
-            select(EntryCategoryLine).where(EntryCategoryLine.entry_id == entry_id)
+            select(EntryCategoryLine)
+            .where(EntryCategoryLine.entry_id == entry_id)
+            .order_by(EntryCategoryLine.created_at.asc(), EntryCategoryLine.id.asc())
         ).scalars()
     )
     movements = list(
         db.execute(
-            select(AccountMovement).where(AccountMovement.entry_id == entry_id)
+            select(AccountMovement)
+            .where(AccountMovement.entry_id == entry_id)
+            .order_by(AccountMovement.created_at.asc(), AccountMovement.id.asc())
         ).scalars()
     )
     return lines, movements
+
+
+def _load_entry_parts_bulk(
+    db: Session,
+    entry_ids: List[str],
+) -> Tuple[dict, dict]:
+    """Batch-load lines and movements for many entries (v2.4.0 #3, kills N+1).
+
+    Returns two dicts keyed by ``entry_id``. Both queries carry an explicit
+    ``ORDER BY created_at ASC, id ASC`` so the per-entry order matches the old
+    single-entry ``_load_entry_parts`` (which relied on unguaranteed insertion
+    order). Grouping is done in-memory to keep the row order the query produced.
+    """
+    lines_by_entry: dict = {}
+    movements_by_entry: dict = {}
+    if not entry_ids:
+        return lines_by_entry, movements_by_entry
+
+    line_rows = db.execute(
+        select(EntryCategoryLine)
+        .where(EntryCategoryLine.entry_id.in_(entry_ids))
+        .order_by(EntryCategoryLine.created_at.asc(), EntryCategoryLine.id.asc())
+    ).scalars()
+    for line in line_rows:
+        lines_by_entry.setdefault(line.entry_id, []).append(line)
+
+    movement_rows = db.execute(
+        select(AccountMovement)
+        .where(AccountMovement.entry_id.in_(entry_ids))
+        .order_by(AccountMovement.created_at.asc(), AccountMovement.id.asc())
+    ).scalars()
+    for movement in movement_rows:
+        movements_by_entry.setdefault(movement.entry_id, []).append(movement)
+
+    return lines_by_entry, movements_by_entry
 
 
 def _sum_line_cny(lines: Iterable[EntryCategoryLine], direction: str) -> Decimal:

@@ -178,6 +178,18 @@ so production `/health` is the canonical "what is deployed" probe.
 - Income category totals must match `balance_in` movement totals in CNY.
 - CNY amounts convert to themselves.
 - Non-CNY amounts use the latest available rate on or before the entry date.
+- `GET /entries` supports optional query params (v2.4.0 #3): `account_id`
+  returns whole entries that have any movement on that account (EXISTS filter,
+  status-agnostic so voided entries are included; the full movement set is kept,
+  never trimmed to a subset). `limit` (`1..500`, out of range → `422`) + `offset`
+  (`>= 0`, default 0) paginate; entries stay ordered `date DESC, created_at DESC`
+  and paging is applied after filtering. **Passing no params returns the true
+  full set, byte-for-byte identical to the pre-v2.4.0 behaviour** (no LIMIT/
+  OFFSET) — the full-scan callers (ledger main screen, reimbursement/installment
+  pickers) are unchanged. The response is a bare `List[EntryRead]` (no
+  envelope). Internally the endpoint loads all entries' lines and movements in
+  two batch `IN` queries (ordered `created_at ASC, id ASC`) instead of one query
+  per entry, eliminating the former N+1. Zero migration.
 - Voiding a confirmed entry reverses its balance/liability effect.
 - Credit card charges increase `current_liability`; credit repayment decreases it and is treated as transfer movement.
 - **Credit `current_liability` is a derived value (v2.2.0 P1, D1=甲): it always equals `Σ(non-voided statement cycle: statement_amount − paid_amount)`.** The stored `accounts.current_liability` column is a cache of exactly this sum, recomputed after every cycle/charge/repayment mutation, so it can never drift from the cycle total (root-cause fix for the historical "opening liability number that no cycle covered"). There is no "unbilled charges" concept in the current model (every `credit_charge` is forced into a cycle at creation), so the cycle sum is the whole truth.
@@ -242,7 +254,11 @@ so production `/health` is the canonical "what is deployed" probe.
   (v2.3.0 评审修补 重要-2).
 - `GET /cash-flow-items` hides `cancelled` items by default (v1.1.5); pass
   `include_cancelled=true` to include them. An explicit `status` filter wins and
-  ignores `include_cancelled`.
+  ignores `include_cancelled`. Optional `account_id` (v2.4.0 #3) filters to items
+  whose single `account_id` column equals it (plain equality — cash flow items are
+  single-account, no EXISTS needed), and stacks with the existing
+  `status`/`date_from`/`date_to`/`include_cancelled` filters. Response shape
+  unchanged.
 - `POST /cash-flow-items/{item_id}/cancel` is idempotent (v1.1.5): cancelling an
   already-`cancelled` item returns `200` with the unchanged item rather than
   erroring. `settled` items cannot be cancelled.

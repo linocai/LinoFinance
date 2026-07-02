@@ -1,6 +1,6 @@
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -12,8 +12,15 @@ router = APIRouter()
 
 
 @router.get("", response_model=List[EntryRead])
-def list_entries(db: Session = Depends(get_db)) -> List[EntryRead]:
-    return ledger.list_entries(db)
+def list_entries(
+    account_id: Optional[str] = Query(default=None),
+    limit: Optional[int] = Query(default=None, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+) -> List[EntryRead]:
+    # v2.4.0 #3: optional account_id EXISTS filter + offset/limit paging. No
+    # params = true full scan, byte-for-byte equal to the pre-v2.4.0 behaviour.
+    return ledger.list_entries(db, account_id=account_id, limit=limit, offset=offset)
 
 
 @router.post("", response_model=EntryRead, status_code=status.HTTP_201_CREATED)
