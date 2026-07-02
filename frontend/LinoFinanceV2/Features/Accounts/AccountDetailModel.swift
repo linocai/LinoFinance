@@ -4,10 +4,13 @@ import SwiftUI
 // AccountDetailModel — v2.3.0 P3 单账户流水专屏 view-model (D5=甲 / D6=甲).
 // Cross-platform: macOS 专屏 + iOS 简版只读 both build their detail view on it.
 //
-// Pure front-end local filtering: pulls the full entries / cash-flow-items /
-// statement-cycles / installment-plans (the personal-use data volume is small,
-// see plan §5.2 D + §5.6 风险4) and filters by account id client-side — NO new
-// backend query params. Surfaces, for one account:
+// v2.4.0 P3: entries + cash-flow-items are now filtered SERVER-SIDE by
+// account_id (was pulled full + filtered client-side). The backend account_id
+// filter is status-agnostic (voided entries come back too), so the confirmed /
+// non-cancelled filters below are still load-bearing and stay. cycles are still
+// server-filtered by credit_account_id; installment plans are still pulled full
+// (no account param on that endpoint) and filtered locally. Surfaces, for one
+// account:
 //   • 历史流水 (account movements drawn from confirmed entries, by movement.accountId)
 //   • 未来现金流 (cash flow items by item.accountId, hides cancelled)
 //   • 信用账单周期 (cycles, by credit_account_id) — credit accounts only
@@ -62,8 +65,12 @@ final class AccountDetailModel: ObservableObject {
     func load() async {
         state = .loading
         do {
-            async let entriesResult = apiClient.listEntries()
-            async let cashFlowResult = apiClient.listCashFlowItems()
+            // entries + cash-flow-items filtered server-side by account_id
+            // (v2.4.0 P3); cycles server-filtered by credit_account_id; plans
+            // still pulled full (endpoint has no account param) and filtered
+            // locally below.
+            async let entriesResult = apiClient.listEntries(accountID: account.id)
+            async let cashFlowResult = apiClient.listCashFlowItems(accountID: account.id)
             async let cyclesResult = apiClient.listStatementCycles(creditAccountID: account.id)
             async let plansResult = apiClient.listInstallmentPlans()
 
@@ -72,9 +79,14 @@ final class AccountDetailModel: ObservableObject {
             let cycles = (try? await cyclesResult) ?? []
             let plans = (try? await plansResult) ?? []
 
+            // Server returned only entries touching this account, but they are
+            // whole entries and status-agnostic — keep the confirmed filter and
+            // pick this account's movement(s) out of each entry (movementRows).
             movements = Self.movementRows(from: entries, accountID: account.id)
+            // Cash flows already scoped to this account by the server; just hide
+            // cancelled and sort by date.
             futureCashFlows = cashFlows
-                .filter { $0.accountId == account.id && $0.status != "cancelled" }
+                .filter { $0.status != "cancelled" }
                 .sorted { $0.expectedDate < $1.expectedDate }
             statementCycles = isCredit ? cycles : []
             installments = isCredit

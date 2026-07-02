@@ -97,8 +97,27 @@ struct LinoAPIClient {
         try await patch("currency-rates/\(id)", body: request)
     }
 
-    func listEntries() async throws -> [EntryDTO] {
-        try await get("entries")
+    /// GET /entries. All params optional (v2.4.0 #3): `accountID` filters to
+    /// whole entries with any movement on that account (server-side EXISTS,
+    /// status-agnostic — callers still filter status client-side); `limit`
+    /// (1...500) + `offset` paginate. Passing nothing returns the full set,
+    /// unchanged from before.
+    func listEntries(
+        accountID: String? = nil,
+        limit: Int? = nil,
+        offset: Int? = nil
+    ) async throws -> [EntryDTO] {
+        var query: [URLQueryItem] = []
+        if let accountID {
+            query.append(URLQueryItem(name: "account_id", value: accountID))
+        }
+        if let limit {
+            query.append(URLQueryItem(name: "limit", value: String(limit)))
+        }
+        if let offset {
+            query.append(URLQueryItem(name: "offset", value: String(offset)))
+        }
+        return try await get("entries", queryItems: query)
     }
 
     /// GET /entries/{id} — full entry detail (lines + movements). The list already
@@ -119,7 +138,8 @@ struct LinoAPIClient {
         status: String? = nil,
         dateFrom: Date? = nil,
         dateTo: Date? = nil,
-        includeCancelled: Bool = false
+        includeCancelled: Bool = false,
+        accountID: String? = nil
     ) async throws -> [CashFlowItemDTO] {
         var query: [URLQueryItem] = []
         if let status {
@@ -133,6 +153,10 @@ struct LinoAPIClient {
         }
         if includeCancelled {
             query.append(URLQueryItem(name: "include_cancelled", value: "true"))
+        }
+        if let accountID {
+            // v2.4.0 #3-b: server-side single-account filter.
+            query.append(URLQueryItem(name: "account_id", value: accountID))
         }
         return try await get("cash-flow-items", queryItems: query)
     }
