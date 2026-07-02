@@ -183,13 +183,18 @@ so production `/health` is the canonical "what is deployed" probe.
   status-agnostic so voided entries are included; the full movement set is kept,
   never trimmed to a subset). `limit` (`1..500`, out of range → `422`) + `offset`
   (`>= 0`, default 0) paginate; entries stay ordered `date DESC, created_at DESC`
-  and paging is applied after filtering. **Passing no params returns the true
-  full set, byte-for-byte identical to the pre-v2.4.0 behaviour** (no LIMIT/
-  OFFSET) — the full-scan callers (ledger main screen, reimbursement/installment
-  pickers) are unchanged. The response is a bare `List[EntryRead]` (no
+  and paging is applied after filtering. `offset` without `limit` has no
+  effect (no LIMIT/OFFSET is applied unless `limit` is present). **Passing no
+  params returns the true full set of entries** (no LIMIT/OFFSET) — the
+  full-scan callers (ledger main screen, reimbursement/installment pickers) get
+  the same entries as before. The response is a bare `List[EntryRead]` (no
   envelope). Internally the endpoint loads all entries' lines and movements in
   two batch `IN` queries (ordered `created_at ASC, id ASC`) instead of one query
-  per entry, eliminating the former N+1. Zero migration.
+  per entry, eliminating the former N+1. Zero migration. Note: intra-entry line/
+  movement order is now this deterministic `created_at ASC, id ASC`; pre-v2.4.0
+  had no ORDER BY (unspecified order), so for entries whose rows share a
+  timestamp the within-entry order may differ — cosmetic only (e.g. a split
+  entry's first category-line tile, transfer leg order).
 - Voiding a confirmed entry reverses its balance/liability effect.
 - Credit card charges increase `current_liability`; credit repayment decreases it and is treated as transfer movement.
 - **Credit `current_liability` is a derived value (v2.2.0 P1, D1=甲): it always equals `Σ(non-voided statement cycle: statement_amount − paid_amount)`.** The stored `accounts.current_liability` column is a cache of exactly this sum, recomputed after every cycle/charge/repayment mutation, so it can never drift from the cycle total (root-cause fix for the historical "opening liability number that no cycle covered"). There is no "unbilled charges" concept in the current model (every `credit_charge` is forced into a cycle at creation), so the cycle sum is the whole truth.
