@@ -58,6 +58,14 @@ struct OverviewView: View {
             // v2.5.0 P2 · D: equal-height row — each card stretches to the row's
             // tallest natural height (now netWorthCard, which grew an extra 应收
             // chip line in A-UI), content stays top-aligned inside.
+            //
+            // v2.5.0 评审修补 · 重要-1: the outer `.frame(maxHeight:.infinity)`
+            // below only fills the HStack's layout SLOT — it does not reach the
+            // visible glass background, which lives inside `GlassCard` and hugs
+            // its content by default. The three cards below pass `GlassCard`'s
+            // `fillsHeight: true` so the glass shape itself stretches to the
+            // slot's height (applied INSIDE `.glassEffect`, before the pixels
+            // are drawn) instead of just the invisible layout box around it.
             HStack(alignment: .top, spacing: 16) {
                 netWorthCard(summary)
                     .frame(maxHeight: .infinity, alignment: .top)
@@ -91,7 +99,7 @@ struct OverviewView: View {
 
     // net worth (indigo tint) + 公式 chips
     private func netWorthCard(_ summary: DashboardSummaryDTO) -> some View {
-        GlassCard(tint: Theme.Color.brandEnd) {
+        GlassCard(tint: Theme.Color.brandEnd, fillsHeight: true) {
             VStack(alignment: .leading, spacing: 10) {
                 Text("净资产")
                     .font(Theme.Font.caption(.medium))
@@ -119,7 +127,7 @@ struct OverviewView: View {
 
     // investment + 今日盈亏
     private func investmentCard(_ summary: DashboardSummaryDTO) -> some View {
-        GlassCard {
+        GlassCard(fillsHeight: true) {
             VStack(alignment: .leading, spacing: 10) {
                 Text("投资")
                     .font(Theme.Font.caption(.medium))
@@ -138,7 +146,7 @@ struct OverviewView: View {
 
     // 未来 30 天净流入 (signed)
     private func cashFlowCard(_ summary: DashboardSummaryDTO) -> some View {
-        GlassCard {
+        GlassCard(fillsHeight: true) {
             VStack(alignment: .leading, spacing: 10) {
                 Text("未来 30 天净流入")
                     .font(Theme.Font.caption(.medium))

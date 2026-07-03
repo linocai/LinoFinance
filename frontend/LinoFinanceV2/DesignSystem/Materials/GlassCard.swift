@@ -17,13 +17,25 @@ struct GlassCard<Content: View>: View {
     var shadow: Theme.ShadowSpec = Theme.Shadow.card
     /// Optional brand tint washed faintly over the glass (net-worth / AI cards).
     var tint: Color? = nil
+    /// v2.5.0 评审修补 · D: when true, the glass background itself stretches to
+    /// fill an externally-imposed height (e.g. a sibling in an equal-height
+    /// HStack) instead of hugging its content. Must be applied INSIDE
+    /// `.glassEffect` — an outer `.frame(maxHeight:.infinity)` on the whole
+    /// card only fills the HStack's layout slot, not the visible glass shape
+    /// (reviewer 重要-1). Default false = existing hug-content behavior,
+    /// zero impact on other GlassCard call sites.
+    var fillsHeight: Bool = false
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         content()
             .padding(padding)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: fillsHeight ? .infinity : nil,
+                alignment: fillsHeight ? .topLeading : .leading
+            )
             .glassEffect(in: shape)
             .overlay {
                 if let tint {

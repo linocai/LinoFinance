@@ -7,6 +7,13 @@ import Foundation
 /// rejected — matches how native currency keypads behave). Does not affect
 /// `Decimal(string:)` parsing at submit time, which already only accepts the
 /// resulting clean string.
+///
+/// v2.5.0 评审修补 · 建议-2: `ch.isASCII && ch.isNumber` (not bare `ch.isNumber`)
+/// — Swift's `Character.isNumber` is Unicode-aware and would otherwise let
+/// full-width digits ("１２３", from CJK IME full-width input) or other
+/// non-ASCII numerics through. Those display in the field but don't match
+/// what `Decimal(string:)` parses at submit (prefix-parse semantics), so the
+/// shown amount and the submitted amount could silently diverge.
 func sanitizeAmountInput(_ raw: String) -> String {
     var seenDot = false
     var fractionDigits = 0
@@ -16,14 +23,15 @@ func sanitizeAmountInput(_ raw: String) -> String {
             guard !seenDot else { continue }
             seenDot = true
             result.append(ch)
-        } else if ch.isNumber {
+        } else if ch.isASCII && ch.isNumber {
             if seenDot {
                 guard fractionDigits < 2 else { continue }
                 fractionDigits += 1
             }
             result.append(ch)
         }
-        // Any other character (letters, symbols, whitespace) is dropped.
+        // Any other character (letters, symbols, whitespace, full-width
+        // digits) is dropped.
     }
     return result
 }

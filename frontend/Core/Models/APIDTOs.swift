@@ -718,9 +718,16 @@ struct ExportDatasetListDTO: Decodable, Equatable, Hashable {
 /// v2.5.0 P2 · F: `.unknown` is a decode-only fallback for any future/unrecognized
 /// backend account type — never sent back (create only offers the 3 explicit
 /// types via a picker array, update never carries `type` at all; see
-/// `AccountFormSheet`/`AccountUpdateRequest`). Keeping it out of a hand-rolled
-/// `CaseIterable` iteration order is intentional: nothing should enumerate it as
-/// a selectable choice.
+/// `AccountFormSheet`/`AccountUpdateRequest`).
+///
+/// v2.5.0 评审修补 · 建议-1: the synthesized `CaseIterable.allCases` DOES include
+/// `.unknown` (no hand-rolled `allCases` overrides it) — this is harmless today
+/// because nothing in the codebase enumerates `AccountType.allCases` (grep-verified),
+/// the create picker uses an explicit `[.balance, .credit, .investment]` array, and
+/// the backend's `AccountCreate.type` regex `^(balance|credit|investment)$` rejects
+/// `unknown` server-side (422) even if a future call site slipped it through. If a
+/// future picker/menu is built from `AccountType.allCases`, it must explicitly
+/// exclude `.unknown` (or the enum should gain a hand-rolled `allCases`).
 enum AccountType: String, CaseIterable, Hashable {
     case balance
     case credit

@@ -101,29 +101,47 @@ struct AddEntryIOSSheet: View {
             await model.loadAccounts()
             await model.loadCategories()
             await model.loadRates()
-            applyDefaultAccounts()
+            applyInitialDefaultAccounts()
         }
         .onChange(of: segment) { _, _ in
             categoryId = nil
-            applyDefaultAccounts()
+            clearInvalidatedAccounts()
         }
         .onChange(of: currency) { _, _ in
-            applyDefaultAccounts()
+            clearInvalidatedAccounts()
         }
     }
 
-    // MARK: - Default account selection (v2.5.0 P2 · H, mirrors macOS AddEntryPage)
+    // MARK: - Default account selection (v2.5.0 评审修补 · H 重要-2, mirrors macOS AddEntryPage)
     //
-    // Non-transfer segments default `accountId` to the first selectable account.
-    // Transfer only defaults the OUT leg — the IN leg stays nil so the user must
-    // pick explicitly (defaulting both would make `out == into`, permanently
-    // failing `canSubmit`). Refill only replaces a value that is nil or no
-    // longer present in the current `selectableAccounts` — a still-valid manual
-    // pick is never silently overwritten.
-    private func applyDefaultAccounts() {
+    // Two separate paths, deliberately NOT merged into one "nil-or-invalid →
+    // fill first" rule — that rule cannot honor a manual pick surviving a
+    // currency round-trip (switching away invalidates it to nil then
+    // immediately refills with first; switching back invalidates THAT and
+    // refills with a possibly different first account, silently swapping the
+    // user's chosen account). See reviewer 重要-2 /
+    // archive/REVIEW_REPORT_v2.5.0.md.
+    //
+    // - `.task` (sheet first opened): fill first-if-nil once.
+    // - `onChange(segment/currency)`: an account no longer in the refreshed
+    //   `selectableAccounts` is cleared to nil — never refilled with first.
+    //   nil blocks `canSubmit`, forcing an explicit re-pick (safe outcome).
+    //   A still-valid manual pick is never touched by either path.
+
+    /// Initial-open only: fill `accountId` with the first selectable account
+    /// if nil. Transfer only defaults the OUT leg.
+    private func applyInitialDefaultAccounts() {
+        if accountId == nil {
+            accountId = selectableAccounts.first?.id
+        }
+    }
+
+    /// Segment/currency changed: drop any account selection that no longer
+    /// belongs to the refreshed `selectableAccounts`. Never refills with first.
+    private func clearInvalidatedAccounts() {
         let accounts = selectableAccounts
-        if accountId == nil || !accounts.contains(where: { $0.id == accountId }) {
-            accountId = accounts.first?.id
+        if let current = accountId, !accounts.contains(where: { $0.id == current }) {
+            accountId = nil
         }
         if segment == .transfer {
             if let current = transferInAccountId, !accounts.contains(where: { $0.id == current }) {
