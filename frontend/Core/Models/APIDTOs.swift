@@ -42,6 +42,17 @@ struct DashboardSummaryDTO: Decodable, Equatable {
     let creditLiabilityByCurrency: [CurrencyAmountDTO]?
     let netWorthByCurrency: [CurrencyAmountDTO]?
 
+    // New in v2.5.0 P1 (backend, commit 82d71ea) — pending-reimbursement
+    // receivable, now folded into net_worth_cny/netWorthByCurrency server-side.
+    // Optional so an older (2.4.0) backend still decodes; additive/backward
+    // compatible. See §5.3: reimbursementReceivableByCurrency is the original-
+    // currency bucket (CNY floor always present) — the P2 UI formula chip reads
+    // its CNY leg, NOT reimbursementReceivableTotalCny (which is a separately
+    // rounded total, not guaranteed byte-equal to the CNY leg here when other
+    // currencies are present).
+    let reimbursementReceivableTotalCny: DecimalValue?
+    let reimbursementReceivableByCurrency: [CurrencyAmountDTO]?
+
     // The global decoder uses .convertFromSnakeCase, which first transforms
     // the JSON key and *then* matches it against CodingKeys raw values.
     // For digit+letter segments the transformer capitalises the letter
@@ -67,6 +78,8 @@ struct DashboardSummaryDTO: Decodable, Equatable {
         case balanceTotalByCurrency
         case creditLiabilityByCurrency
         case netWorthByCurrency
+        case reimbursementReceivableTotalCny
+        case reimbursementReceivableByCurrency
     }
 }
 
@@ -702,17 +715,39 @@ struct ExportDatasetListDTO: Decodable, Equatable, Hashable {
     let datasets: [ExportDatasetDTO]
 }
 
-enum AccountType: String, Codable, CaseIterable, Hashable {
+/// v2.5.0 P2 · F: `.unknown` is a decode-only fallback for any future/unrecognized
+/// backend account type — never sent back (create only offers the 3 explicit
+/// types via a picker array, update never carries `type` at all; see
+/// `AccountFormSheet`/`AccountUpdateRequest`). Keeping it out of a hand-rolled
+/// `CaseIterable` iteration order is intentional: nothing should enumerate it as
+/// a selectable choice.
+enum AccountType: String, CaseIterable, Hashable {
     case balance
     case credit
     case investment
+    case unknown
 
     var title: String {
         switch self {
         case .balance: "余额"
         case .credit: "信用"
         case .investment: "投资"
+        case .unknown: "未知"
         }
+    }
+}
+
+extension AccountType: Decodable {
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = AccountType(rawValue: raw) ?? .unknown
+    }
+}
+
+extension AccountType: Encodable {
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
     }
 }
 

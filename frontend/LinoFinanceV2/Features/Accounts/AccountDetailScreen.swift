@@ -301,6 +301,7 @@ struct AccountDetailScreen: View {
         case .credit: "creditcard"
         case .investment: "chart.line.uptrend.xyaxis.circle"
         case .balance: account.currency == .usd ? "dollarsign.circle" : "yensign.circle"
+        case .unknown: "questionmark.circle"
         }
     }
 
@@ -310,6 +311,7 @@ struct AccountDetailScreen: View {
         case .credit: typeLabel = "信用账户"
         case .investment: typeLabel = "投资账户"
         case .balance: typeLabel = "资金账户"
+        case .unknown: typeLabel = "未知类型账户"
         }
         return "\(typeLabel) · \(account.currency.rawValue)"
     }

@@ -1,5 +1,33 @@
 import Foundation
 
+/// Sanitizes raw keystroke input for the 记一笔 big-amount field (macOS
+/// `AddEntryPage` + iOS `AddEntryIOSSheet` share this — v2.5.0 P2 item B):
+/// keep digits only, allow at most one "." separator, and cap the fractional
+/// part at 2 digits (typing a 3rd decimal digit is simply dropped, not
+/// rejected — matches how native currency keypads behave). Does not affect
+/// `Decimal(string:)` parsing at submit time, which already only accepts the
+/// resulting clean string.
+func sanitizeAmountInput(_ raw: String) -> String {
+    var seenDot = false
+    var fractionDigits = 0
+    var result = ""
+    for ch in raw {
+        if ch == "." {
+            guard !seenDot else { continue }
+            seenDot = true
+            result.append(ch)
+        } else if ch.isNumber {
+            if seenDot {
+                guard fractionDigits < 2 else { continue }
+                fractionDigits += 1
+            }
+            result.append(ch)
+        }
+        // Any other character (letters, symbols, whitespace) is dropped.
+    }
+    return result
+}
+
 // AddEntryModel — D3 记一笔 form state + the double-entry mapping (P2 core).
 //
 // Mapping follows the v1 golden reference `MacQuickEntryView.submitForm()` +

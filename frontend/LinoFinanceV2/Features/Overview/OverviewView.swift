@@ -55,10 +55,16 @@ struct OverviewView: View {
     private func content(_ summary: DashboardSummaryDTO) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             heroCard(summary)
+            // v2.5.0 P2 · D: equal-height row — each card stretches to the row's
+            // tallest natural height (now netWorthCard, which grew an extra 应收
+            // chip line in A-UI), content stays top-aligned inside.
             HStack(alignment: .top, spacing: 16) {
                 netWorthCard(summary)
+                    .frame(maxHeight: .infinity, alignment: .top)
                 investmentCard(summary)
+                    .frame(maxHeight: .infinity, alignment: .top)
                 cashFlowCard(summary)
+                    .frame(maxHeight: .infinity, alignment: .top)
             }
         }
     }
@@ -71,7 +77,12 @@ struct OverviewView: View {
                     .font(Theme.Font.subtitle(.medium))
                     .foregroundStyle(Theme.Color.textSecondary)
                 dualCurrency(summary.disposable30dByCurrency, font: Theme.Font.bigNumber())
-                Text("当前余额可动用部分，已扣除未来 30 天的固定支出")
+                // v2.5.0 P2 · E: the old copy said "已扣除未来 30 天的固定支出"
+                // (deducted), but disposable_30d = balance + cash_flow_30d, and
+                // cash_flow_30d nets BOTH the 30-day inflows and outflows — it's
+                // not a pure deduction. "已计入" (accounted for) matches the
+                // actual formula.
+                Text("当前余额可动用部分，已计入未来 30 天的收支")
                     .font(Theme.Font.caption())
                     .foregroundStyle(Theme.Color.textTertiary)
             }
@@ -87,10 +98,18 @@ struct OverviewView: View {
                     .foregroundStyle(Theme.Color.textSecondary)
                 dualCurrency(summary.netWorthByCurrency, axis: .vertical, font: Theme.Font.cardNumber())
 
-                // 公式 chips (CNY 口径): 余额 + 投资 − 信用 = 净资产
+                // 公式 chips (CNY 口径): 余额 + 投资 + 应收 − 信用 = 净资产
+                // v2.5.0 P2 · A-UI: 应收 chip reads the CNY LEG of
+                // reimbursementReceivableByCurrency (same source pattern as every
+                // other chip here — cny(xxxByCurrency)), NOT
+                // reimbursementReceivableTotalCny. The latter is a separately
+                // rounded cross-currency total; using it here would make the
+                // formula fail to add up whenever a non-CNY pending
+                // reimbursement exists (§5.4 P2 / plan-critic 建议2).
                 FlowFormula(
                     balance: cny(summary.balanceTotalByCurrency) ?? summary.balanceTotalCny,
                     investment: cny(summary.investmentTotalByCurrency) ?? (summary.investmentTotalCny ?? DecimalValue(0)),
+                    receivable: cny(summary.reimbursementReceivableByCurrency) ?? DecimalValue(0),
                     credit: cny(summary.creditLiabilityByCurrency) ?? summary.creditLiabilityTotalCny,
                     net: cny(summary.netWorthByCurrency) ?? summary.netWorthCny
                 )
@@ -234,11 +253,14 @@ struct OverviewView: View {
     }
 }
 
-// MARK: - Net-worth formula chips (余额 + 投资 − 信用 = 净资产, CNY)
+// MARK: - Net-worth formula chips (余额 + 投资 + 应收 − 信用 = 净资产, CNY)
+// v2.5.0 P2 · A-UI: 应收 (pending reimbursement receivable) inserted per §5.3's
+// new net-worth formula (backend P1, commit 82d71ea).
 
 private struct FlowFormula: View {
     let balance: DecimalValue
     let investment: DecimalValue
+    let receivable: DecimalValue
     let credit: DecimalValue
     let net: DecimalValue
 
@@ -249,6 +271,8 @@ private struct FlowFormula: View {
                 chip("余额", balance)
                 op("+")
                 chip("投资", investment)
+                op("+")
+                chip("应收", receivable)
             }
             HStack(spacing: 6) {
                 op("−")

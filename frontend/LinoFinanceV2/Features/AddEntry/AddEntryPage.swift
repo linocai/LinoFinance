@@ -58,15 +58,37 @@ struct AddEntryPage: View {
             await model.loadAccounts()
             await model.loadCategories()
             await model.loadRates()
+            applyDefaultAccounts()
         }
         .onChange(of: segment) { _, _ in
             categoryId = nil
-            accountId = nil
-            transferInAccountId = nil
+            applyDefaultAccounts()
         }
         .onChange(of: currency) { _, _ in
             // Account currency must match the movement currency.
-            accountId = nil
+            applyDefaultAccounts()
+        }
+    }
+
+    // MARK: - Default account selection (v2.5.0 P2 · H)
+    //
+    // Non-transfer segments default `accountId` to the first selectable account
+    // (displayOrdered). Transfer only defaults the OUT leg — the IN leg stays nil
+    // so the user must make an explicit choice (defaulting both to the same
+    // account would make `out == into`, permanently failing `canSubmit`).
+    // Refill only replaces a value that is nil or no longer present in the
+    // current `selectableAccounts` — an existing, still-valid manual pick is
+    // never silently overwritten (e.g. switching currency away and back).
+    private func applyDefaultAccounts() {
+        let accounts = selectableAccounts
+        if accountId == nil || !accounts.contains(where: { $0.id == accountId }) {
+            accountId = accounts.first?.id
+        }
+        if segment == .transfer {
+            if let current = transferInAccountId, !accounts.contains(where: { $0.id == current }) {
+                transferInAccountId = nil
+            }
+        } else {
             transferInAccountId = nil
         }
     }
@@ -147,9 +169,18 @@ struct AddEntryPage: View {
                     .foregroundStyle(Theme.Color.textPrimary)
                     .multilineTextAlignment(.center)
                     .fixedSize()
-                Text(".00")
-                    .font(Theme.Font.cardNumber(.semibold))
-                    .foregroundStyle(Theme.Color.textTertiary)
+                    .onChange(of: amountText) { _, newValue in
+                        let sanitized = sanitizeAmountInput(newValue)
+                        if sanitized != newValue { amountText = sanitized }
+                    }
+                // v2.5.0 P2 · B: ".00" is a decorative cents hint for whole-number
+                // entry ("123" → "123 .00"); once the user types their own "." it
+                // must not double up into "123.33.00".
+                if !amountText.contains(".") {
+                    Text(".00")
+                        .font(Theme.Font.cardNumber(.semibold))
+                        .foregroundStyle(Theme.Color.textTertiary)
+                }
             }
 
             // CNY / USD toggle (small SelectableChip pair)
