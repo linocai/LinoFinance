@@ -38,11 +38,21 @@ class DashboardSummary(BaseModel):
     credit_liability_by_currency: List[CurrencyAmount] = []
     net_worth_by_currency: List[CurrencyAmount] = []
 
+    # new in v2.5.0 — additive: pending reimbursement receivable now folded into
+    # net worth. `..._total_cny` is the CNY-converted sum (real-time convert with
+    # a stored-`converted_cny_amount` fallback when a currency has no rate for
+    # today); `..._by_currency` are the original-currency buckets (CNY always
+    # present; other currencies only when non-zero). Only status=="pending"
+    # claims count — received/abandoned are excluded (§5.3).
+    reimbursement_receivable_total_cny: Decimal = Decimal("0")
+    reimbursement_receivable_by_currency: List[CurrencyAmount] = []
+
     @field_serializer(
         "balance_total_cny",
         "credit_liability_total_cny",
         "net_worth_cny",
         "investment_total_cny",
+        "reimbursement_receivable_total_cny",
     )
     def serialize_decimal(self, value: Decimal) -> str:
         return format_decimal(value)

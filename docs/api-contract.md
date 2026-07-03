@@ -358,9 +358,11 @@ remapped by Alembic migration `202606150001`
 - `GET /dashboard/summary` (revamped v1.1.6) returns the four dashboard cards plus
   entry counts: `disposable_30d_by_currency` (future-month disposable),
   `investment_total_cny` / `investment_total_by_currency` (investment accounts),
-  `net_worth_cny` (= `balance_total_cny` − `credit_liability_total_cny` +
-  investments), `cash_flow_30d_by_currency` (next-30-day net cash flow), and
-  `today_pnl_by_currency`, alongside `confirmed_entry_count` / `voided_entry_count`.
+  `net_worth_cny` (= `balance_total_cny` + `investment_total_cny` +
+  `reimbursement_receivable_total_cny` − `credit_liability_total_cny`;
+  the receivable term was added in v2.5.0, see below), `cash_flow_30d_by_currency`
+  (next-30-day net cash flow), and `today_pnl_by_currency`, alongside
+  `confirmed_entry_count` / `voided_entry_count`.
   `draft_entry_count` is **deprecated (v1.4.0)** and pinned to `0` — the field is
   retained only so already-installed iOS 1.3 clients (whose DTO declares it a
   non-optional `let`) keep decoding the response. All CNY totals quantize to the
@@ -369,11 +371,35 @@ remapped by Alembic migration `202606150001`
   breakdown: `balance_total_by_currency`, `credit_liability_by_currency`, and
   `net_worth_by_currency` (each `[{currency, amount}]`). Amounts are in original
   currency with **no FX conversion**; per currency
-  `net = balance + investment − credit liability`, mirroring the CNY formula. CNY
+  `net = balance + investment + reimbursement receivable − credit liability`
+  (the receivable term was added in v2.5.0), mirroring the CNY formula. CNY
   is always present; other currencies appear only when the amount is non-zero
   (same `_pack_with_cny_floor` rule as the other by-currency lists), so a USD
   net worth of exactly 0 omits the USD row from `net_worth_by_currency` even when
   USD balance/credit rows are non-zero.
+- `GET /dashboard/summary` (additive v2.5.0) folds **pending reimbursement
+  receivable** into net worth and exposes it as two new fields:
+  `reimbursement_receivable_total_cny` (string, CNY-converted total) and
+  `reimbursement_receivable_by_currency` (`[{currency, amount}]`, original
+  currency; CNY always present, other currencies only when non-zero). Only
+  `ReimbursementClaim.status == "pending"` claims count — `received`/`abandoned`
+  are excluded, and there is **no 30-day window** (all outstanding pending claims,
+  symmetric with credit liability). A pending receivable is an already-incurred
+  asset: the original expense already lowered net worth, so adding the receivable
+  back keeps net worth ≈ unchanged until the money actually arrives (`pending →
+  received`, at which point the claim drops out of the receivable and the cash
+  lands in an account — no double count). **Aggregation口径**: claims are summed
+  per currency first (feeding `reimbursement_receivable_by_currency`), then each
+  currency bucket is converted **once** via the real-time rate for today
+  (`convert_to_cny(today)`, same as credit liability). **Missing-rate fallback**:
+  if a currency has no rate for today, `convert_to_cny` raises — rather than let
+  that 400 the whole dashboard, that currency's contribution falls back to the
+  sum of its pending claims' stored `converted_cny_amount` (a claim whose stored
+  value is null contributes 0). This receivable conversion never makes the
+  endpoint fail; `GET /dashboard/summary` stays 200 even when a rate is missing.
+  The fields are additive with defaults, so pre-v2.5.0 clients that ignore unknown
+  keys are unaffected — they only see `net_worth_cny` / `net_worth_by_currency`
+  grow by the receivable.
 - `POST /accounts/{account_id}/daily-pnl` (v1.1.6) records an investment account's
   newly observed balance; the backend computes the delta from the prior balance,
   writes an `account_adjustment` (`source='investment_daily'`) plus an audit log,

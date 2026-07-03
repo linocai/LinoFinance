@@ -10,8 +10,13 @@ from app.models.account import Account
 from app.models.cash_flow import CashFlowItem
 from app.models.entry import FinancialEntry
 from app.models.reconciliation import AccountAdjustment
+from app.models.reimbursement import ReimbursementClaim
 from app.schemas.dashboard import CurrencyAmount, DashboardSummary
-from app.services.ledger import convert_to_cny, quantize_money
+from app.services.ledger import (
+    LedgerValidationError,
+    convert_to_cny,
+    quantize_money,
+)
 
 ACTIVE_CASH_FLOW_STATUSES = {"expected", "confirmed", "partial"}
 DAILY_PNL_SOURCE = "investment_daily"
@@ -63,6 +68,14 @@ def get_dashboard_summary(db: Session) -> DashboardSummary:
                 + account.current_balance
             )
 
+    # v2.5.0: pending reimbursement receivable is an already-incurred asset
+    # (the expense already lowered net worth; the money is owed back). Aggregate
+    # per currency, then convert each bucket once (§5.3 aggregation口径).
+    receivable_by_ccy = _pending_reimbursement_by_currency(db)
+    reimbursement_receivable_total_cny = _receivable_total_cny(
+        db, receivable_by_ccy, today
+    )
+
     today_pnl = _today_pnl_by_currency(db, today)
     cash_flow_30d = _cash_flow_30d_by_currency(db, today)
     disposable = _disposable_30d_by_currency(by_ccy_balance, cash_flow_30d)
@@ -70,8 +83,9 @@ def get_dashboard_summary(db: Session) -> DashboardSummary:
     balance_by_ccy = _pack_with_cny_floor(by_ccy_balance)
     credit_by_ccy = _pack_with_cny_floor(by_ccy_credit)
     net_worth_by_ccy = _net_worth_by_currency(
-        by_ccy_balance, by_ccy_invest, by_ccy_credit
+        by_ccy_balance, by_ccy_invest, by_ccy_credit, receivable_by_ccy
     )
+    receivable_by_ccy_packed = _pack_with_cny_floor(receivable_by_ccy)
 
     entry_counts = _entry_counts_by_status(db)
 
@@ -80,7 +94,10 @@ def get_dashboard_summary(db: Session) -> DashboardSummary:
         balance_total_cny=quantize_money(balance_total_cny),
         credit_liability_total_cny=quantize_money(credit_liability_total_cny),
         net_worth_cny=quantize_money(
-            balance_total_cny + investment_total_cny - credit_liability_total_cny
+            balance_total_cny
+            + investment_total_cny
+            + reimbursement_receivable_total_cny
+            - credit_liability_total_cny
         ),
         # Deprecated (v1.4.0): draft status removed; field kept and pinned to 0
         # so already-installed iOS 1.3 clients (non-optional `let`) still decode.
@@ -95,6 +112,10 @@ def get_dashboard_summary(db: Session) -> DashboardSummary:
         balance_total_by_currency=balance_by_ccy,
         credit_liability_by_currency=credit_by_ccy,
         net_worth_by_currency=net_worth_by_ccy,
+        reimbursement_receivable_total_cny=quantize_money(
+            reimbursement_receivable_total_cny
+        ),
+        reimbursement_receivable_by_currency=receivable_by_ccy_packed,
     )
 
 
@@ -192,18 +213,22 @@ def _net_worth_by_currency(
     balance_by_ccy: Dict[str, Decimal],
     invest_by_ccy: Dict[str, Decimal],
     credit_by_ccy: Dict[str, Decimal],
+    receivable_by_ccy: Dict[str, Decimal],
 ) -> List[CurrencyAmount]:
-    """Per-currency net worth = balance + investment − credit liability.
+    """Per-currency net worth = balance + investment + receivable − credit.
 
-    Mirrors the CNY formula (``net_worth_cny = balance + investment −
-    credit``) in original currency, with no cross-currency conversion (D6).
-    CNY is always included; other currencies appear only when non-zero
-    (`_pack_with_cny_floor`), so a USD net worth of exactly 0 omits the USD row.
+    Mirrors the CNY formula (``net_worth_cny = balance + investment +
+    reimbursement receivable − credit``) in original currency, with no
+    cross-currency conversion (D6). Pending reimbursement receivable (v2.5.0)
+    is added per currency. CNY is always included; other currencies appear only
+    when non-zero (`_pack_with_cny_floor`), so a USD net worth of exactly 0
+    omits the USD row.
     """
     currencies = (
         set(balance_by_ccy.keys())
         | set(invest_by_ccy.keys())
         | set(credit_by_ccy.keys())
+        | set(receivable_by_ccy.keys())
         | {"CNY"}
     )
     totals: Dict[str, Decimal] = {}
@@ -211,9 +236,76 @@ def _net_worth_by_currency(
         totals[ccy] = (
             balance_by_ccy.get(ccy, Decimal("0"))
             + invest_by_ccy.get(ccy, Decimal("0"))
+            + receivable_by_ccy.get(ccy, Decimal("0"))
             - credit_by_ccy.get(ccy, Decimal("0"))
         )
     return _pack_with_cny_floor(totals)
+
+
+def _pending_reimbursement_by_currency(db: Session) -> Dict[str, Decimal]:
+    """Sum ``amount`` of pending reimbursement claims, bucketed by currency.
+
+    Only ``status == "pending"`` claims count (received/abandoned are excluded,
+    §5.3). Returns original-currency sums; conversion to CNY happens once per
+    currency in :func:`_receivable_total_cny`.
+    """
+    rows = db.execute(
+        select(
+            ReimbursementClaim.currency,
+            func.sum(ReimbursementClaim.amount),
+        )
+        .where(ReimbursementClaim.status == "pending")
+        .group_by(ReimbursementClaim.currency)
+    )
+    totals: Dict[str, Decimal] = {}
+    for currency, amount_sum in rows:
+        totals[currency] = amount_sum or Decimal("0")
+    return totals
+
+
+def _receivable_total_cny(
+    db: Session,
+    receivable_by_ccy: Dict[str, Decimal],
+    today: date,
+) -> Decimal:
+    """Convert each pending-receivable currency bucket to CNY, summed.
+
+    Converts each currency bucket **once** (§5.3). High-risk fallback (§5.5,
+    critic 重要-1): ``convert_to_cny`` *raises* ``LedgerValidationError`` when a
+    currency has no rate for today — the dashboard route would turn that into a
+    400 and the whole overview would fail to open. So when a bucket cannot be
+    converted, fall back to the sum of that currency's pending claims' stored
+    ``converted_cny_amount`` (the service writes it on every claim; the model
+    column is Optional so a None stored value contributes 0). This receivable
+    conversion must never make the dashboard raise.
+    """
+    total = Decimal("0")
+    for currency, amount in sorted(receivable_by_ccy.items()):
+        try:
+            converted, _ = convert_to_cny(db, amount, currency, today)
+        except LedgerValidationError:
+            converted = _stored_receivable_cny_fallback(db, currency)
+        total += converted
+    return total
+
+
+def _stored_receivable_cny_fallback(db: Session, currency: str) -> Decimal:
+    """Fallback CNY value for a currency's pending receivable when no rate.
+
+    Sum the stored ``converted_cny_amount`` of that currency's pending claims;
+    claims whose stored value is None contribute 0. Never raises.
+    """
+    rows = db.execute(
+        select(ReimbursementClaim.converted_cny_amount).where(
+            ReimbursementClaim.status == "pending",
+            ReimbursementClaim.currency == currency,
+        )
+    ).scalars()
+    total = Decimal("0")
+    for stored in rows:
+        if stored is not None:
+            total += stored
+    return total
 
 
 def _pack_with_cny_floor(totals: Dict[str, Decimal]) -> List[CurrencyAmount]:
