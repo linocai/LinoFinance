@@ -3,13 +3,18 @@ import SwiftUI
 
 #if os(macOS)
 
-// CyclesModel — D7 周期 view-model (订阅 + 分期 + 信用账单周期).
+// CyclesModel — D7 周期 view-model (分期 + 信用账单周期).
 //
-// Three independent resources, loaded together:
-//   • 订阅 SubscriptionRuleDTO   — list/create + pause/resume/generate-next/cancel
+// Two independent resources, loaded together:
 //   • 分期 InstallmentPlanDTO     — list/create + early-paid-off/paid-off/cancel
 //   • 信用账单周期 CreditStatementCycleDTO — list(creditAccountID)/create
 //        (read + create only — NO update/close, per plan §D7 + backlog)
+//
+// v2.5.0 P3: the 订阅 (SubscriptionRuleDTO) resource was removed — it was only
+// ever consumed by the now-deleted 周期屏 订阅 tab (D4=甲). The backend
+// subscription endpoints and `apiClient.listSubscriptionRules()` etc. are
+// untouched; nothing else in the frontend called this model's subscription
+// members (verified by grep before deletion).
 @MainActor
 final class CyclesModel: ObservableObject {
 
@@ -20,7 +25,6 @@ final class CyclesModel: ObservableObject {
         case failed(String)
     }
 
-    @Published private(set) var subscriptions: [SubscriptionRuleDTO] = []
     @Published private(set) var installments: [InstallmentPlanDTO] = []
     @Published private(set) var statementCycles: [CreditStatementCycleDTO] = []
     /// Installment-plan id → settled period count (the REAL progress; v2.3.0 P3).
@@ -41,11 +45,9 @@ final class CyclesModel: ObservableObject {
     func load() async {
         state = .loading
         do {
-            async let subs = apiClient.listSubscriptionRules()
             async let plans = apiClient.listInstallmentPlans()
             async let cycles = apiClient.listStatementCycles()
             async let cashFlows = apiClient.listCashFlowItems()
-            subscriptions = try await subs
             installments = try await plans
             statementCycles = try await cycles
             installmentSettledCounts = Self.settledCounts(from: (try? await cashFlows) ?? [])
@@ -69,35 +71,6 @@ final class CyclesModel: ObservableObject {
 
     func settledInstallmentCount(_ planID: String) -> Int {
         installmentSettledCounts[planID] ?? 0
-    }
-
-    // MARK: - Subscriptions
-
-    func pauseSubscription(_ id: String) async throws {
-        _ = try await apiClient.pauseSubscriptionRule(id)
-        subscriptions = (try? await apiClient.listSubscriptionRules()) ?? subscriptions
-    }
-
-    func resumeSubscription(_ id: String) async throws {
-        _ = try await apiClient.resumeSubscriptionRule(id)
-        subscriptions = (try? await apiClient.listSubscriptionRules()) ?? subscriptions
-    }
-
-    func generateNextSubscription(_ id: String) async throws {
-        _ = try await apiClient.generateNextSubscriptionCashFlow(id)
-        subscriptions = (try? await apiClient.listSubscriptionRules()) ?? subscriptions
-    }
-
-    func cancelSubscription(_ id: String) async throws {
-        _ = try await apiClient.cancelSubscriptionRule(id)
-        subscriptions = (try? await apiClient.listSubscriptionRules()) ?? subscriptions
-    }
-
-    @discardableResult
-    func createSubscription(_ request: SubscriptionRuleCreateRequest) async throws -> SubscriptionRuleDTO {
-        let rule = try await apiClient.createSubscriptionRule(request)
-        subscriptions = (try? await apiClient.listSubscriptionRules()) ?? subscriptions
-        return rule
     }
 
     // MARK: - Installments

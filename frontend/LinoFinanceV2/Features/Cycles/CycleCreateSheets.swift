@@ -2,113 +2,16 @@ import SwiftUI
 
 #if os(macOS)
 
-// CycleCreateSheets — D7 create modals (订阅 / 分期 / 信用账单周期).
+// CycleCreateSheets — D7 create modals (分期 / 信用账单周期).
 //
 // Each is a glass sheet bound to its real *CreateRequest. They reuse AppModel's
 // cached accounts/categories and (for installments) load confirmed entries to
 // satisfy the required linkedEntryId.
-
-// MARK: - 新建订阅
-
-struct NewSubscriptionSheet: View {
-    @ObservedObject var model: AppModel
-    @ObservedObject var cyclesModel: CyclesModel
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var title = ""
-    @State private var amountText = ""
-    @State private var currency: CurrencyCode = .cny
-    @State private var billingInterval = "monthly"
-    @State private var accountId: String?
-    @State private var categoryId: String?
-    @State private var startDate = Date()
-    @State private var note = ""
-    @State private var isSubmitting = false
-    @State private var errorMessage: String?
-
-    private let intervals = ["weekly", "monthly", "yearly"]
-
-    var body: some View {
-        CycleSheetScaffold(
-            title: "新建订阅",
-            icon: "arrow.triangle.2.circlepath",
-            subtitle: "周期性扣费规则",
-            isSubmitting: isSubmitting,
-            canSubmit: canSubmit,
-            errorMessage: errorMessage,
-            onCancel: { dismiss() },
-            onSubmit: { await submit() }
-        ) {
-            labeledField("标题") {
-                TextField("如：Netflix 会员", text: $title).textFieldStyle(.roundedBorder)
-            }
-            amountRow($amountText, $currency)
-            labeledField("周期") {
-                GlassMenuPicker(label: billingInterval.financeStatusTitle) {
-                    ForEach(intervals, id: \.self) { iv in
-                        Button(iv.financeStatusTitle) { billingInterval = iv }
-                    }
-                }
-            }
-            labeledField("扣费账户（可选）") {
-                accountPicker($accountId, accounts: balanceAccounts)
-            }
-            labeledField("分类（可选）") {
-                GlassMenuPicker(
-                    label: expenseCategories.first { $0.id == categoryId }?.name ?? "未选择",
-                    isPlaceholder: categoryId == nil
-                ) {
-                    Button("未选择") { categoryId = nil }
-                    ForEach(expenseCategories) { cat in
-                        Button(cat.name) { categoryId = cat.id }
-                    }
-                }
-            }
-            labeledField("起始日期") {
-                glassDateField($startDate)
-            }
-            labeledField("备注（可选）") {
-                TextField("补充说明", text: $note).textFieldStyle(.roundedBorder)
-            }
-        }
-        .task { await ensureRefData() }
-    }
-
-    private var balanceAccounts: [AccountDTO] { model.accounts.filter { $0.currency == currency }.activeBalanceAccounts }
-    private var expenseCategories: [CategoryDTO] { model.categories.filter { $0.isActive && $0.type == .expense } }
-
-    private var parsedAmount: DecimalValue? { parseDecimalAmount(amountText).map(DecimalValue.init) }
-    private var canSubmit: Bool {
-        !title.trimmingCharacters(in: .whitespaces).isEmpty && (parsedAmount?.value ?? 0) > 0
-    }
-
-    private func ensureRefData() async {
-        if model.accounts.isEmpty { await model.loadAccounts() }
-        if model.categories.isEmpty { await model.loadCategories() }
-    }
-
-    private func submit() async {
-        guard let amount = parsedAmount else { return }
-        isSubmitting = true; errorMessage = nil
-        defer { isSubmitting = false }
-        let request = SubscriptionRuleCreateRequest(
-            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-            amount: amount,
-            currency: currency,
-            accountId: accountId,
-            categoryId: categoryId,
-            billingInterval: billingInterval,
-            startDate: startDate,
-            note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note
-        )
-        do {
-            _ = try await cyclesModel.createSubscription(request)
-            dismiss()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-}
+//
+// v2.5.0 P3: `NewSubscriptionSheet` (订阅) was removed along with the 周期屏
+// 订阅 tab (D4=甲) — it was dead code with the tab's only entry point gone.
+// `SubscriptionRuleCreateRequest` / `apiClient.createSubscriptionRule` etc.
+// remain in Core (backend-facing infra, untouched, orthogonal to this UI).
 
 // MARK: - 新建分期
 
