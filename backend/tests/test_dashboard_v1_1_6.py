@@ -148,7 +148,11 @@ def _usd_rate(client, rate="7"):
             "from_currency": "USD",
             "to_currency": "CNY",
             "rate": rate,
-            "date": date.today().isoformat(),
+            # Fixed date on/before the hardcoded statement-cycle dates (statement
+            # 2026-06-01) so the USD credit cycle's CNY conversion always finds a
+            # rate ≤ cycle date — was date.today(), which drifted past the cycle
+            # dates once the wall clock moved beyond them → cycle create 400.
+            "date": "2026-05-01",
             "source": "manual",
         },
     )
