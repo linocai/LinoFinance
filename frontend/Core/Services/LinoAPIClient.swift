@@ -427,6 +427,18 @@ struct LinoAPIClient {
         try await post("ai/plans", body: request)
     }
 
+    /// v3.1.0 P3 — fetches ONE plan by id (`GET /ai/plans/{plan_id}`, already
+    /// implemented server-side, just never wrapped client-side before now).
+    /// Used by the iOS deep-link/notification landing sheet
+    /// (`PendingAIPlanSheetIOS`), which cannot rely on `AppModel.aiPlans` —
+    /// that cache can easily be stale or missing a plan an `AIIntentService`
+    /// invocation just created moments ago via its OWN, separate
+    /// `FinanceRepository`. A precise single-id fetch avoids re-pulling (and
+    /// scanning) the whole plan history just to find one row.
+    func aiPlan(_ id: String) async throws -> AIPlanDTO {
+        try await get("ai/plans/\(id)")
+    }
+
     func approveAIPlan(_ id: String, note: String? = nil) async throws -> AIPlanDTO {
         try await post("ai/plans/\(id)/approve", body: AINoteRequest(note: note))
     }

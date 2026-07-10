@@ -251,6 +251,11 @@ struct FinanceRepository {
         try await apiClient.createAIPlan(request)
     }
 
+    /// v3.1.0 P3 — see `LinoAPIClient.aiPlan(_:)`.
+    func aiPlan(_ id: String) async throws -> AIPlanDTO {
+        try await apiClient.aiPlan(id)
+    }
+
     func approveAIPlan(_ id: String) async throws -> AIPlanDTO {
         try await apiClient.approveAIPlan(id)
     }

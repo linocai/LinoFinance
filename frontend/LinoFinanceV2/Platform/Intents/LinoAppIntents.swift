@@ -516,6 +516,16 @@ struct IntentFinanceService {
 /// function never itself loops or retries an execute (v3.0.0 评审 重要-2 同源
 /// 教训: don't hand-roll a second source of duplicate execution on top of what
 /// the state gate already prevents).
+///
+/// v3.1.0 P3 additions (免提确认闭环 — D5/D6): the spoken `IntentDialog` reply
+/// this function returns was always the ONLY feedback a Siri/Shortcuts
+/// invocation gave (P2). P3 adds a second, persistent channel on top of it —
+/// a local notification (`LocalNotifications`, iOS only) — for the two
+/// outcomes worth revisiting later: an auto-executed entry (with a "撤销"
+/// action) and a plan left pending (tapping it opens `PendingAIPlanSheetIOS`
+/// via the exact same push-routing path a remote high-risk-plan push already
+/// uses). Both are best-effort and silently no-op when notifications aren't
+/// authorized — the spoken reply is never blocked on them.
 struct AIIntentService {
     func record(sourceText: String) async -> String {
         let cleanText = sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -550,8 +560,12 @@ struct AIIntentService {
             }
             guard plan.status == "auto_confirm_candidate", plan.autoConfirmEligible else {
                 // requires_confirmation（中/高风险）、或人工已 approve 但尚未执行
-                // 的旧 plan——一律留给 app 里确认，免提通道绝不代为执行。
-                return "已存为待确认提案，请打开 LinoFinance 确认后入账：「\(cleanText)」。"
+                // 的旧 plan——一律留给 app 里确认，免提通道绝不代为执行。P3: also
+                // fires the "待确认" local notification (D5/D6·iOS only — no-ops
+                // on macOS and when notifications aren't authorized).
+                let message = "已存为待确认提案，请打开 LinoFinance 确认后入账：「\(cleanText)」。"
+                await notifyPending(plan: plan, summary: message)
+                return message
             }
 
             let accounts = try await repository.accounts()
@@ -562,12 +576,20 @@ struct AIIntentService {
             guard idsResolved else {
                 // 低风险但账户/分类 id 缺失或已失效（§5.2①）——同样只留提案，不能
                 // 强行 execute（会在 schema 校验处失败，plan 直接转终态 failed，
-                // 不可再补救执行）。
-                return "已生成提案，但账户或分类信息不完整，请打开 LinoFinance 补充后确认：「\(cleanText)」。"
+                // 不可再补救执行）。同上，也发「待确认」通知。
+                let message = "已生成提案，但账户或分类信息不完整，请打开 LinoFinance 补充后确认：「\(cleanText)」。"
+                await notifyPending(plan: plan, summary: message)
+                return message
             }
 
             let executed = try await repository.executeAIPlan(plan.id)
-            return summarize(executed, accounts: accounts, categories: categories)
+            let message = summarize(executed, accounts: accounts, categories: categories)
+            // P3: "已自动记账" 通知 + 可撤销 action（D5/D6·iOS only）。故意只在
+            // ACTUALLY 执行成功这一处调用——上面 `status == "executed"` 的幂等
+            // 回显分支不会再走到这里，避免同一笔记账在两次并发触发（Back Tap 连
+            // 点/Siri 重试）下弹两条「已自动记账」通知。
+            await notifyExecuted(plan: executed, summary: message)
+            return message
         } catch IntentFinanceError.missingToken {
             return "还没有登录 LinoFinance，请先打开 app 登录。"
         } catch let apiError as APIError {
@@ -597,18 +619,34 @@ struct AIIntentService {
         }
     }
 
-    /// "记了什么/多少钱/哪个账户" — reuses `EditableAIAction`'s own payload
-    /// parsing (the same one the interactive review screen renders from) so
-    /// this never hand-rolls a second JSON-payload reader. `accounts`/
-    /// `categories` empty is a valid degraded call (see the dedup-echo branch
-    /// in `record` above) — the account-name lookup just comes back nil and
-    /// is omitted, everything else still renders.
+    /// "记了什么/多少钱/哪个账户" — P3 refined to enumerate EVERY `CreateEntry`/
+    /// `RecordCreditRepayment` action in the plan, not just the first: D1's
+    /// auto-execute gate allows a plan with several low-risk entries in one go
+    /// (e.g. "星巴克38元，7-11买水12元"), and the original single-action
+    /// version silently dropped every action after the first from the spoken
+    /// reply even though all of them were recorded ("多 action 合理归纳").
+    /// Reuses `EditableAIAction`'s own payload parsing (the same one the
+    /// interactive review screen renders from) so this never hand-rolls a
+    /// second JSON-payload reader. `accounts` empty is a valid degraded call
+    /// (see the dedup-echo branch in `record` above) — the account-name
+    /// lookup just comes back nil and is omitted, everything else still
+    /// renders.
     private func summarize(_ plan: AIPlanDTO, accounts: [AccountDTO], categories: [CategoryDTO]) -> String {
-        guard let action = plan.actions.first(where: {
-            $0.actionType == "CreateEntry" || $0.actionType == "RecordCreditRepayment"
-        }), case .entry(let draft, _) = EditableAIAction(action: action).kind else {
+        let entries: [String] = plan.actions.compactMap { action in
+            guard action.actionType == "CreateEntry" || action.actionType == "RecordCreditRepayment",
+                  case .entry(let draft, _) = EditableAIAction(action: action).kind else {
+                return nil
+            }
+            return describeEntry(draft, accounts: accounts)
+        }
+        guard !entries.isEmpty else {
             return "已按「\(plan.sourceText)」完成记账。"
         }
+        return "已记：" + entries.joined(separator: "；") + "。"
+    }
+
+    /// One entry's "<标题> <金额+币种>，<账户名>" fragment for `summarize`.
+    private func describeEntry(_ draft: EditableEntryDraft, accounts: [AccountDTO]) -> String {
         let line = draft.categoryLines.first
         let movement = draft.accountMovements.first
         let currency = line?.currency ?? movement?.currency ?? .cny
@@ -616,10 +654,40 @@ struct AIIntentService {
             .flatMap(parseDecimalAmount)
             .map { FinanceFormatter.money(DecimalValue($0), currency: currency) }
         let accountName = movement?.accountId.flatMap { id in accounts.first(where: { $0.id == id })?.name }
-        var parts = ["已记录「\(draft.title)」"]
-        if let amountText { parts.append(amountText) }
-        if let accountName { parts.append(accountName) }
-        return parts.joined(separator: "，") + "。"
+        var text = draft.title
+        if let amountText { text += " \(amountText)" }
+        if let accountName { text += "，\(accountName)" }
+        return text
+    }
+
+    // MARK: - Notifications (v3.1.0 P3, D5/D6 — new scheduling only exists on
+    // iOS; these two helpers no-op on macOS via the internal `#if os(iOS)` so
+    // `record(sourceText:)` above stays free of platform branching)
+
+    /// A plan was left pending — schedules a local notification whose
+    /// userInfo matches `push_dispatch`'s shape exactly (`target_type`=
+    /// `"ai_plan"` / `target_id`), so tapping it routes through the SAME
+    /// `PushNotificationManager` → `.linoDidReceivePushTarget` →
+    /// `AppModel.handlePushNotificationTarget` path a remote high-risk-plan
+    /// push already uses — zero new routing surface (D5 甲). Silently no-ops
+    /// when notifications aren't authorized (D6: never blocks the headless
+    /// reply).
+    private func notifyPending(plan: AIPlanDTO, summary: String) async {
+        #if os(iOS)
+        await LocalNotifications.notifyPendingProposal(summary: summary, planId: plan.id)
+        #endif
+    }
+
+    /// The plan auto-executed — notifies with a "撤销" action bound to the
+    /// ONE executed action's id (`rollbackAIAction`'s unit, not the plan id).
+    /// Mirrors `AIPlanHistoryRow`'s own "回滚" lookup
+    /// (`actions.first(where: { $0.status == "executed" })`) so both surfaces
+    /// agree on which action a rollback targets.
+    private func notifyExecuted(plan: AIPlanDTO, summary: String) async {
+        #if os(iOS)
+        guard let actionId = plan.actions.first(where: { $0.status == "executed" })?.id else { return }
+        await LocalNotifications.notifyExecuted(summary: summary, actionId: actionId)
+        #endif
     }
 
     private func repository() throws -> FinanceRepository {

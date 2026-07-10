@@ -19,6 +19,11 @@ extension Notification.Name {
     static let linoDidRegisterForRemoteNotifications = Notification.Name("linoDidRegisterForRemoteNotifications")
     static let linoDidFailRemoteNotificationRegistration = Notification.Name("linoDidFailRemoteNotificationRegistration")
     static let linoDidReceivePushTarget = Notification.Name("linoDidReceivePushTarget")
+    /// v3.1.0 P3 — the "撤销" action on an auto-executed-AI local notification
+    /// (see `LocalNotifications`). Kept separate from `linoDidReceivePushTarget`
+    /// because its payload key space is different (an `ai_action_id` to roll
+    /// back, not a `target_type`/`target_id` navigation target).
+    static let linoDidRequestAIActionRollback = Notification.Name("linoDidRequestAIActionRollback")
 }
 
 @MainActor
@@ -43,6 +48,10 @@ final class LinoAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        // v3.1.0 P3 — registers the "撤销" category/action so it's attached by
+        // the time a免提 execution's `LocalNotifications.notifyExecuted` first
+        // fires. Safe to call unconditionally at every launch (idempotent).
+        LocalNotifications.registerCategories()
         return true
     }
 
@@ -82,6 +91,24 @@ final class LinoAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
+
+        // v3.1.0 P3 — the "撤销" action button on an auto-executed-AI
+        // notification carries an `ai_action_id`, not a navigation target;
+        // route it to its own notification name rather than the
+        // target_type/target_id path below (an executed notification never
+        // sets those keys, so this branch would be a no-op there anyway —
+        // being explicit keeps the two payload shapes from ever blurring).
+        if response.actionIdentifier == LocalNotifications.undoActionID,
+           let actionID = userInfo["ai_action_id"] as? String {
+            NotificationCenter.default.post(
+                name: .linoDidRequestAIActionRollback,
+                object: nil,
+                userInfo: ["ai_action_id": actionID]
+            )
+            completionHandler()
+            return
+        }
+
         var payload: [String: String] = [:]
         if let targetType = userInfo["target_type"] as? String {
             payload["target_type"] = targetType

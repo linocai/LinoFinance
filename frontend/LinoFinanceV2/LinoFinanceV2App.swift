@@ -198,6 +198,23 @@ private struct IOSAppShell: View {
                 Task { await model.refreshAll() }
             }
         }
+        // v3.1.0 P3 — AI-plan review sheet, landed on by a remote push OR a
+        // local notification tap for the `ai_plan` target (both route through
+        // `handlePushNotificationTarget`, which sets `pendingAIPlanId` on
+        // iOS). `String` isn't `Identifiable`, so this uses `isPresented`
+        // (not `.sheet(item:)` like `editingEntry` above) with a computed
+        // Binding that clears the id on dismiss — including the system
+        // swipe-down gesture, which SwiftUI reports through this same setter.
+        .sheet(isPresented: Binding(
+            get: { model.pendingAIPlanId != nil },
+            set: { isPresented in if !isPresented { model.pendingAIPlanId = nil } }
+        )) {
+            if let planId = model.pendingAIPlanId {
+                PendingAIPlanSheetIOS(model: model, planId: planId) {
+                    Task { await model.refreshAll() }
+                }
+            }
+        }
         // Py ③ — APNs registration + deep-link bridge. The delegate posts these;
         // the shell registers the token with the backend and routes push targets.
         .onReceive(NotificationCenter.default.publisher(for: .linoDidRegisterForRemoteNotifications)) { notification in
@@ -208,6 +225,11 @@ private struct IOSAppShell: View {
             let targetType = notification.userInfo?["target_type"] as? String
             let targetID = notification.userInfo?["target_id"] as? String
             Task { await model.handlePushNotificationTarget(type: targetType, id: targetID) }
+        }
+        // v3.1.0 P3 — "撤销" tapped on an auto-executed-AI local notification.
+        .onReceive(NotificationCenter.default.publisher(for: .linoDidRequestAIActionRollback)) { notification in
+            guard let actionID = notification.userInfo?["ai_action_id"] as? String else { return }
+            Task { await model.rollbackAIAction(actionID) }
         }
     }
 }

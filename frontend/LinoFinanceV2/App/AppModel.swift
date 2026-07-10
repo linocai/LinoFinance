@@ -53,6 +53,15 @@ final class AppModel: ObservableObject {
     /// close/submit. Presented alongside `isAddEntryPresented` (either flag shows
     /// the form).
     @Published var editingEntry: EntryDTO?
+    /// v3.1.0 P3 — non-nil ⇒ iOS should present the AI-plan review sheet for
+    /// this plan id (mirrors `editingEntry`'s optional-drives-a-sheet
+    /// pattern). Set by `handlePushNotificationTarget`'s `ai_plan` case — the
+    /// SAME setter fires whether the target arrived via a remote push or a
+    /// local notification tap (`PushRouting.swift`), since both carry the
+    /// identical `target_type`/`target_id` userInfo shape. macOS routes the
+    /// same target straight to the `.ai` sidebar screen instead and never
+    /// touches this property.
+    @Published var pendingAIPlanId: String?
 
     // MARK: - Networking
 

@@ -57,6 +57,30 @@ extension AppModel {
         _ = try? await repository.registerPushDevice(request)
     }
 
+    // MARK: - AI action rollback via notification "撤销" (v3.1.0 P3, iOS only)
+
+    /// Invoked when the user taps "撤销" on an auto-executed-AI local
+    /// notification (`LocalNotifications.notifyExecuted`'s category action,
+    /// routed here by `LinoAppDelegate` → `.linoDidRequestAIActionRollback`).
+    /// Rolls back the ONE action via the exact same `rollbackAIAction`
+    /// endpoint the interactive AI screen's "回滚" button already calls
+    /// (`AIAssistantModel.rollback` — no new backend surface), then refreshes
+    /// the ledger-wide caches (a rollback reverses a real balance/liability
+    /// effect) and posts a result notification either way — a notification
+    /// action runs with no visible screen to show success/failure on, so
+    /// silence on failure would look identical to a successful undo.
+    func rollbackAIAction(_ actionId: String) async {
+        #if os(iOS)
+        do {
+            _ = try await repository.rollbackAIAction(actionId)
+            await refreshAll()
+            await LocalNotifications.notifyRollbackResult(success: true, message: "已撤销这笔自动记账。")
+        } catch {
+            await LocalNotifications.notifyRollbackResult(success: false, message: "撤销失败：\(error.localizedDescription)")
+        }
+        #endif
+    }
+
     private static func pushDeviceID() -> String {
         let key = "linofinance.push.deviceID"
         if let existing = UserDefaults.standard.string(forKey: key), !existing.isEmpty {
