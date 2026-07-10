@@ -3,15 +3,15 @@ import SwiftUI
 
 // AppModel+Platform — Py platform-integration helpers.
 //
-// Derived values the MenuBarExtra popover + the widget snapshot writer need,
-// plus the snapshot assembly itself, plus push-device registration and the
-// Sign in with Apple / admin-token re-auth path. Split out of the lean P2
-// `AppModel` so the platform-integration surface lives in one place.
+// Derived values the MenuBarExtra popover needs, plus push-device
+// registration and the Sign in with Apple / admin-token re-auth path. Split
+// out of the lean P2 `AppModel` so the platform-integration surface lives in
+// one place.
 
 @MainActor
 extension AppModel {
 
-    // MARK: - Derived metrics (menu bar + snapshot)
+    // MARK: - Derived metrics (menu bar)
 
     /// "未来一月可支配" CNY — the dashboard's per-currency disposable, CNY row.
     var disposable30dCny: DecimalValue {
@@ -28,12 +28,6 @@ extension AppModel {
         return DecimalValue(sum)
     }
 
-    /// 30-day net cash flow (CNY) — from the dashboard's cashFlow30d rows.
-    var cashFlow30dCny: DecimalValue {
-        let rows = dashboard?.cashFlow30dByCurrency ?? []
-        return rows.first(where: { $0.currency == .cny })?.amount ?? DecimalValue(0)
-    }
-
     /// Next unpaid/unclosed credit cycle, soonest due first.
     var nextCreditCycle: CreditStatementCycleDTO? {
         cycles
@@ -47,34 +41,6 @@ extension AppModel {
         aiPlans.filter {
             ["requires_confirmation", "auto_confirm_candidate", "failed"].contains($0.status)
         }
-    }
-
-    // MARK: - Widget snapshot
-
-    /// Assemble a `V2WidgetSnapshot` from the cached DTOs and push it to the
-    /// shared App Group. Called at the tail of `refreshAll()`.
-    func writeWidgetSnapshot() {
-        guard let summary = dashboard else { return }
-
-        let nextDue = nextCreditCycle.map { cycle in
-            V2WidgetSnapshot.CreditDue(
-                accountName: accounts.first { $0.id == cycle.creditAccountId }?.name ?? "信用账户",
-                dueDate: cycle.dueDate,
-                amount: FinanceFormatter.money(cycle.remainingAmount, currency: cycle.currency)
-            )
-        }
-
-        let snapshot = V2WidgetSnapshot(
-            netWorth: FinanceFormatter.money(summary.netWorthCny),
-            balance: FinanceFormatter.money(summary.balanceTotalCny),
-            creditLiability: FinanceFormatter.money(summary.creditLiabilityTotalCny),
-            thirtyDayNet: FinanceFormatter.money(cashFlow30dCny),
-            trend: [],
-            nextCreditDue: nextDue,
-            pendingAIPlanCount: pendingAIPlans.count,
-            updatedAt: Date()
-        )
-        V2WidgetSnapshotStore.shared.write(snapshot)
     }
 
     // MARK: - Push device registration (Py ③)

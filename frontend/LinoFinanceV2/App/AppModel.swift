@@ -26,10 +26,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var categories: [CategoryDTO] = []
     @Published private(set) var rates: [CurrencyRateDTO] = []
 
-    // Py (platform integration): the MenuBarExtra popover + widget snapshot writer
-    // need the credit cycles + AI plans too, so they're cached here. Loaded by
-    // `refreshAll()` alongside the rest. Additive — the P2 Overview/AddEntry slice
-    // never touched these.
+    // Py (platform integration): the MenuBarExtra popover needs the credit
+    // cycles + AI plans too, so they're cached here. Loaded by `refreshAll()`
+    // alongside the rest. Additive — the P2 Overview/AddEntry slice never
+    // touched these.
     @Published private(set) var cycles: [CreditStatementCycleDTO] = []
     @Published private(set) var aiPlans: [AIPlanDTO] = []
 
@@ -131,9 +131,8 @@ final class AppModel: ObservableObject {
     }
 
     /// Pull everything the Add Entry form needs (accounts + categories + rates)
-    /// plus the dashboard, the credit cycles + AI plans (for the menu bar / widget
-    /// snapshot), in parallel. On completion it pushes a fresh widget snapshot to
-    /// the shared App Group so the widget reflects the latest data.
+    /// plus the dashboard, the credit cycles + AI plans (for the menu bar), in
+    /// parallel.
     func refreshAll() async {
         async let d: Void = loadDashboard()
         async let a: Void = loadAccounts()
@@ -142,7 +141,6 @@ final class AppModel: ObservableObject {
         async let cy: Void = loadCycles()
         async let ai: Void = loadAIPlans()
         _ = await (d, a, c, r, cy, ai)
-        writeWidgetSnapshot()
     }
 
     // MARK: - Mutations
