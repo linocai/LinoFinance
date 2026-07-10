@@ -36,6 +36,9 @@ struct AddEntryIOSSheet: View {
     @State private var isSubmitting = false
     @State private var errorMessage: String?
 
+    // v3.0.0 P4 ① — iOS「AI 解析」入口 (D5): 粘贴/输入一句话代替手填表单。
+    @State private var showingAIProposal = false
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -43,6 +46,7 @@ struct AddEntryIOSSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         SegmentedPill(options: AddEntrySegment.allCases, selection: $segment) { $0.title }
+                        aiEntryRow
                         amountBlock
                         field("标题") {
                             TextField(segment == .transfer ? "如：信用卡还款" : "如：午餐", text: $title)
@@ -110,6 +114,39 @@ struct AddEntryIOSSheet: View {
         .onChange(of: currency) { _, _ in
             clearInvalidatedAccounts()
         }
+        .sheet(isPresented: $showingAIProposal) {
+            // The AI path writes the ledger itself (unlike the manual form below,
+            // which still goes through `submit()`) — on success it dismisses
+            // itself, then this closure dismisses the outer 记一笔 sheet too and
+            // notifies the host, mirroring `submit()`'s own onSubmitted+dismiss.
+            AIProposalSheetIOS(model: model) {
+                onSubmitted()
+                dismiss()
+            }
+        }
+    }
+
+    // MARK: - AI 解析入口 (v3.0.0 P4 ①, D5)
+
+    private var aiEntryRow: some View {
+        Button {
+            showingAIProposal = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 13, weight: .semibold))
+                Text("改用 AI 解析一句话记账")
+                    .font(Theme.Font.caption(.medium))
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(Theme.Color.brandEnd)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .glassPanel(cornerRadius: Theme.Radius.button, tint: Theme.Color.brandEnd)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Default account selection (v2.5.0 评审修补 · H 重要-2, mirrors macOS AddEntryPage)

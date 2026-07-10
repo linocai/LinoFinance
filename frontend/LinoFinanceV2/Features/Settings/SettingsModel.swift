@@ -49,9 +49,9 @@ final class SettingsModel: ObservableObject {
     @Published private(set) var auditLogs: [AuditLogDTO] = []
     @Published private(set) var auditState: SectionState = .idle
 
-    // AI 助手
-    @Published private(set) var aiConfig: AIConfigDTO?
-    @Published private(set) var aiPlans: [AIPlanDTO] = []
+    // AI 月度备忘 (v3.0.0 P4: 记账输入/提案 CRUD 已搬到 `AIAssistantModel` / 独立 AI
+    // 屏；AI 连接配置 CRUD 已搬到 `AIConfigModel` / `AIConfigFormCard`——这里只剩
+    // memosSection 仍用的月度备忘，位置照 D6 不动)。
     @Published private(set) var aiMemos: [AIMemoDTO] = []
     @Published private(set) var aiState: SectionState = .idle
 
@@ -156,12 +156,7 @@ final class SettingsModel: ObservableObject {
     func loadAI() async {
         aiState = .loading
         do {
-            async let configResult = apiClient.aiConfig()
-            async let plansResult = apiClient.listAIPlans()
-            async let memosResult = apiClient.listAIMemos()
-            aiConfig = try await configResult
-            aiPlans = (try? await plansResult) ?? []
-            aiMemos = (try? await memosResult)?.items ?? []
+            aiMemos = try await apiClient.listAIMemos().items
             aiState = .loaded
         } catch {
             aiState = .failed(error.localizedDescription)
@@ -287,27 +282,7 @@ final class SettingsModel: ObservableObject {
         }
     }
 
-    // MARK: - AI 助手 (薄壳: 创建计划 / 批准·驳回·执行·回滚 / 生成·归档备忘)
-
-    @discardableResult
-    func createPlan(sourceText: String) async -> Bool {
-        let trimmed = sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-        do {
-            actionError = nil
-            _ = try await apiClient.createAIPlan(AIPlanCreateRequest(sourceText: trimmed))
-            await loadAI()
-            return true
-        } catch {
-            actionError = error.localizedDescription
-            return false
-        }
-    }
-
-    func approvePlan(_ id: String) async { await runReloadAI { _ = try await self.apiClient.approveAIPlan(id) } }
-    func rejectPlan(_ id: String) async { await runReloadAI { _ = try await self.apiClient.rejectAIPlan(id) } }
-    func executePlan(_ id: String) async { await runReloadAI { _ = try await self.apiClient.executeAIPlan(id) } }
-    func rollbackAction(_ id: String) async { await runReloadAI { _ = try await self.apiClient.rollbackAIAction(id) } }
+    // MARK: - AI 月度备忘 (生成 / 归档；提案 CRUD 已搬到 `AIAssistantModel`)
 
     func generateMemo() async {
         await runReloadAI {

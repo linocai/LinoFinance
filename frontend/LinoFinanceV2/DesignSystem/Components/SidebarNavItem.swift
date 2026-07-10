@@ -14,6 +14,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable, Hashable {
     case reimbursements
     case cycles
     case reports
+    case ai
     case settings
 
     var id: String { rawValue }
@@ -27,6 +28,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable, Hashable {
         case .reimbursements: "报销"
         case .cycles: "周期"
         case .reports: "报表"
+        case .ai: "AI"
         case .settings: "设置"
         }
     }
@@ -41,6 +43,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable, Hashable {
         case .reimbursements: "arrow.uturn.left.circle"
         case .cycles: "arrow.triangle.2.circlepath"
         case .reports: "chart.bar"
+        case .ai: "sparkles"
         case .settings: "gearshape"
         }
     }

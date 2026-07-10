@@ -700,171 +700,55 @@ private struct AuditRow: View {
     }
 }
 
-// MARK: - 7. AI 助手 (薄壳: 创建计划 → 批准/驳回/执行/回滚 · 备忘生成/归档)
+// MARK: - 7. AI 助手 (v3.0.0 P4: 配置表单 + 月度备忘；记账输入/提案已搬到独立 AI 屏)
 
 private struct AIAssistantCard: View {
     @ObservedObject var settings: SettingsModel
-    @State private var sourceText = ""
-    @State private var submitting = false
+    @StateObject private var configModel: AIConfigModel
+
+    init(settings: SettingsModel) {
+        self.settings = settings
+        _configModel = StateObject(wrappedValue: AIConfigModel(apiClient: settings.apiClient))
+    }
 
     var body: some View {
         SettingsCard(title: "AI 助手", systemImage: "sparkles", tint: Theme.Color.brandEnd) {
-            switch settings.aiState {
-            case .idle, .loading:
-                SectionLoading()
-            case .failed(let m):
-                SectionFailed(message: m) { Task { await settings.loadAI() } }
-            case .loaded:
-                VStack(alignment: .leading, spacing: 14) {
-                    configRow
-                    inputCard
-                    if !settings.aiPlans.isEmpty {
-                        Divider().overlay(Theme.Color.divider)
-                        Text("计划")
-                            .font(Theme.Font.caption(.semibold))
-                            .foregroundStyle(Theme.Color.textSecondary)
-                        ForEach(Array(settings.aiPlans.prefix(5))) { plan in
-                            AIPlanRow(plan: plan, settings: settings)
-                        }
-                    }
-                    memosSection
-                }
+            VStack(alignment: .leading, spacing: 14) {
+                Text("自然语言记账已搬到侧栏「AI」独立页面；这里只管连接哪个 AI 服务。")
+                    .font(Theme.Font.caption())
+                    .foregroundStyle(Theme.Color.textTertiary)
+                AIConfigFormCard(configModel: configModel)
+                memosSection
             }
         }
-    }
-
-    @ViewBuilder
-    private var configRow: some View {
-        if let config = settings.aiConfig {
-            HStack(spacing: 8) {
-                StatusBadge(
-                    text: config.apiKeyConfigured ? "已配置 \(config.provider)" : "未配置密钥",
-                    tone: config.apiKeyConfigured ? .positive : .warning
-                )
-                if let m = config.model, !m.isEmpty {
-                    Text(m).font(Theme.Font.caption()).foregroundStyle(Theme.Color.textTertiary)
-                }
-                Spacer(minLength: 0)
-            }
-        }
-    }
-
-    private var inputCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // 自然语言输入框 — 玻璃面板内的多行输入 (comp 的 AI 输入卡).
-            TextEditor(text: $sourceText)
-                .font(Theme.Font.body())
-                .scrollContentBackground(.hidden)
-                .frame(height: 64)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .glassPanel(cornerRadius: Theme.Radius.button)
-                .overlay(alignment: .topLeading) {
-                    if sourceText.isEmpty {
-                        Text("用自然语言描述，例如：把上周三星巴克 38 元记成餐饮支出")
-                            .font(Theme.Font.body())
-                            .foregroundStyle(Theme.Color.textTertiary)
-                            .padding(.horizontal, 15)
-                            .padding(.vertical, 16)
-                            .allowsHitTesting(false)
-                    }
-                }
-            HStack {
-                Spacer()
-                PrimaryDarkButton("解析", isLoading: submitting) {
-                    Task {
-                        submitting = true
-                        let ok = await settings.createPlan(sourceText: sourceText)
-                        if ok { sourceText = "" }
-                        submitting = false
-                    }
-                }
-                .disabled(submitting || sourceText.trimmingCharacters(in: .whitespaces).isEmpty)
-                .opacity((submitting || sourceText.trimmingCharacters(in: .whitespaces).isEmpty) ? 0.5 : 1)
-            }
-        }
+        .task { if configModel.config == nil { await configModel.load() } }
     }
 
     @ViewBuilder
     private var memosSection: some View {
         Divider().overlay(Theme.Color.divider)
-        HStack {
-            Text("月度备忘")
-                .font(Theme.Font.caption(.semibold))
-                .foregroundStyle(Theme.Color.textSecondary)
-            Spacer()
-            TintedActionChip(title: "生成", tone: .brand) { Task { await settings.generateMemo() } }
-        }
-        if settings.aiMemos.isEmpty {
-            Text("还没有月度备忘。点「生成」创建上一个月的总结。")
-                .font(Theme.Font.caption())
-                .foregroundStyle(Theme.Color.textTertiary)
-        } else {
-            ForEach(Array(settings.aiMemos.prefix(3))) { memo in
-                AIMemoRow(memo: memo) { Task { await settings.archiveMemo(memo.id) } }
+        switch settings.aiState {
+        case .idle, .loading:
+            SectionLoading()
+        case .failed(let m):
+            SectionFailed(message: m) { Task { await settings.loadAI() } }
+        case .loaded:
+            HStack {
+                Text("月度备忘")
+                    .font(Theme.Font.caption(.semibold))
+                    .foregroundStyle(Theme.Color.textSecondary)
+                Spacer()
+                TintedActionChip(title: "生成", tone: .brand) { Task { await settings.generateMemo() } }
             }
-        }
-    }
-}
-
-private struct AIPlanRow: View {
-    let plan: AIPlanDTO
-    @ObservedObject var settings: SettingsModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(plan.sourceText)
-                    .font(Theme.Font.caption(.medium))
-                    .foregroundStyle(Theme.Color.textPrimary)
-                    .lineLimit(2)
-                Spacer(minLength: 6)
-                StatusBadge(text: plan.status.financeStatusTitle, tone: statusTone)
+            if settings.aiMemos.isEmpty {
+                Text("还没有月度备忘。点「生成」创建上一个月的总结。")
+                    .font(Theme.Font.caption())
+                    .foregroundStyle(Theme.Color.textTertiary)
+            } else {
+                ForEach(Array(settings.aiMemos.prefix(3))) { memo in
+                    AIMemoRow(memo: memo) { Task { await settings.archiveMemo(memo.id) } }
+                }
             }
-            HStack(spacing: 8) {
-                StatusBadge(text: plan.riskLevel.financeStatusTitle, tone: riskTone)
-                Spacer(minLength: 0)
-                actions
-            }
-        }
-        .padding(10)
-        .glassPanel(cornerRadius: Theme.Radius.button)
-    }
-
-    @ViewBuilder
-    private var actions: some View {
-        switch plan.status {
-        case "pending", "requires_confirmation", "auto_confirm_candidate":
-            TintedActionChip(title: "批准", tone: .positive) { Task { await settings.approvePlan(plan.id) } }
-            TintedActionChip(title: "驳回", tone: .destructive) { Task { await settings.rejectPlan(plan.id) } }
-        case "approved":
-            TintedActionChip(title: "执行", tone: .action) { Task { await settings.executePlan(plan.id) } }
-            TintedActionChip(title: "驳回", tone: .destructive) { Task { await settings.rejectPlan(plan.id) } }
-        case "executed":
-            // 执行后可对每个 action 回滚 (薄链路: 只暴露第一个可回滚 action).
-            if let action = plan.actions.first(where: { $0.status == "executed" }) {
-                TintedActionChip(title: "回滚", tone: .neutral) { Task { await settings.rollbackAction(action.id) } }
-            }
-        default:
-            EmptyView()
-        }
-    }
-
-    private var statusTone: StatusBadge.Tone {
-        switch plan.status {
-        case "executed": .positive
-        case "approved": .pending
-        case "rejected", "failed": .negative
-        case "rolled_back": .neutral
-        default: .warning
-        }
-    }
-
-    private var riskTone: StatusBadge.Tone {
-        switch plan.riskLevel {
-        case "high": .negative
-        case "medium": .warning
-        default: .neutral
         }
     }
 }

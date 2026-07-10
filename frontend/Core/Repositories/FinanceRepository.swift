@@ -226,6 +226,10 @@ struct FinanceRepository {
         try await apiClient.aiConfig()
     }
 
+    func updateAIConfig(_ request: AIConfigUpdateRequest) async throws -> AIConfigDTO {
+        try await apiClient.updateAIConfig(request)
+    }
+
     func aiPlans(
         status: String? = nil,
         relatedType: String? = nil,

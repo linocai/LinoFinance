@@ -38,7 +38,15 @@ struct MoreIOSView: View {
                                 }
                                 .buttonStyle(.plain)
                                 Divider().overlay(Theme.Color.divider)
-                                placeholderRow(title: "设置", systemImage: "gearshape")
+                                // v3.0.0 P4: 设置从占位行变真实屏——目前只做 AI 配置
+                                // (D0)，分类/汇率/通知/导出/登录管理等 macOS 专属节仍
+                                // 留 macOS。
+                                NavigationLink {
+                                    SettingsIOSView(model: model)
+                                } label: {
+                                    moreRow(title: "设置", subtitle: "AI 配置", systemImage: "gearshape", ready: true)
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                         Text("iOS 版先做核心 5 屏，其余功能稍后补齐。")

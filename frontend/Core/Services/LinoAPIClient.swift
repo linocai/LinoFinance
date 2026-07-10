@@ -391,6 +391,11 @@ struct LinoAPIClient {
         try await get("ai/config")
     }
 
+    /// v3.0.0 P4 (D0) — upsert the in-app AI config (base_url / api_key / model).
+    func updateAIConfig(_ request: AIConfigUpdateRequest) async throws -> AIConfigDTO {
+        try await put("ai/config", body: request)
+    }
+
     func listAIPlans(
         status: String? = nil,
         relatedType: String? = nil,
@@ -594,6 +599,17 @@ struct LinoAPIClient {
     ) async throws -> Response {
         var request = request(for: path)
         request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try encoder.encode(body)
+        return try await send(request)
+    }
+
+    private func put<Request: Encodable, Response: Decodable>(
+        _ path: String,
+        body: Request
+    ) async throws -> Response {
+        var request = request(for: path)
+        request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try encoder.encode(body)
         return try await send(request)

@@ -256,6 +256,24 @@ struct AIPlanCreateRequest: Encodable {
     var rawResponse: [String: JSONValueDTO]?
 }
 
+/// PUT /ai/config (v3.0.0 P4, D0 — AI 配置 app 内填写落库).
+///
+/// `baseUrl` / `model`: always sent as whatever the form currently shows (GET
+/// returns `base_url`/`model` in plaintext so the form can prefill them) — an
+/// emptied field means "clear", which the backend already treats identically
+/// to an explicit `null` (`update_ai_config` strips blank strings to `None`),
+/// so a plain `String?` (omit-on-nil) is fine for these two.
+/// `apiKey`: the SecureField is NEVER pre-filled with the real key (`GET` only
+/// ever returns a masked last-4 hint) — leaving it blank and saving must mean
+/// "keep the stored key", not "clear it". `Nullable` distinguishes the three
+/// states the backend's field-presence semantics expect: omit (`nil`) = keep,
+/// `.null` = explicit clear (a dedicated "清除密钥" action), `.value(x)` = set.
+struct AIConfigUpdateRequest: Encodable {
+    var baseUrl: String?
+    var apiKey: Nullable<String>?
+    var model: String?
+}
+
 struct AINoteRequest: Encodable {
     var note: String?
 }

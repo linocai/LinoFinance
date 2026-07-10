@@ -283,8 +283,13 @@ struct SubscriptionRuleDTO: Identifiable, Decodable, Equatable, Hashable {
 struct AIConfigDTO: Decodable, Equatable, Hashable {
     let provider: String
     let model: String?
+    // v3.0.0 P4 — additive: the backend (P3) now returns the plaintext base_url
+    // (never the api_key — only a masked last-4 hint) so Settings can prefill the
+    // config form. Both optional so a hypothetical older server still decodes.
+    let baseUrl: String?
     let baseUrlConfigured: Bool
     let apiKeyConfigured: Bool
+    let apiKeyHint: String?
     let autoConfirmLimitCny: DecimalValue
 }
 
@@ -807,6 +812,19 @@ enum MovementType: String, Codable, Hashable {
     case creditRepayment = "credit_repayment"
     case transferIn = "transfer_in"
     case transferOut = "transfer_out"
+
+    /// Human label — added for the v3.0.0 P4 AI proposal review cards, which are
+    /// the first place a movement type needed a friendly (non-rawValue) label.
+    var title: String {
+        switch self {
+        case .balanceIn: "入账"
+        case .balanceOut: "出账"
+        case .creditCharge: "信用卡消费"
+        case .creditRepayment: "信用卡还款"
+        case .transferIn: "转入"
+        case .transferOut: "转出"
+        }
+    }
 }
 
 enum CurrencyCode: String, Codable, CaseIterable, Hashable {
