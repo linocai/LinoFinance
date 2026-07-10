@@ -1,5 +1,8 @@
 import AppIntents
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
+import Vision
 
 // LinoAppIntents — Py ⑤ App Intents / Siri / Shortcuts (iOS + macOS).
 //
@@ -136,6 +139,53 @@ struct ConfirmAIPlanIntent: AppIntent {
     }
 }
 
+// AIRecordIntent / AIParseScreenshotIntent — v3.1.0 P2 免提录入 (D1/D2/D3/D4).
+//
+// Both funnel into the SAME headless orchestrator, `AIIntentService.record`
+// (below `IntentFinanceService`), which mirrors the existing AI pipeline
+// (`POST /ai/plans` → risk-assessed proposal → auto-execute when low-risk AND
+// id-complete, otherwise leave pending) but makes the accept/defer decision
+// itself instead of surfacing an interactive review screen — there is no
+// human in the loop for a Siri/Shortcuts invocation. See `AIIntentService`'s
+// doc comment for the full decision chain.
+
+struct AIRecordIntent: AppIntent {
+    static var title: LocalizedStringResource = "AI 记一笔"
+    static var description = IntentDescription("用一句话描述一笔收支，交给 AI 自动记账。金额不大且账户/分类信息完整时会直接记账并播报结果；否则会存成待确认的提案，需要打开 LinoFinance 手动确认。")
+
+    @Parameter(title: "内容", requestValueDialog: IntentDialog("这笔账是什么？比如「星巴克花了38元，用招商卡」。"))
+    var text: String
+
+    init() {
+        text = ""
+    }
+
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let message = await AIIntentService().record(sourceText: text)
+        return .result(dialog: IntentDialog(stringLiteral: message))
+    }
+}
+
+struct AIParseScreenshotIntent: AppIntent {
+    static var title: LocalizedStringResource = "解析截图记账"
+    static var description = IntentDescription("从一张账单或收据截图里用系统文字识别提取内容，交给 AI 自动记账。识别完全在本机进行，不会上传截图、不会保存截图，也不会访问相册——请通过「快捷指令」把截图传入（例如「获取最新截图」）。")
+
+    // Optional (not required): a Siri voice-only invocation has no way to
+    // supply an image, so a missing value is a normal, expected case —
+    // handled inside `AIIntentService.recordFromScreenshot` with a clear
+    // message, not one the system should interactively prompt for (D3:
+    // Shortcuts-fed only, no photo-library access).
+    @Parameter(title: "截图", supportedContentTypes: [.image])
+    var screenshot: IntentFile?
+
+    init() {}
+
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let message = await AIIntentService().recordFromScreenshot(screenshot)
+        return .result(dialog: IntentDialog(stringLiteral: message))
+    }
+}
+
 struct LinoShortcuts: AppShortcutsProvider {
     static var shortcutTileColor: ShortcutTileColor = .teal
 
@@ -188,6 +238,26 @@ struct LinoShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "确认 AI",
             systemImageName: "sparkles"
+        )
+
+        AppShortcut(
+            intent: AIRecordIntent(),
+            phrases: [
+                "用 \(.applicationName) AI 记一笔",
+                "用 \(.applicationName) 智能记账",
+            ],
+            shortTitle: "AI 记一笔",
+            systemImageName: "waveform.and.mic"
+        )
+
+        AppShortcut(
+            intent: AIParseScreenshotIntent(),
+            phrases: [
+                "用 \(.applicationName) 解析截图记账",
+                "用 \(.applicationName) 识别账单截图",
+            ],
+            shortTitle: "解析截图记账",
+            systemImageName: "text.viewfinder"
         )
     }
 }
@@ -396,6 +466,216 @@ struct IntentFinanceService {
             return nil
         }
         return (start, end)
+    }
+}
+
+/// AIIntentService — v3.1.0 P2 headless 免提编排，被 `AIRecordIntent`（文本）与
+/// `AIParseScreenshotIntent`（端上 OCR 出文本后转发）共用。
+///
+/// Deliberately its own self-contained struct (own `repository()`, mirrors
+/// `IntentFinanceService`'s pattern immediately above) rather than reusing
+/// `AIAssistantModel` — that model is `@MainActor`, holds `@Published`
+/// interactive-review state (editable drafts, a high-risk strong-confirm
+/// gate, history), and is designed to be driven by a human tapping through a
+/// SwiftUI screen. An intent's `perform()` runs headless, off the main actor,
+/// with no screen and no human to hand a decision to — it must make the
+/// accept/defer call itself in one shot. The tiny bit of duplication (an
+/// 8-line token/baseURL → `FinanceRepository` builder, identical to
+/// `IntentFinanceService.repository()`) is the trade-off for keeping both
+/// services simple, self-contained, and safe to reason about in isolation —
+/// exactly the same call `IntentFinanceService` itself already made.
+///
+/// D1 甲 免提裁决 (PROJECT_PLAN §5.6): a plan is executed automatically ONLY
+/// when BOTH hold —
+///   (a) `status == "auto_confirm_candidate"` AND `autoConfirmEligible` —
+///       server-computed: true only when EVERY action in the plan is a
+///       `CreateEntry` with amount_cny ≤ the configured auto-confirm limit
+///       (backend `_assess_action` / `_highest_risk`: any other action type,
+///       or a larger amount, makes the whole plan medium/high risk — verified
+///       against `backend/app/services/ai.py`, not re-derived client-side so
+///       it can never drift from whatever limit is actually configured);
+///   (b) every action's account_id / category_id resolves against the
+///       CURRENT account/category lists — reusing `EditableAIAction.
+///       validationError` (`AIProposalDraft.swift`), the exact id-completeness
+///       check the interactive review screen runs before a human can hit
+///       confirm. This catches both "the LLM left an id blank" and "the
+///       account/category was deleted since this plan was created".
+/// Anything else (medium/high risk, an id that doesn't resolve, or a plan a
+/// human already touched via the app) is left as a pending proposal — never
+/// force-executed headless; the reply tells the user to open the app.
+///
+/// No client-side retry loop (纯在线, no offline queue — durable): this
+/// function calls `createAIPlan` once and, only on the auto-execute path,
+/// `executeAIPlan` once. A mechanical double-fire (Siri retry / Back Tap 连点
+/// / a looping Shortcut) is a SEPARATE `perform()` invocation with its own
+/// call into this function — the P1 120s content-fingerprint dedup window is
+/// what keeps two such invocations from ever double-executing (the second
+/// `createAIPlan` returns the SAME plan id; whichever call loses the race
+/// either sees the plan already `executed` up front — handled below — or its
+/// own `executeAIPlan` hits the server's execute state gate and 400s). This
+/// function never itself loops or retries an execute (v3.0.0 评审 重要-2 同源
+/// 教训: don't hand-roll a second source of duplicate execution on top of what
+/// the state gate already prevents).
+struct AIIntentService {
+    func record(sourceText: String) async -> String {
+        let cleanText = sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanText.isEmpty else {
+            return "没听清要记什么，请再说一遍，比如「星巴克花了38元，用招商卡」。"
+        }
+        do {
+            let repository = try repository()
+
+            // D6: 未配置 AI → 立即清晰话术，不触发 LLM 网络调用。GET ai/config 只是
+            // 普通后端查询（读 ai_settings 表），真正打给所配大模型的请求在下面的
+            // createAIPlan 里——配置不全时绝不会走到那一步。
+            let config = try await repository.aiConfig()
+            guard config.baseUrlConfigured, config.apiKeyConfigured,
+                  !(config.model ?? "").trimmingCharacters(in: .whitespaces).isEmpty else {
+                return "AI 还没有配置，请打开 LinoFinance 在设置里填写 Base URL / API Key / Model。"
+            }
+
+            let plan = try await repository.createAIPlan(AIPlanCreateRequest(sourceText: cleanText))
+
+            if plan.status == "executed" {
+                // P1 幂等短窗（120s）命中了一个并发触发、已经执行完的同名 plan
+                // （比如 Back Tap 连点两下、Siri 重试）——不再二次 execute，直接
+                // 告知已经记过（accounts/categories 留空，summarize 会优雅降级为
+                // 只报标题+金额，省一次没必要的账户/分类拉取）。
+                return "这一笔已经记过了，没有重复记账。\(summarize(plan, accounts: [], categories: []))"
+            }
+            if ["rejected", "cancelled", "failed"].contains(plan.status) {
+                // P1 幂等窗内命中了一个已经终结的旧 plan（比如 120s 内刚在 app 里
+                // 拒绝过同样内容）——这不是"待确认"，如实告知没有记成，别误导。
+                return "这笔没有记成（已是\(plan.status.financeStatusTitle)状态），如果仍要记录，请重新说一遍，或打开 LinoFinance 手动记账。"
+            }
+            guard plan.status == "auto_confirm_candidate", plan.autoConfirmEligible else {
+                // requires_confirmation（中/高风险）、或人工已 approve 但尚未执行
+                // 的旧 plan——一律留给 app 里确认，免提通道绝不代为执行。
+                return "已存为待确认提案，请打开 LinoFinance 确认后入账：「\(cleanText)」。"
+            }
+
+            let accounts = try await repository.accounts()
+            let categories = try await repository.categories()
+            let idsResolved = plan.actions.allSatisfy { action in
+                EditableAIAction(action: action).validationError(accounts: accounts, categories: categories) == nil
+            }
+            guard idsResolved else {
+                // 低风险但账户/分类 id 缺失或已失效（§5.2①）——同样只留提案，不能
+                // 强行 execute（会在 schema 校验处失败，plan 直接转终态 failed，
+                // 不可再补救执行）。
+                return "已生成提案，但账户或分类信息不完整，请打开 LinoFinance 补充后确认：「\(cleanText)」。"
+            }
+
+            let executed = try await repository.executeAIPlan(plan.id)
+            return summarize(executed, accounts: accounts, categories: categories)
+        } catch IntentFinanceError.missingToken {
+            return "还没有登录 LinoFinance，请先打开 app 登录。"
+        } catch let apiError as APIError {
+            if case .transport = apiError {
+                return "记账服务连接失败，请稍后重试。"
+            }
+            return "记账失败：\(apiError.localizedDescription)"
+        } catch {
+            return "记账失败：\(error.localizedDescription)"
+        }
+    }
+
+    /// `AIParseScreenshotIntent`'s entry — OCR the screenshot on-device (D2 甲)
+    /// then hand the recognized text to the same `record(sourceText:)`
+    /// pipeline. `file == nil` is the expected shape for a Siri voice-only
+    /// invocation (there is no image to bind) — handled here with a clear
+    /// message, not via an interactive prompt (D3: Shortcuts-fed only).
+    func recordFromScreenshot(_ file: IntentFile?) async -> String {
+        guard let file else {
+            return "没有收到截图，请通过「快捷指令」传入一张截图再试（本功能不会读取相册）。"
+        }
+        do {
+            let recognizedText = try ScreenshotOCR.recognizeText(in: file.data)
+            return await record(sourceText: recognizedText)
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    /// "记了什么/多少钱/哪个账户" — reuses `EditableAIAction`'s own payload
+    /// parsing (the same one the interactive review screen renders from) so
+    /// this never hand-rolls a second JSON-payload reader. `accounts`/
+    /// `categories` empty is a valid degraded call (see the dedup-echo branch
+    /// in `record` above) — the account-name lookup just comes back nil and
+    /// is omitted, everything else still renders.
+    private func summarize(_ plan: AIPlanDTO, accounts: [AccountDTO], categories: [CategoryDTO]) -> String {
+        guard let action = plan.actions.first(where: {
+            $0.actionType == "CreateEntry" || $0.actionType == "RecordCreditRepayment"
+        }), case .entry(let draft, _) = EditableAIAction(action: action).kind else {
+            return "已按「\(plan.sourceText)」完成记账。"
+        }
+        let line = draft.categoryLines.first
+        let movement = draft.accountMovements.first
+        let currency = line?.currency ?? movement?.currency ?? .cny
+        let amountText = (line?.amountText ?? movement?.amountText)
+            .flatMap(parseDecimalAmount)
+            .map { FinanceFormatter.money(DecimalValue($0), currency: currency) }
+        let accountName = movement?.accountId.flatMap { id in accounts.first(where: { $0.id == id })?.name }
+        var parts = ["已记录「\(draft.title)」"]
+        if let amountText { parts.append(amountText) }
+        if let accountName { parts.append(accountName) }
+        return parts.joined(separator: "，") + "。"
+    }
+
+    private func repository() throws -> FinanceRepository {
+        guard let token = SecureTokenStore.shared.readEffectiveToken(), !token.isEmpty else {
+            throw IntentFinanceError.missingToken
+        }
+        return FinanceRepository(
+            apiClient: LinoAPIClient(
+                baseURL: AppModel.resolveBaseURL(),
+                authToken: token
+            )
+        )
+    }
+}
+
+/// On-device Vision OCR (D2 甲) — no LLM vision call, no upload, no disk
+/// write, no Photos permission (the image arrives already in-process via
+/// `IntentFile`, fed by a Shortcut — D3). `.accurate` + zh-Hans/en-US covers
+/// the bilingual receipt/bill screenshots this feature targets. Decodes via
+/// `CGImageSource` (ImageIO) rather than `UIImage`/`NSImage` so this stays
+/// platform-agnostic with no `#if os(...)` split — matching this file's
+/// existing style (none of the other intents branch on platform either).
+private enum ScreenshotOCR {
+    static func recognizeText(in data: Data) throws -> String {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            throw AIIntentOCRError.message("这张截图无法读取，请换一张再试。")
+        }
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["zh-Hans", "en-US"]
+        request.usesLanguageCorrection = true
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        do {
+            try handler.perform([request])
+        } catch {
+            throw AIIntentOCRError.message("截图文字识别失败，请换一张再试。")
+        }
+        let text = (request.results ?? [])
+            .compactMap { $0.topCandidates(1).first?.string }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            throw AIIntentOCRError.message("没有从截图里识别出文字，请确认截图清晰、包含账单信息。")
+        }
+        return text
+    }
+}
+
+private enum AIIntentOCRError: LocalizedError {
+    case message(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .message(let text): text
+        }
     }
 }
 
