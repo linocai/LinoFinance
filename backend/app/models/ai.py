@@ -20,6 +20,12 @@ class AIPlan(IDTimestampMixin, Base):
     confidence: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 4))
     explanation: Mapped[Optional[str]] = mapped_column(Text)
     raw_response: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON)
+    # v3.1.0 P1: sha256 hex (64 chars) over the request-original content
+    # (source_text + client-sent actions). Nullable — historical rows stay NULL —
+    # with a NON-unique index: the short-window dedup semantics live in the query
+    # (same fingerprint AND created_at within the window), not a DB constraint, so
+    # the same content across separate windows may legitimately produce many rows.
+    content_fingerprint: Mapped[Optional[str]] = mapped_column(String(64), index=True)
 
 
 class AIAction(IDTimestampMixin, Base):

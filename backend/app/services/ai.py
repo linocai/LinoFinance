@@ -1,4 +1,6 @@
-from datetime import date as DateType
+import hashlib
+import json
+from datetime import date as DateType, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -35,6 +37,17 @@ from app.services.ledger import LedgerNotFoundError, LedgerValidationError, quan
 
 RISK_ORDER = {"low": 0, "medium": 1, "high": 2}
 STRONG_CONFIRM_PHRASE = "EXECUTE_HIGH_RISK"
+
+# v3.1.0 P1 idempotency window. A short (~2 min) window is deliberate: it only
+# catches the "same bookkeeping intent fired twice mechanically" case — a
+# double-tap, a Siri retry, a Shortcut loop, or `prepareExecution` resubmitting
+# after a failed client-side reject (v3.0.0 review 重要-3). It must NOT dedup a
+# genuinely repeated purchase hours later ("another coffee, same price") — time
+# pulls those apart into distinct plans. Tune here if the hands-free flows change.
+IDEMPOTENCY_WINDOW_SECONDS = 120
+# ASCII record separator joining the two fingerprint parts so a source_text
+# ending in "[" can never collide with the actions-JSON boundary.
+_FINGERPRINT_SEPARATOR = "\x1e"
 HIGH_RISK_ACTIONS = {"VoidEntry", "DeleteRecord", "ModifyCurrencyRate", "ModifyConfirmedEntry", "BulkUpdate"}
 MEDIUM_RISK_ACTIONS = {
     "CreateCashFlowItem",
@@ -115,9 +128,77 @@ def _ledger_context(db: Session) -> Dict[str, Any]:
     }
 
 
-def create_ai_plan(db: Session, payload: AIPlanCreate) -> AIPlanRead:
+def compute_content_fingerprint(
+    source_text: str,
+    actions: List[AIActionProposal],
+) -> str:
+    """Deterministic sha256 (hex, 64 chars) over the REQUEST-ORIGINAL content —
+    the client's `source_text` + the actions it sent — NOT the LLM's generated
+    output.
+
+    Two reasons for hashing the request rather than the generated actions:
+    (1) the LLM is non-deterministic, so hashing its output would miss real
+    duplicates; (2) we must be able to dedup BEFORE spending an LLM call.
+
+    Each action contributes only ``{action_type, payload}`` — `explanation` and
+    `confidence` don't change what gets posted to the ledger, so they must not
+    change the fingerprint. `sort_keys=True` canonicalizes key order recursively
+    (a client re-serializing the same payload with keys in a different order
+    yields the SAME fingerprint). The pure-text path (no client actions) hashes
+    an empty ``[]`` marker.
+    """
+    canonical_actions = [
+        {"action_type": action.action_type, "payload": action.payload}
+        for action in actions
+    ]
+    canonical = (
+        source_text.strip()
+        + _FINGERPRINT_SEPARATOR
+        + json.dumps(
+            canonical_actions,
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _find_recent_plan_by_fingerprint(db: Session, fingerprint: str) -> Optional[AIPlan]:
+    """Return the most recent plan with the same content fingerprint created
+    inside the idempotency window, or None. The cutoff is computed in aware UTC
+    (matching how `created_at` is stored — `server_default=func.now()` is UTC on
+    both SQLite and Postgres — and mirroring the `attachments.cleanup` cutoff
+    idiom); the ~120s fuzziness absorbs any app/DB clock skew."""
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=IDEMPOTENCY_WINDOW_SECONDS)
+    return db.execute(
+        select(AIPlan)
+        .where(
+            AIPlan.content_fingerprint == fingerprint,
+            AIPlan.created_at >= cutoff,
+        )
+        .order_by(AIPlan.created_at.desc())
+    ).scalars().first()
+
+
+def create_ai_plan(db: Session, payload: AIPlanCreate) -> Tuple[AIPlanRead, bool]:
+    """Create an AI plan, or return an existing same-content plan created inside
+    the idempotency window (v3.1.0 P1). Returns ``(plan, created)`` where
+    ``created`` is False on a dedup hit so the route can answer 200 vs 201."""
     settings = get_settings()
     config = ai_provider.resolve_ai_config(db)
+
+    # Fingerprint the request-original content and dedup BEFORE any LLM call, so a
+    # mechanical resubmit neither mints a second plan nor spends a second LLM
+    # request. A hit returns the existing plan verbatim (whatever its status —
+    # even executed/rejected): the execute state gate then makes the end-to-end
+    # flow idempotent, and no second executable plan is ever created (the exact
+    # root cause of v3.0.0 review 重要-3).
+    fingerprint = compute_content_fingerprint(payload.source_text, payload.actions)
+    existing = _find_recent_plan_by_fingerprint(db, fingerprint)
+    if existing is not None:
+        return get_ai_plan(db, existing.id), False
+
     actions = payload.actions
     raw_response = payload.raw_response
     explanation = payload.explanation
@@ -147,6 +228,7 @@ def create_ai_plan(db: Session, payload: AIPlanCreate) -> AIPlanRead:
         confidence=Decimal(str(confidence)) if confidence is not None else None,
         explanation=explanation,
         raw_response=raw_response,
+        content_fingerprint=fingerprint,
     )
     db.add(plan)
     db.flush()
@@ -172,7 +254,7 @@ def create_ai_plan(db: Session, payload: AIPlanCreate) -> AIPlanRead:
             push_dispatch.dispatch_high_risk_ai_plan(db, plan.id)
         except Exception:
             pass
-    return get_ai_plan(db, plan.id)
+    return get_ai_plan(db, plan.id), True
 
 
 def list_ai_plans(

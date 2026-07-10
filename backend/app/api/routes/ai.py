@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -48,12 +48,22 @@ def list_ai_plans(
 
 
 @router.post("/plans", response_model=AIPlanRead, status_code=status.HTTP_201_CREATED)
-def create_ai_plan(payload: AIPlanCreate, db: Session = Depends(get_db)) -> AIPlanRead:
+def create_ai_plan(
+    payload: AIPlanCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> AIPlanRead:
+    # v3.1.0 P1 idempotency: a same-content resubmit inside the ~120s window
+    # returns the EXISTING plan with 200 (body is byte-identical shape to 201) so
+    # the client can transparently treat both as "here is your plan".
     try:
-        return ai.create_ai_plan(db, payload)
+        plan, created = ai.create_ai_plan(db, payload)
     except LedgerValidationError as exc:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return plan
 
 
 @router.get("/plans/{plan_id}", response_model=AIPlanRead)
