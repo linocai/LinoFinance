@@ -94,6 +94,10 @@ _STRUCTURAL_LINK_EDIT_MESSAGE = (
     "请编辑其来源的现金流 / 报销 / 分期项，不可直接编辑"
 )
 
+_FINAL_REIMBURSEMENT_EDIT_MESSAGE = (
+    "此支出关联的报销已到账/已放弃（终态），请先在报销页处理后再编辑"
+)
+
 
 def replace_entry(
     db: Session,
@@ -136,6 +140,10 @@ def _guard_entry_editable(db: Session, entry: FinancialEntry) -> None:
       terminal audit history and must never be resurrected/recreated.
     - Structurally-linked entries → rejected (see ``_entry_is_structurally_linked``).
 
+    - Source-expense entries whose reimbursement claim has reached a FINAL
+      status (received / abandoned) → rejected (see
+      ``_entry_has_final_reimbursement_claim``). The pending case stays editable.
+
     ``created_by`` is intentionally *not* a gate: an ``ai``-authored entry is a
     normal formal ledger record the user may freely edit, and settlement entries
     inherit the client's ``created_by`` (usually ``user``), so the field is not a
@@ -148,6 +156,8 @@ def _guard_entry_editable(db: Session, entry: FinancialEntry) -> None:
         raise LedgerValidationError("Only draft or confirmed entries can be edited")
     if _entry_is_structurally_linked(db, entry.id):
         raise LedgerValidationError(_STRUCTURAL_LINK_EDIT_MESSAGE)
+    if _entry_has_final_reimbursement_claim(db, entry.id):
+        raise LedgerValidationError(_FINAL_REIMBURSEMENT_EDIT_MESSAGE)
 
 
 def _entry_is_structurally_linked(db: Session, entry_id: str) -> bool:
@@ -165,9 +175,12 @@ def _entry_is_structurally_linked(db: Session, entry_id: str) -> bool:
       credit-charge entry.
 
     Deliberately excluded: ``ReimbursementClaim.linked_entry_id`` (the *source*
-    expense entry). Editing that is the intended flow — void abandons its pending
-    claims and recreate re-issues them (matrix item 3), exactly like a plain
-    void+recreate.
+    expense entry) **while its claim is still pending**. Editing that is the
+    intended flow — void abandons its pending claims and recreate re-issues them
+    (matrix item 3), exactly like a plain void+recreate. Once that claim reaches
+    a FINAL status the void+recreate flow breaks, so the *separate*
+    ``_entry_has_final_reimbursement_claim`` guard (below, checked in
+    ``_guard_entry_editable``) rejects that case.
     """
     if (
         db.execute(
@@ -197,6 +210,45 @@ def _entry_is_structurally_linked(db: Session, entry_id: str) -> bool:
     ):
         return True
     return False
+
+
+def _entry_has_final_reimbursement_claim(db: Session, entry_id: str) -> bool:
+    """True when a FINAL-status reimbursement claim references this entry as its
+    source expense (``ReimbursementClaim.linked_entry_id``).
+
+    The source-expense case is normally editable — ``_entry_is_structurally_linked``
+    excludes it on purpose so void+recreate can abandon the entry's *pending*
+    claims and re-issue them. But once a claim on this entry is FINAL
+    (``received`` / ``abandoned``, from ``reimbursement.FINAL_STATUSES``), that
+    flow silently corrupts the ledger:
+
+    - ``received``: an income entry (E2) was already created and the claim is
+      terminal. ``void_entry`` → ``abandon_claims_for_entry`` *skips* FINAL claims
+      (it only abandons pending ones), so the void reverses the source expense
+      while the received claim + its income entry survive → **phantom income**;
+      recreate then mints a fresh ``pending`` claim → the same reimbursement is
+      represented twice (received + new pending), **double-counting** the
+      pending-receivable net-worth term.
+    - ``abandoned``: same skip → recreate silently re-issues a pending claim for
+      a reimbursement the user already gave up on, re-inflating the receivable.
+
+    So an entry carrying any FINAL claim must be handled on the reimbursement
+    page first (un-receive / re-open), never via void+recreate (v3.0.0 评审
+    重要-1).
+    """
+    from app.services.reimbursement import FINAL_STATUSES
+
+    return (
+        db.execute(
+            select(ReimbursementClaim.id)
+            .where(
+                ReimbursementClaim.linked_entry_id == entry_id,
+                ReimbursementClaim.status.in_(FINAL_STATUSES),
+            )
+            .limit(1)
+        ).scalar()
+        is not None
+    )
 
 
 def list_entries(

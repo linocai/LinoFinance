@@ -106,6 +106,12 @@ final class AIAssistantModel: ObservableObject {
 
     @discardableResult
     func submitSourceText() async -> Bool {
+        // Re-entrancy guard (v3.0.0 评审 重要-2): a fast double-tap dispatches two
+        // Tasks before `.disabled(isParsing)` re-renders; the second must bail
+        // here (this line runs synchronously before any await, so the flag set
+        // below is already visible to the second invocation) or it double-creates
+        // a plan the server can't dedupe.
+        guard !isParsing else { return false }
         let trimmed = sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         isParsing = true
@@ -164,6 +170,12 @@ final class AIAssistantModel: ObservableObject {
     /// — if clean — resubmits them as a fresh plan, approves it, and either
     /// executes immediately (low/medium risk) or stops for the high-risk gate.
     func prepareExecution(accounts: [AccountDTO], categories: [CategoryDTO]) async -> ExecutionOutcome {
+        // Re-entrancy guard (v3.0.0 评审 重要-2): a fast double-tap dispatches two
+        // Tasks before `.disabled(isSubmittingDraft)` re-renders; the second must
+        // bail here — this line runs synchronously before any await, so the flag
+        // set below is already visible — or each派生 a fresh `createAIPlan` (new
+        // id) the server can't dedupe → the same spend lands twice.
+        guard !isSubmittingDraft else { return .failed }
         guard let originalPlan = draftPlan else { return .failed }
         if let error = firstValidationError(accounts: accounts, categories: categories) {
             actionError = error
@@ -183,11 +195,32 @@ final class AIAssistantModel: ObservableObject {
                 await loadHistory()
                 return .awaitingHighRiskConfirm
             }
-            let executed = try await apiClient.executeAIPlan(approved.id)
-            try? await apiClient.rejectAIPlan(originalPlan.id)
+            // Execute is the ambiguous-failure step: the server may have already
+            // committed the ledger write even though the response failed. On error
+            // keep the draft (for retry) and warn the user to check history first
+            // so a resubmit can't double-post (v3.0.0 评审 重要-3 前端缓解).
+            do {
+                _ = try await apiClient.executeAIPlan(approved.id)
+            } catch {
+                actionError = error.localizedDescription
+                    + "\n重试前请到历史确认该提案状态，避免重复落账"
+                return .failed
+            }
+            // Success: retire the original draft/history plan so it can't be
+            // re-executed. If that best-effort reject fails we no longer swallow
+            // it silently — surface a notice so the user reconciles history
+            // (v3.0.0 评审 重要-3 前端缓解).
+            var rejectFailed = false
+            do {
+                _ = try await apiClient.rejectAIPlan(originalPlan.id)
+            } catch {
+                rejectFailed = true
+            }
             discardDraft()
+            if rejectFailed {
+                actionError = "已执行成功，但原草稿未能自动作废，请到历史核对避免重复"
+            }
             await loadHistory()
-            _ = executed
             return .executed
         } catch {
             actionError = error.localizedDescription
@@ -197,19 +230,38 @@ final class AIAssistantModel: ObservableObject {
 
     @discardableResult
     func confirmHighRiskExecution() async -> Bool {
+        // Re-entrancy guard (v3.0.0 评审 重要-2): a double-tap on the strong-confirm
+        // button would execute the already-approved high-risk plan twice. Bail
+        // synchronously before any await; `prepareExecution`'s defer already
+        // released the flag when it returned `.awaitingHighRiskConfirm`, so it is
+        // free to reclaim here.
+        guard !isSubmittingDraft else { return false }
         guard let plan = pendingHighRiskPlan, let originalPlan = draftPlan else { return false }
+        isSubmittingDraft = true
+        defer { isSubmittingDraft = false }
+        actionError = nil
+        // Execute is the ambiguous-failure step (see `prepareExecution`): warn the
+        // user to check history before retrying (v3.0.0 评审 重要-3 前端缓解).
         do {
-            actionError = nil
             _ = try await apiClient.executeAIPlan(plan.id, strongConfirm: "EXECUTE_HIGH_RISK")
-            try? await apiClient.rejectAIPlan(originalPlan.id)
-            pendingHighRiskPlan = nil
-            discardDraft()
-            await loadHistory()
-            return true
         } catch {
             actionError = error.localizedDescription
+                + "\n重试前请到历史确认该提案状态，避免重复落账"
             return false
         }
+        var rejectFailed = false
+        do {
+            _ = try await apiClient.rejectAIPlan(originalPlan.id)
+        } catch {
+            rejectFailed = true
+        }
+        pendingHighRiskPlan = nil
+        discardDraft()
+        if rejectFailed {
+            actionError = "已执行成功，但原草稿未能自动作废，请到历史核对避免重复"
+        }
+        await loadHistory()
+        return true
     }
 
     /// User backs out of the high-risk gate. The plan was already approved

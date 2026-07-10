@@ -126,6 +126,33 @@ def _credit_charge_payload(credit_account, category, amount, currency="USD", dat
     }
 
 
+def _reimbursable_expense_payload(account, category, amount, expected_date="2026-06-30"):
+    return {
+        "title": "Taxi",
+        "date": "2026-05-16",
+        "status": "confirmed",
+        "category_lines": [
+            {
+                "category_id": category["id"],
+                "direction": "expense",
+                "amount": amount,
+                "currency": "CNY",
+                "reimbursable_flag": True,
+                "reimbursement_payer": "company",
+                "reimbursement_expected_date": expected_date,
+            }
+        ],
+        "account_movements": [
+            {
+                "account_id": account["id"],
+                "movement_type": "balance_out",
+                "amount": amount,
+                "currency": "CNY",
+            }
+        ],
+    }
+
+
 def _balance(client, account_id):
     return client.get(f"/api/v1/accounts/{account_id}").json()["current_balance"]
 
@@ -305,6 +332,89 @@ def test_edit_reimbursement_entry_abandons_old_claim_and_issues_new(client) -> N
         client.get("/api/v1/dashboard/summary").json()["reimbursement_receivable_total_cny"]
     ) == Decimal("150")
     assert _balance(client, account["id"]) == "850.00"
+
+
+# --- 3b. edit source expense of a FINAL reimbursement claim → rejected ---------
+# (v3.0.0 评审 重要-1): a received/abandoned claim makes void+recreate corrupt
+# the ledger — void skips FINAL claims, so the source expense reverses while the
+# received income entry survives (phantom income) and recreate mints a second
+# pending claim (double-counted receivable). Guard must reject BEFORE any change.
+
+
+def test_edit_source_expense_with_received_claim_is_rejected(client) -> None:
+    account = create_account(client, balance="1000")
+    expense_category = create_category(client, name="Taxi")
+    income_category = create_category(client, name="Reimb income", category_type="income")
+
+    payload = _reimbursable_expense_payload(account, expense_category, "100")
+    source = client.post("/api/v1/entries", json=payload).json()
+    assert _balance(client, account["id"]) == "900.00"
+
+    claim = client.get("/api/v1/reimbursement-claims?status=pending").json()[0]
+
+    # Mark received → income entry E2 created, money lands back, claim terminal.
+    received = client.post(
+        f"/api/v1/reimbursement-claims/{claim['id']}/mark-received",
+        json={
+            "actual_received_date": "2026-06-15",
+            "received_account_id": account["id"],
+            "entry": {
+                "title": "Taxi reimbursed",
+                "date": "2026-06-15",
+                "status": "confirmed",
+                "category_lines": [
+                    {
+                        "category_id": income_category["id"],
+                        "direction": "income",
+                        "amount": "100",
+                        "currency": "CNY",
+                    }
+                ],
+                "account_movements": [
+                    {
+                        "account_id": account["id"],
+                        "movement_type": "balance_in",
+                        "amount": "100",
+                        "currency": "CNY",
+                    }
+                ],
+            },
+        },
+    )
+    assert received.status_code == 200, received.text
+    assert client.get(f"/api/v1/reimbursement-claims/{claim['id']}").json()["status"] == "received"
+    assert _balance(client, account["id"]) == "1000.00"  # -100 spend +100 reimbursed
+
+    # Editing the SOURCE expense is now blocked — its claim is terminal.
+    response = client.patch(f"/api/v1/entries/{source['id']}", json=payload)
+    assert response.status_code == 400
+    assert "报销" in response.json()["detail"]
+    # Nothing rolled back: source still confirmed, received claim + balance intact.
+    assert client.get(f"/api/v1/entries/{source['id']}").json()["status"] == "confirmed"
+    assert client.get(f"/api/v1/reimbursement-claims/{claim['id']}").json()["status"] == "received"
+    assert _balance(client, account["id"]) == "1000.00"
+
+
+def test_edit_source_expense_with_abandoned_claim_is_rejected(client) -> None:
+    account = create_account(client, balance="1000")
+    category = create_category(client, name="Taxi")
+
+    payload = _reimbursable_expense_payload(account, category, "100")
+    source = client.post("/api/v1/entries", json=payload).json()
+    assert _balance(client, account["id"]) == "900.00"
+
+    claim = client.get("/api/v1/reimbursement-claims?status=pending").json()[0]
+    abandoned = client.post(f"/api/v1/reimbursement-claims/{claim['id']}/abandon")
+    assert abandoned.status_code == 200, abandoned.text
+    assert abandoned.json()["status"] == "abandoned"
+
+    response = client.patch(f"/api/v1/entries/{source['id']}", json=payload)
+    assert response.status_code == 400
+    assert "报销" in response.json()["detail"]
+    # Untouched: source still confirmed, claim still abandoned, balance still -100.
+    assert client.get(f"/api/v1/entries/{source['id']}").json()["status"] == "confirmed"
+    assert client.get(f"/api/v1/reimbursement-claims/{claim['id']}").json()["status"] == "abandoned"
+    assert _balance(client, account["id"]) == "900.00"
 
 
 # --- 4. edit a voided entry → rejected ----------------------------------------
