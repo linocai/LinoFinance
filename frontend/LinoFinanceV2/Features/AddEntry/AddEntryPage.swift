@@ -23,6 +23,11 @@ import SwiftUI
 struct AddEntryPage: View {
     @ObservedObject var model: AppModel
 
+    /// v3.0.0 P5 — non-nil ⇒ EDIT mode: the form is prefilled from this entry and
+    /// 保存 sends PATCH (void+recreate) instead of POST. The caller passes only
+    /// entries whose shape the simple form can represent (see `AddEntryPrefill`).
+    var editingEntry: EntryDTO? = nil
+
     /// Called to leave the page (back to the previous sidebar destination).
     var onClose: () -> Void
     /// Called after a successful submit so the host can refresh the dashboard.
@@ -43,6 +48,12 @@ struct AddEntryPage: View {
 
     @State private var isSubmitting = false
     @State private var errorMessage: String?
+    // Edit prefill runs once; `isApplyingPrefill` suppresses the
+    // segment/currency reset onChange handlers while the prefill assigns state.
+    @State private var didPrefill = false
+    @State private var isApplyingPrefill = false
+
+    private var isEditing: Bool { editingEntry != nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -58,16 +69,48 @@ struct AddEntryPage: View {
             await model.loadAccounts()
             await model.loadCategories()
             await model.loadRates()
-            applyInitialDefaultAccounts()
+            if let editingEntry, !didPrefill {
+                applyPrefill(editingEntry)
+                didPrefill = true
+            } else if editingEntry == nil {
+                applyInitialDefaultAccounts()
+            }
         }
         .onChange(of: segment) { _, _ in
+            // Skip while the edit prefill programmatically sets the segment
+            // (otherwise it would wipe the prefilled category/account).
+            guard !isApplyingPrefill else { return }
             categoryId = nil
             clearInvalidatedAccounts()
         }
         .onChange(of: currency) { _, _ in
             // Account currency must match the movement currency.
+            guard !isApplyingPrefill else { return }
             clearInvalidatedAccounts()
         }
+    }
+
+    /// Edit mode: reverse-map the entry into the form. Sets `isApplyingPrefill`
+    /// so the segment/currency reset handlers don't clobber the assigned
+    /// category/account; the flag is lowered on the next runloop tick, after
+    /// SwiftUI has processed these mutations (and fired the guarded onChanges).
+    private func applyPrefill(_ entry: EntryDTO) {
+        guard let prefill = AddEntryPrefill(entry: entry) else { return }
+        isApplyingPrefill = true
+        segment = prefill.segment
+        currency = prefill.currency
+        title = prefill.title
+        amountText = prefill.amountText
+        categoryId = prefill.categoryId
+        accountId = prefill.accountId
+        transferInAccountId = prefill.transferInAccountId
+        date = prefill.date
+        reimbursable = prefill.reimbursable
+        reimbursementPayer = prefill.reimbursementPayer
+        if let expected = prefill.reimbursementExpectedDate {
+            reimbursementExpectedDate = expected
+        }
+        DispatchQueue.main.async { isApplyingPrefill = false }
     }
 
     // MARK: - Default account selection (v2.5.0 评审修补 · H 重要-2)
@@ -121,10 +164,10 @@ struct AddEntryPage: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("记一笔")
+            Text(isEditing ? "编辑记录" : "记一笔")
                 .font(Theme.Font.pageTitle())
                 .foregroundStyle(Theme.Color.textPrimary)
-            Text("复式记账 · 保存即确认")
+            Text(isEditing ? "保存后原记录作废、生成新记录" : "复式记账 · 保存即确认")
                 .font(Theme.Font.caption())
                 .foregroundStyle(Theme.Color.textSecondary)
         }
@@ -327,7 +370,7 @@ struct AddEntryPage: View {
                     .lineLimit(2)
             }
             HStack(spacing: 12) {
-                PrimaryDarkButton("保存", fullWidth: true, isLoading: isSubmitting) {
+                PrimaryDarkButton(isEditing ? "保存修改" : "保存", fullWidth: true, isLoading: isSubmitting) {
                     Task { await submit() }
                 }
                 .disabled(isSubmitting || !canSubmit)
@@ -449,7 +492,11 @@ struct AddEntryPage: View {
         defer { isSubmitting = false }
         do {
             let request = try AddEntryMapper.makeRequest(currentInput())
-            _ = try await model.submitEntry(request)
+            if let editingEntry {
+                _ = try await model.updateEntry(editingEntry.id, request: request)
+            } else {
+                _ = try await model.submitEntry(request)
+            }
             errorMessage = nil
             onSubmitted()
             onClose()

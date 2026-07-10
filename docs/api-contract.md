@@ -160,11 +160,11 @@ so production `/health` is the canonical "what is deployed" probe.
   - `GET /exports/csv/{dataset}`
   - `GET /entries`
   - `POST /entries`
+  - `PATCH /entries/{entry_id}` (v3.0.0 P5)
   - `POST /entries/{entry_id}/void`
   - `GET /dashboard/summary`
 - Planned next:
   - Expand `GET /dashboard/summary` into richer report cards after Phase 1 entries settle.
-  - Add entry update/edit endpoints after basic create/void semantics are stable.
 
 ## Entry Rules Implemented
 
@@ -197,6 +197,29 @@ so production `/health` is the canonical "what is deployed" probe.
   timestamp the within-entry order may differ — cosmetic only (e.g. a split
   entry's first category-line tile, transfer leg order).
 - Voiding a confirmed entry reverses its balance/liability effect.
+- **`PATCH /entries/{entry_id}` edits an entry via void+recreate (v3.0.0 P5, D2=甲).**
+  The request body is a **complete new `EntryCreate`** (replace semantics, *not* a
+  field-level merge). In one transaction the backend voids the original entry
+  (reversing its movements and abandoning its pending reimbursement claims — the
+  original row is kept `voided` for audit) and creates a brand-new entry from the
+  payload, returning that **new entry (new id)** with `200`. Because recreate
+  re-runs the normal create path: a moved credit charge **re-attaches** to
+  whichever non-voided cycle now covers its date (possibly a *different* cycle;
+  both cycles' `statement_amount` and the account `current_liability≡Σcycle`
+  recompute), and reimbursable lines spawn **fresh** claims (the old claim is
+  abandoned) so the pending-receivable net-worth term follows the edit with no
+  double count. Any failure (e.g. a mismatched category/movement total in the new
+  payload) rolls the whole transaction back — the original entry stays intact.
+  Reject-edit face (`400`): a `voided` entry ("Voided entries cannot be edited"),
+  and any **structurally-linked** entry — one referenced as a *product* by a
+  settled `CashFlowItem.linked_entry_id`, a `ReimbursementClaim.received_entry_id`,
+  or an `InstallmentPlan.linked_entry_id` — which must be edited through its source
+  object instead (editing it would orphan the upstream link and double-count).
+  `created_by` is **not** a gate: an `ai`-authored entry is a normal editable
+  ledger record; a reimbursement's *source* expense entry
+  (`ReimbursementClaim.linked_entry_id`) is likewise editable (that is the
+  intended flow — its pending claims abandon on void and re-issue on recreate).
+  `404` when the entry does not exist. Zero migration.
 - Credit card charges increase `current_liability`; credit repayment decreases it and is treated as transfer movement.
 - **Credit `current_liability` is a derived value (v2.2.0 P1, D1=甲): it always equals `Σ(non-voided statement cycle: statement_amount − paid_amount)`.** The stored `accounts.current_liability` column is a cache of exactly this sum, recomputed after every cycle/charge/repayment mutation, so it can never drift from the cycle total (root-cause fix for the historical "opening liability number that no cycle covered"). There is no "unbilled charges" concept in the current model (every `credit_charge` is forced into a cycle at creation), so the cycle sum is the whole truth.
 - **`POST /accounts` rejects a non-zero `current_liability` on a credit account with `422` (v2.2.0 P1).** Opening credit debt must be expressed by creating an opening statement cycle (so it is covered by `Σcycle`), never as a bare opening number on the account. A credit account is always created with `current_liability = 0`; the column then tracks `Σcycle`.

@@ -130,6 +130,15 @@ struct LinoAPIClient {
         try await post("entries", body: request)
     }
 
+    /// PATCH /entries/{id} (v3.0.0 P5) — edit = void+recreate. The body is a
+    /// COMPLETE replacement `EntryCreateRequest` (not a merge); the backend
+    /// voids the original (kept as a voided audit row) and returns a brand-new
+    /// entry with a new id. Reuses `EntryCreateRequest` so the wire shape can
+    /// never drift from create.
+    func updateEntry(_ id: String, request: EntryCreateRequest) async throws -> EntryDTO {
+        try await patch("entries/\(id)", body: request)
+    }
+
     func voidEntry(_ id: String) async throws -> EntryDTO {
         try await post("entries/\(id)/void")
     }

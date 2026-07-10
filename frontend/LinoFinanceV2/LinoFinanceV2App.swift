@@ -112,19 +112,29 @@ private struct MacAppShell: View {
         // and shows the chosen destination (the page is no longer a modal).
         .onChange(of: model.selection) { _, _ in
             model.isAddEntryPresented = false
+            model.editingEntry = nil
         }
     }
 
     // 记一笔 is now a RIGHT-SIDE PAGE (R1 ·去模态): the sidebar stays visible and
-    // the content area swaps to AddEntryPage. The old `.sheet` is gone.
+    // the content area swaps to AddEntryPage. The old `.sheet` is gone. Either the
+    // ⌘N new-entry flag OR an editingEntry (v3.0.0 P5) shows the page.
     @ViewBuilder
     private var content: some View {
-        if model.isAddEntryPresented {
+        if model.isAddEntryPresented || model.editingEntry != nil {
             AddEntryPage(
                 model: model,
-                onClose: { model.isAddEntryPresented = false },
+                editingEntry: model.editingEntry,
+                onClose: {
+                    model.isAddEntryPresented = false
+                    model.editingEntry = nil
+                },
                 onSubmitted: { Task { await model.refreshAll() } }
             )
+            // `.id` on the edited entry id (or "new") recreates the page's form
+            // @State when switching between new-entry and different edits, so the
+            // prefill runs cleanly for each target.
+            .id(model.editingEntry?.id ?? "new-entry")
         } else {
             destinationContent
         }
@@ -179,6 +189,12 @@ private struct IOSAppShell: View {
         .id(model.authVersion)
         .sheet(isPresented: $model.isAddEntryPresented) {
             AddEntryIOSSheet(model: model) {
+                Task { await model.refreshAll() }
+            }
+        }
+        // v3.0.0 P5 — edit sheet, prefilled from the tapped ledger entry.
+        .sheet(item: $model.editingEntry) { entry in
+            AddEntryIOSSheet(model: model, editingEntry: entry) {
                 Task { await model.refreshAll() }
             }
         }

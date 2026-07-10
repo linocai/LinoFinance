@@ -39,6 +39,11 @@ struct FinanceRepository {
         try await apiClient.createEntry(request)
     }
 
+    /// PATCH /entries/{id} (v3.0.0 P5) — edit = void+recreate, returns the new entry.
+    func updateEntry(_ id: String, request: EntryCreateRequest) async throws -> EntryDTO {
+        try await apiClient.updateEntry(id, request: request)
+    }
+
     func voidEntry(_ id: String) async throws -> EntryDTO {
         try await apiClient.voidEntry(id)
     }

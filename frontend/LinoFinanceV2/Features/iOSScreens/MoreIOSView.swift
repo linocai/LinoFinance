@@ -139,6 +139,13 @@ private struct LedgerIOSView: View {
         .navigationTitle("流水")
         .navigationBarTitleDisplayMode(.inline)
         .task { if ledgerModel.entries.isEmpty { await ledgerModel.load() } }
+        // v3.0.0 P5 — reload after the edit sheet closes (this pushed view is not
+        // recreated, so its cached entries would otherwise stay stale: the old
+        // row voided-out + the new row missing). editingEntry is only ever set
+        // from this screen's row taps, so keying off it is precise.
+        .onChange(of: model.editingEntry?.id) { _, newValue in
+            if newValue == nil { Task { await ledgerModel.load() } }
+        }
     }
 
     @ViewBuilder
@@ -155,15 +162,24 @@ private struct LedgerIOSView: View {
                 VStack(spacing: 0) {
                     ForEach(Array(visible.enumerated()), id: \.element.id) { index, entry in
                         if index > 0 { Divider().overlay(Theme.Color.divider) }
-                        row(entry)
-                            .padding(.vertical, 11)
+                        // Tap-to-edit for entries the 记一笔 form can represent
+                        // (v3.0.0 P5); others stay plain read-only rows.
+                        let editable = AddEntryPrefill(entry: entry) != nil
+                        if editable {
+                            Button { model.editingEntry = entry } label: { row(entry, editable: true) }
+                                .buttonStyle(.plain)
+                                .padding(.vertical, 11)
+                        } else {
+                            row(entry, editable: false)
+                                .padding(.vertical, 11)
+                        }
                     }
                 }
             }
         }
     }
 
-    private func row(_ entry: EntryDTO) -> some View {
+    private func row(_ entry: EntryDTO, editable: Bool) -> some View {
         let kind = ledgerModel.kind(of: entry)
         let firstLine = entry.categoryLines.first
         let amountValue = firstLine?.amount ?? entry.accountMovements.first?.amount ?? DecimalValue(0)
@@ -190,7 +206,13 @@ private struct LedgerIOSView: View {
                 font: Theme.Font.subtitle(.semibold),
                 color: color(kind)
             )
+            if editable {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.Color.textTertiary)
+            }
         }
+        .contentShape(Rectangle())
     }
 
     private func signed(_ value: DecimalValue, kind: LedgerKind) -> DecimalValue {

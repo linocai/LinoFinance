@@ -12,6 +12,8 @@ from app.models.category import Category
 from app.models.credit_statement_cycle import CreditStatementCycle
 from app.models.currency_rate import CurrencyRate
 from app.models.entry import AccountMovement, EntryCategoryLine, FinancialEntry
+from app.models.installment import InstallmentPlan
+from app.models.reimbursement import ReimbursementClaim
 from app.schemas.entry import EntryCreate, EntryRead
 
 MONEY_QUANT = Decimal("0.01")
@@ -35,6 +37,22 @@ class LedgerValidationError(LedgerError):
 
 
 def create_entry(db: Session, payload: EntryCreate, commit: bool = True) -> EntryRead:
+    entry_id, generated_statement_cycle_ids = _persist_entry(db, payload)
+    if commit:
+        db.commit()
+        _dispatch_generated_statement_cycles(db, generated_statement_cycle_ids)
+    return get_entry(db, entry_id)
+
+
+def _persist_entry(db: Session, payload: EntryCreate) -> Tuple[str, set]:
+    """Build + apply a fresh entry (rows, movements, claims) in the session.
+
+    Extracted from ``create_entry`` so the void+recreate edit path
+    (``replace_entry``) reuses the exact same creation logic — including cycle
+    attachment, liability recompute and reimbursement-claim generation — instead
+    of re-implementing it. Does NOT commit; returns ``(entry_id, generated
+    statement-cycle ids)`` so the caller commits once and dispatches pushes.
+    """
     entry = FinancialEntry(
         title=payload.title,
         entry_type=payload.entry_type,
@@ -64,10 +82,121 @@ def create_entry(db: Session, payload: EntryCreate, commit: bool = True) -> Entr
     else:
         generated_statement_cycle_ids = set()
 
+    return entry.id, generated_statement_cycle_ids
+
+
+# The only statuses an entry may be in for edit/void. ``voided`` is terminal;
+# anything else is a data anomaly.
+_EDITABLE_ENTRY_STATUSES = {"draft", "confirmed"}
+
+_STRUCTURAL_LINK_EDIT_MESSAGE = (
+    "此记账是结算 / 报销到账 / 分期的系统联动产物，"
+    "请编辑其来源的现金流 / 报销 / 分期项，不可直接编辑"
+)
+
+
+def replace_entry(
+    db: Session,
+    entry_id: str,
+    payload: EntryCreate,
+    commit: bool = True,
+) -> EntryRead:
+    """Edit an entry = void the old one + recreate from ``payload`` (D2=甲).
+
+    A single transaction: ``void_entry`` reverses the old entry's movements and
+    abandons its pending reimbursement claims (the original row is kept
+    ``voided`` for audit), then ``_persist_entry`` builds a brand-new entry from
+    the full replacement payload (replace semantics — the body is a complete new
+    ``EntryCreate``, not a field-level merge). Returns the **new** entry (new
+    id). Any failure in either half leaves nothing committed; the route rolls
+    back. Because recreate re-runs ``_create_account_movement`` /
+    ``_apply_movements``, a moved credit charge re-attaches to whichever cycle
+    now covers its date (possibly a different cycle; both cycles' totals and the
+    account liability recompute), and reimbursable lines spawn fresh claims — so
+    the pending-receivable net-worth term follows the edit with no double count.
+    """
+    entry = db.get(FinancialEntry, entry_id)
+    if entry is None:
+        raise LedgerNotFoundError("Entry not found")
+    _guard_entry_editable(db, entry)
+
+    void_entry(db, entry_id, commit=False)
+    new_entry_id, generated_statement_cycle_ids = _persist_entry(db, payload)
+
     if commit:
         db.commit()
         _dispatch_generated_statement_cycles(db, generated_statement_cycle_ids)
-    return get_entry(db, entry.id)
+    return get_entry(db, new_entry_id)
+
+
+def _guard_entry_editable(db: Session, entry: FinancialEntry) -> None:
+    """Reject-edit face for ``replace_entry`` (validate before any mutation).
+
+    - ``voided`` (or any non-draft/confirmed) entry → rejected: a voided row is
+      terminal audit history and must never be resurrected/recreated.
+    - Structurally-linked entries → rejected (see ``_entry_is_structurally_linked``).
+
+    ``created_by`` is intentionally *not* a gate: an ``ai``-authored entry is a
+    normal formal ledger record the user may freely edit, and settlement entries
+    inherit the client's ``created_by`` (usually ``user``), so the field is not a
+    reliable structural signal. The real signal is an inbound FK reference from
+    an upstream object, which is what we detect below.
+    """
+    if entry.status == "voided":
+        raise LedgerValidationError("Voided entries cannot be edited")
+    if entry.status not in _EDITABLE_ENTRY_STATUSES:
+        raise LedgerValidationError("Only draft or confirmed entries can be edited")
+    if _entry_is_structurally_linked(db, entry.id):
+        raise LedgerValidationError(_STRUCTURAL_LINK_EDIT_MESSAGE)
+
+
+def _entry_is_structurally_linked(db: Session, entry_id: str) -> bool:
+    """True when the entry is the *product* of an upstream object.
+
+    void+recreate would orphan the upstream reference (it still points at the
+    now-``voided`` row) and mint an untracked new entry, double-counting. Such
+    entries must be edited via their source object instead:
+
+    - ``CashFlowItem.linked_entry_id`` — a settled cash flow's product entry
+      (subscription / installment / generic settle / reimbursement received).
+    - ``ReimbursementClaim.received_entry_id`` — a reimbursement's received
+      (income) entry.
+    - ``InstallmentPlan.linked_entry_id`` — an installment plan's source
+      credit-charge entry.
+
+    Deliberately excluded: ``ReimbursementClaim.linked_entry_id`` (the *source*
+    expense entry). Editing that is the intended flow — void abandons its pending
+    claims and recreate re-issues them (matrix item 3), exactly like a plain
+    void+recreate.
+    """
+    if (
+        db.execute(
+            select(CashFlowItem.id)
+            .where(CashFlowItem.linked_entry_id == entry_id)
+            .limit(1)
+        ).scalar()
+        is not None
+    ):
+        return True
+    if (
+        db.execute(
+            select(ReimbursementClaim.id)
+            .where(ReimbursementClaim.received_entry_id == entry_id)
+            .limit(1)
+        ).scalar()
+        is not None
+    ):
+        return True
+    if (
+        db.execute(
+            select(InstallmentPlan.id)
+            .where(InstallmentPlan.linked_entry_id == entry_id)
+            .limit(1)
+        ).scalar()
+        is not None
+    ):
+        return True
+    return False
 
 
 def list_entries(

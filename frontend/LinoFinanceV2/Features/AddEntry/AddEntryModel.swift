@@ -263,3 +263,93 @@ struct AddEntryMapper {
 private extension AccountMovementCreateRequest {
     var asArray: [AccountMovementCreateRequest] { [self] }
 }
+
+// MARK: - Reverse mapping (v3.0.0 P5 · edit prefill)
+//
+// Turns an existing `EntryDTO` back into the 记一笔 simple-form state so the edit
+// entry point can prefill the SAME form (R0 房规 · 复用记一笔表单，不另起炉灶) and
+// resubmit via PATCH (void+recreate). This is the exact inverse of
+// `AddEntryMapper.makeRequest`, so only shapes the simple form can produce are
+// representable:
+//   - transfer: exactly two movements (transfer_out + transfer_in), no lines
+//   - expense/income/creditCharge: exactly one movement + one matching line
+// Anything else (multi-line splits, credit_repayment, daily/multi-day summaries,
+// voided rows) returns nil → the caller hides/greys the 编辑 entry point. This
+// nil is ALSO the frontend "editable-shape" gate (backend still authoritatively
+// rejects voided / structurally-linked entries with a clear 400).
+struct AddEntryPrefill {
+    var segment: AddEntrySegment
+    var amountText: String
+    var currency: CurrencyCode
+    var title: String
+    var categoryId: String?
+    var accountId: String?
+    var transferInAccountId: String?
+    var date: Date
+    var reimbursable: Bool
+    var reimbursementPayer: String
+    var reimbursementExpectedDate: Date?
+
+    init?(entry: EntryDTO) {
+        // Voided rows are terminal audit history — never editable.
+        guard entry.status != .voided else { return nil }
+
+        let movements = entry.accountMovements
+        let lines = entry.categoryLines
+
+        // Transfer — two legs, no category line.
+        if entry.entryType == "transfer" || (lines.isEmpty && movements.count == 2) {
+            guard lines.isEmpty,
+                  movements.count == 2,
+                  let out = movements.first(where: { $0.movementType == .transferOut }),
+                  let into = movements.first(where: { $0.movementType == .transferIn }),
+                  out.currency == into.currency else { return nil }
+            segment = .transfer
+            currency = out.currency
+            amountText = Self.amountText(out.amount.value)
+            title = entry.title
+            categoryId = nil
+            accountId = out.accountId
+            transferInAccountId = into.accountId
+            date = entry.date
+            reimbursable = false
+            reimbursementPayer = ""
+            reimbursementExpectedDate = nil
+            return
+        }
+
+        // Single-line expense / income / creditCharge.
+        guard movements.count == 1, lines.count == 1 else { return nil }
+        let movement = movements[0]
+        let line = lines[0]
+        let resolvedSegment: AddEntrySegment
+        switch (movement.movementType, line.direction) {
+        case (.balanceOut, .expense): resolvedSegment = .expense
+        case (.balanceIn, .income): resolvedSegment = .income
+        case (.creditCharge, .expense): resolvedSegment = .creditCharge
+        default: return nil
+        }
+        // The line and movement must share currency (the simple form only ever
+        // emits a matched pair).
+        guard line.currency == movement.currency else { return nil }
+
+        segment = resolvedSegment
+        currency = line.currency
+        amountText = Self.amountText(line.amount.value)
+        title = entry.title
+        categoryId = line.categoryId
+        accountId = movement.accountId
+        transferInAccountId = nil
+        date = entry.date
+        reimbursable = line.reimbursableFlag
+        reimbursementPayer = line.reimbursementPayer ?? ""
+        reimbursementExpectedDate = line.reimbursementExpectedDate
+    }
+
+    /// Plain numeric string for the big-amount field (e.g. "120" / "120.5"),
+    /// matching what `sanitizeAmountInput` would keep. `NSDecimalNumber.stringValue`
+    /// renders a Decimal without exponent and drops trailing zeros.
+    private static func amountText(_ value: Decimal) -> String {
+        NSDecimalNumber(decimal: value).stringValue
+    }
+}

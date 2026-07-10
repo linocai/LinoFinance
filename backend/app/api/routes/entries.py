@@ -40,6 +40,26 @@ def get_entry(entry_id: str, db: Session = Depends(get_db)) -> EntryRead:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
+@router.patch("/{entry_id}", response_model=EntryRead)
+def replace_entry(
+    entry_id: str,
+    payload: EntryCreate,
+    db: Session = Depends(get_db),
+) -> EntryRead:
+    # v3.0.0 P5 (D2=甲): editing an entry = void the old one + recreate from the
+    # full replacement payload in one transaction (see ledger.replace_entry).
+    # Returns the NEW entry (new id); the old row survives as a voided audit
+    # record. Body is a complete EntryCreate (replace semantics, not a merge).
+    # Voided / structurally-linked entries are rejected with a 400.
+    try:
+        return ledger.replace_entry(db, entry_id, payload)
+    except LedgerNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LedgerValidationError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
 @router.post("/{entry_id}/void", response_model=EntryRead)
 def void_entry(entry_id: str, db: Session = Depends(get_db)) -> EntryRead:
     try:

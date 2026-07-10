@@ -124,14 +124,23 @@ struct LedgerScreen: View {
                 VStack(spacing: 0) {
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, entry in
                         if index > 0 { Divider().overlay(Theme.Color.divider).padding(.horizontal, 12) }
+                        // 编辑 only for non-voided entries whose shape the 记一笔
+                        // form can represent (v3.0.0 P5). Structurally-linked
+                        // entries still reach the form but the backend rejects the
+                        // PATCH with a clear 400 (surfaced in actionBanner).
+                        let onEdit: (() -> Void)? = (entry.status != .voided && AddEntryPrefill(entry: entry) != nil)
+                            ? { model.editingEntry = entry }
+                            : nil
+                        let onDelete: (() -> Void)? = entry.status == .voided
+                            ? nil
+                            : { Task { await ledgerModel.voidEntry(entry.id) } }
                         EntryRow(
                             entry: entry,
                             kind: ledgerModel.kind(of: entry),
                             category: ledgerModel.category(entry.categoryLines.first?.categoryId ?? ""),
                             account: ledgerModel.account(entry.accountMovements.first?.accountId),
-                            onDelete: entry.status == .voided ? nil : {
-                                Task { await ledgerModel.voidEntry(entry.id) }
-                            }
+                            onEdit: onEdit,
+                            onDelete: onDelete
                         )
                         .padding(.horizontal, 12)
                         .padding(.vertical, 11)
@@ -220,6 +229,8 @@ private struct EntryRow: View {
     let kind: LedgerKind
     let category: CategoryDTO?
     let account: AccountDTO?
+    /// nil → no edit entry point (voided / shape the 记一笔 form can't represent).
+    let onEdit: (() -> Void)?
     /// nil → no delete (voided rows can't be re-deleted).
     let onDelete: (() -> Void)?
 
@@ -265,6 +276,12 @@ private struct EntryRow: View {
                     color: amountTint
                 )
                 .frame(minWidth: 96, alignment: .trailing)
+            }
+
+            if let onEdit {
+                // 编辑 = void+recreate（v3.0.0 P5）：预填记一笔表单、提交后原记录作废、生成新记录。
+                TintedActionChip(title: "编辑", tone: .action, action: onEdit)
+                    .help("编辑后原记录作废、生成一条新记录")
             }
 
             if let onDelete {

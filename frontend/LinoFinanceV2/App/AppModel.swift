@@ -48,6 +48,11 @@ final class AppModel: ObservableObject {
 
     @Published var selection: SidebarDestination = .overview
     @Published var isAddEntryPresented = false
+    /// v3.0.0 P5 — non-nil when the 记一笔 page/sheet is open in EDIT mode for an
+    /// existing entry (prefilled → submit sends PATCH void+recreate). Cleared on
+    /// close/submit. Presented alongside `isAddEntryPresented` (either flag shows
+    /// the form).
+    @Published var editingEntry: EntryDTO?
 
     // MARK: - Networking
 
@@ -149,6 +154,14 @@ final class AppModel: ObservableObject {
     /// so the caller can surface a visible message (never degrades to a draft).
     func submitEntry(_ request: EntryCreateRequest) async throws -> EntryDTO {
         try await repository.createEntry(request)
+    }
+
+    /// v3.0.0 P5 — edit an existing entry via PATCH (void+recreate). Returns the
+    /// NEW entry (new id); the backend keeps the original as a voided audit row.
+    /// Throws the underlying API error (e.g. a 400 for a voided / structurally
+    /// linked entry) so the caller surfaces a visible message.
+    func updateEntry(_ id: String, request: EntryCreateRequest) async throws -> EntryDTO {
+        try await repository.updateEntry(id, request: request)
     }
 
     /// Latest USD→CNY rate (by date) — used to lock a USD entry's exchange_rate_id

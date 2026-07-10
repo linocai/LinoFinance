@@ -15,6 +15,8 @@ import SwiftUI
 
 struct AddEntryIOSSheet: View {
     @ObservedObject var model: AppModel
+    /// v3.0.0 P5 — non-nil ⇒ EDIT mode: prefill from this entry, submit via PATCH.
+    var editingEntry: EntryDTO? = nil
     /// Called after a successful submit so the host can refresh the dashboard.
     var onSubmitted: () -> Void
 
@@ -35,9 +37,14 @@ struct AddEntryIOSSheet: View {
 
     @State private var isSubmitting = false
     @State private var errorMessage: String?
+    // Edit prefill runs once; `isApplyingPrefill` suppresses the reset onChanges.
+    @State private var didPrefill = false
+    @State private var isApplyingPrefill = false
 
     // v3.0.0 P4 ① — iOS「AI 解析」入口 (D5): 粘贴/输入一句话代替手填表单。
     @State private var showingAIProposal = false
+
+    private var isEditing: Bool { editingEntry != nil }
 
     var body: some View {
         NavigationStack {
@@ -46,7 +53,8 @@ struct AddEntryIOSSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         SegmentedPill(options: AddEntrySegment.allCases, selection: $segment) { $0.title }
-                        aiEntryRow
+                        // AI 一句话记账 only makes sense for a NEW entry, not an edit.
+                        if !isEditing { aiEntryRow }
                         amountBlock
                         field("标题") {
                             TextField(segment == .transfer ? "如：信用卡还款" : "如：午餐", text: $title)
@@ -82,7 +90,7 @@ struct AddEntryIOSSheet: View {
                     .padding(16)
                 }
             }
-            .navigationTitle("记一笔")
+            .navigationTitle(isEditing ? "编辑记录" : "记一笔")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -92,7 +100,7 @@ struct AddEntryIOSSheet: View {
                     if isSubmitting {
                         ProgressView()
                     } else {
-                        Button("保存") { Task { await submit() } }
+                        Button(isEditing ? "保存修改" : "保存") { Task { await submit() } }
                             .fontWeight(.semibold)
                             .disabled(!canSubmit)
                     }
@@ -105,13 +113,20 @@ struct AddEntryIOSSheet: View {
             await model.loadAccounts()
             await model.loadCategories()
             await model.loadRates()
-            applyInitialDefaultAccounts()
+            if let editingEntry, !didPrefill {
+                applyPrefill(editingEntry)
+                didPrefill = true
+            } else if editingEntry == nil {
+                applyInitialDefaultAccounts()
+            }
         }
         .onChange(of: segment) { _, _ in
+            guard !isApplyingPrefill else { return }
             categoryId = nil
             clearInvalidatedAccounts()
         }
         .onChange(of: currency) { _, _ in
+            guard !isApplyingPrefill else { return }
             clearInvalidatedAccounts()
         }
         .sheet(isPresented: $showingAIProposal) {
@@ -171,6 +186,28 @@ struct AddEntryIOSSheet: View {
         if accountId == nil {
             accountId = selectableAccounts.first?.id
         }
+    }
+
+    /// Edit mode: reverse-map the entry into the form (mirrors macOS AddEntryPage).
+    /// `isApplyingPrefill` shields the segment/currency reset onChanges while the
+    /// prefill assigns state; it lowers on the next runloop tick.
+    private func applyPrefill(_ entry: EntryDTO) {
+        guard let prefill = AddEntryPrefill(entry: entry) else { return }
+        isApplyingPrefill = true
+        segment = prefill.segment
+        currency = prefill.currency
+        title = prefill.title
+        amountText = prefill.amountText
+        categoryId = prefill.categoryId
+        accountId = prefill.accountId
+        transferInAccountId = prefill.transferInAccountId
+        date = prefill.date
+        reimbursable = prefill.reimbursable
+        reimbursementPayer = prefill.reimbursementPayer
+        if let expected = prefill.reimbursementExpectedDate {
+            reimbursementExpectedDate = expected
+        }
+        DispatchQueue.main.async { isApplyingPrefill = false }
     }
 
     /// Segment/currency changed: drop any account selection that no longer
@@ -432,7 +469,11 @@ struct AddEntryIOSSheet: View {
         defer { isSubmitting = false }
         do {
             let request = try AddEntryMapper.makeRequest(currentInput())
-            _ = try await model.submitEntry(request)
+            if let editingEntry {
+                _ = try await model.updateEntry(editingEntry.id, request: request)
+            } else {
+                _ = try await model.submitEntry(request)
+            }
             errorMessage = nil
             onSubmitted()
             dismiss()
