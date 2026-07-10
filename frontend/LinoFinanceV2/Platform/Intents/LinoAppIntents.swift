@@ -548,9 +548,24 @@ struct AIIntentService {
 
             if plan.status == "executed" {
                 // P1 幂等短窗（120s）命中了一个并发触发、已经执行完的同名 plan
-                // （比如 Back Tap 连点两下、Siri 重试）——不再二次 execute，直接
-                // 告知已经记过（accounts/categories 留空，summarize 会优雅降级为
-                // 只报标题+金额，省一次没必要的账户/分类拉取）。
+                // （比如 Back Tap 连点两下、Siri 重试）——不再二次 execute。但
+                // `rollback_ai_action`（后端 `ai.py`）撤销时只把被撤销的那个
+                // action 自己的 status 改成 "rolled_back"，*不*回退 plan.status
+                // （回退 plan.status 会牵动 v3.0.0 就定下的既有状态机语义，不值
+                // 当为这一个显示分支去动它——评审已确认不改后端）。所以单看
+                // plan.status=="executed" 不能断言"这笔账现在还在"：如果窗内命
+                // 中的这个 plan 的所有 action 都已经被撤销，账本里这笔已经不存
+                // 在了，"已经记过了"会是一句自己拆穿自己的假话。v3.1.0 评审
+                // 重要-1：先看 actions 里是否还有真正 executed 的，再决定播报
+                // 哪一种话术。
+                let stillExecuted = plan.actions.contains { $0.status == "executed" }
+                guard stillExecuted else {
+                    // 全部非 executed（比如刚被回滚成 rolled_back）——如实告知，
+                    // 不发通知（这不是一次新的写账结果，没有东西可撤销/可提醒）。
+                    return "这笔此前记过但已被撤销，暂时无法通过语音重复记录，请稍后再试或打开 LinoFinance 手动记账。"
+                }
+                // accounts/categories 留空，summarize 会优雅降级为只报标题+金
+                // 额，省一次没必要的账户/分类拉取。
                 return "这一笔已经记过了，没有重复记账。\(summarize(plan, accounts: [], categories: []))"
             }
             if ["rejected", "cancelled", "failed"].contains(plan.status) {

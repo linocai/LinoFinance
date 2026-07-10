@@ -75,6 +75,24 @@ extension AppModel {
             _ = try await repository.rollbackAIAction(actionId)
             await refreshAll()
             await LocalNotifications.notifyRollbackResult(success: true, message: "已撤销这笔自动记账。")
+        } catch let apiError as APIError {
+            // v3.1.0 评审 建议-3：重复撤销（这笔此前已经被撤销过，比如两次点了
+            // 同一条「撤销」action，或推送/本地通知各弹了一条、都点了「撤销」）
+            // 命中后端 `ai.py` 的 rollback 状态门 "Only executed AI actions can
+            // be rolled back"（这句门禁文案不是专为"重复撤销"写的——只是
+            // rolled_back 的 action 不再满足 status=="executed" 而撞上同一句），
+            // 原样透出会在通知横幅里露一句误导用户的英文。宽松匹配（大小写不
+            // 敏感——后端从未承诺这句文案的大小写是稳定契约）该 detail 子串时
+            // 换成如实的中文短句；命中以外的一切失败（网络失败、其他 400
+            // detail、5xx 等）保持原样透出 `apiError.localizedDescription`，不
+            // 吞掉真实原因。
+            if case .badStatus(_, let detail) = apiError,
+               let detail,
+               detail.range(of: "only executed ai actions can be rolled back", options: .caseInsensitive) != nil {
+                await LocalNotifications.notifyRollbackResult(success: false, message: "撤销失败：这笔已经撤销过了。")
+            } else {
+                await LocalNotifications.notifyRollbackResult(success: false, message: "撤销失败：\(apiError.localizedDescription)")
+            }
         } catch {
             await LocalNotifications.notifyRollbackResult(success: false, message: "撤销失败：\(error.localizedDescription)")
         }

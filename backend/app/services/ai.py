@@ -191,9 +191,22 @@ def create_ai_plan(db: Session, payload: AIPlanCreate) -> Tuple[AIPlanRead, bool
     # Fingerprint the request-original content and dedup BEFORE any LLM call, so a
     # mechanical resubmit neither mints a second plan nor spends a second LLM
     # request. A hit returns the existing plan verbatim (whatever its status —
-    # even executed/rejected): the execute state gate then makes the end-to-end
-    # flow idempotent, and no second executable plan is ever created (the exact
-    # root cause of v3.0.0 review 重要-3).
+    # even executed/rejected): the execute state gate then makes a SEQUENTIAL
+    # resubmit (the second `create` arrives after the first has already
+    # committed) idempotent end to end, and no second executable plan is ever
+    # created for it (the exact root cause of v3.0.0 review 重要-3).
+    #
+    # This is NOT a concurrency guarantee (v3.1.0 评审 建议-1 — softened from an
+    # earlier "idempotent end-to-end" claim that overstated it): the
+    # query-then-LLM-then-insert path below is not one atomic transaction, so
+    # two requests racing inside the same ~120s window can both miss
+    # `_find_recent_plan_by_fingerprint` and each insert their own plan — there
+    # is no advisory lock and `content_fingerprint`'s index is deliberately
+    # non-unique. Left as-is, not closed: a single user's own retries are
+    # effectively sequential (Siri is modal; a double-tap/Back Tap resolves to
+    # one shortcut invocation), so the residual window is narrow in practice,
+    # and a genuine double write stays recoverable via rollback plus the
+    # spoken/notified confirmation every write already surfaces.
     fingerprint = compute_content_fingerprint(payload.source_text, payload.actions)
     existing = _find_recent_plan_by_fingerprint(db, fingerprint)
     if existing is not None:
