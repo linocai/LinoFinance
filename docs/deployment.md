@@ -99,8 +99,13 @@ sudo systemctl status linofinance-api
 ## Scheduled Jobs (定时任务)
 
 Credit-due reminders (T-5/3/1/0) and soft-deleted attachment cleanup run via
-`scripts/run_scheduled_jobs.py`, driven by a systemd timer. Use
-`deploy/systemd/linofinance-jobs.service` (a `oneshot` unit sharing the same
+`scripts/run_scheduled_jobs.py`; as of v3.0.0 P6 the same unit also runs
+`scripts/fetch_exchange_rates.py` (daily auto exchange-rate fetch from the
+free, keyless `open.er-api.com` — inserts `CurrencyRate(source="auto")` only
+when today has no rate yet, manual or auto; never overwrites a manual entry;
+no new env vars needed). Both run via a systemd timer. Use
+`deploy/systemd/linofinance-jobs.service` (a `oneshot` unit with two
+`ExecStart=` lines, sharing the same
 `User`/`Group`/`EnvironmentFile=/etc/linofinance/api.env` as the API) and
 `deploy/systemd/linofinance-jobs.timer`:
 
@@ -127,6 +132,12 @@ push (fired inline when a cycle is created) still works without the timer; only
 the day-relative due reminders depend on it. A default `credit_repayment` /
 `system` `NotificationRule` is seeded by the v1.3.0 data migration so the
 matcher has an active rule out of the box.
+
+Same fact applies to the v3.0.0 P6 `fetch_exchange_rates.py` line: if the timer
+is not installed, no auto exchange rate is ever fetched — manually-entered
+rates (`POST /currency-rates`) keep working exactly as before, this only means
+the day is never auto-backfilled when a manual entry was skipped. This job is
+optional (it augments, not replaces, manual rate entry).
 
 ## HTTPS Reverse Proxy
 

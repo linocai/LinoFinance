@@ -1,5 +1,5 @@
 [Unit]
-Description=LinoFinance scheduled jobs (credit-due reminders + attachment cleanup)
+Description=LinoFinance scheduled jobs (credit-due reminders + attachment cleanup + auto exchange rate fetch)
 After=network.target linofinance-api.service
 
 [Service]
@@ -9,3 +9,9 @@ Group=linofinance
 WorkingDirectory=/opt/linofinance/app/current/backend
 EnvironmentFile=/etc/linofinance/api.env
 ExecStart=/opt/linofinance/app/current/backend/.venv/bin/python scripts/run_scheduled_jobs.py
+# v3.0.0 P6: daily auto exchange-rate fetch (open.er-api.com, keyless, no new
+# env vars). Inserts CurrencyRate(source="auto") only when today has no rate
+# yet (manual always wins, never overwritten); safe to run more than once a
+# day. A `oneshot` service runs multiple ExecStart= lines in order, so this
+# reuses the same timer/schedule as the job above instead of a second unit.
+ExecStart=/opt/linofinance/app/current/backend/.venv/bin/python scripts/fetch_exchange_rates.py
