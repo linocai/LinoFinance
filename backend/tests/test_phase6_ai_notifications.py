@@ -1,6 +1,41 @@
+import json
 from datetime import date
 
 from app.services import ai_provider
+
+
+class _FakeLLMResponse:
+    """Minimal stand-in for the urllib response context manager."""
+
+    def __init__(self, payload: dict) -> None:
+        self._data = json.dumps(payload).encode("utf-8")
+
+    def read(self) -> bytes:
+        return self._data
+
+    def __enter__(self) -> "_FakeLLMResponse":
+        return self
+
+    def __exit__(self, *exc) -> bool:
+        return False
+
+
+def _patch_llm(monkeypatch, llm_output: dict, captured: dict):
+    """Patch the provider's HTTP call to return `llm_output` (the parsed JSON the
+    model would emit) and record the outgoing request for assertions. No real
+    key and no real network call are ever used."""
+
+    def fake_urlopen(request, timeout=None):
+        captured["endpoint"] = request.full_url
+        captured["authorization"] = request.get_header("Authorization")
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        response_payload = {
+            "choices": [{"message": {"content": json.dumps(llm_output)}}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 7},
+        }
+        return _FakeLLMResponse(response_payload)
+
+    monkeypatch.setattr(ai_provider.urllib.request, "urlopen", fake_urlopen)
 
 
 def create_account(client, name="Checking", balance="500"):
@@ -336,3 +371,179 @@ def test_ai_prompt_anchors_today_to_business_timezone(monkeypatch) -> None:
     prompt = ai_provider._build_system_prompt()
 
     assert "Today's date is 2026-01-02." in prompt
+
+
+def test_ai_prompt_lists_void_entry_action() -> None:
+    # v3.0.0 P3: VoidEntry must be advertised to the model (execution chain
+    # already supports it; the prompt previously omitted it).
+    prompt = ai_provider._build_system_prompt()
+    assert "VoidEntry" in prompt
+
+
+def test_ai_config_put_masks_key_and_honors_field_presence(client) -> None:
+    # v3.0.0 P3 D0: PUT persists config; GET never echoes the full key.
+    put_response = client.put(
+        "/api/v1/ai/config",
+        json={
+            "base_url": "https://llm.example/v1",
+            "api_key": "sk-secret-abcd1234",
+            "model": "gpt-test",
+        },
+    )
+    assert put_response.status_code == 200
+    put_body = put_response.json()
+    assert put_body["base_url"] == "https://llm.example/v1"
+    assert put_body["model"] == "gpt-test"
+    assert put_body["base_url_configured"] is True
+    assert put_body["api_key_configured"] is True
+    assert put_body["api_key_hint"] == "...1234"
+    assert "api_key" not in put_body
+    assert "sk-secret-abcd1234" not in json.dumps(put_body)
+
+    get_body = client.get("/api/v1/ai/config").json()
+    assert get_body["base_url"] == "https://llm.example/v1"
+    assert get_body["api_key_hint"] == "...1234"
+    assert "sk-secret-abcd1234" not in json.dumps(get_body)
+
+    # Absent api_key key -> preserve existing key; model updated.
+    preserve = client.put("/api/v1/ai/config", json={"model": "gpt-test-2"}).json()
+    assert preserve["model"] == "gpt-test-2"
+    assert preserve["api_key_configured"] is True
+    assert preserve["api_key_hint"] == "...1234"
+    assert preserve["base_url"] == "https://llm.example/v1"
+
+    # Empty string -> clear that field.
+    cleared = client.put("/api/v1/ai/config", json={"api_key": ""}).json()
+    assert cleared["api_key_configured"] is False
+    assert cleared["api_key_hint"] is None
+    # base_url/model untouched by the key-only clear.
+    assert cleared["base_url"] == "https://llm.example/v1"
+    assert cleared["model"] == "gpt-test-2"
+
+
+def test_ai_plan_uses_db_config_and_injects_ledger_context(client, monkeypatch) -> None:
+    # v3.0.0 P3: the LLM path resolves config DB > env, injects the user's real
+    # account/category lists, and lands the returned real ids in the proposal.
+    account = create_account(client)
+    category = create_category(client)
+
+    assert client.put(
+        "/api/v1/ai/config",
+        json={
+            "base_url": "https://db-llm.test/v1",
+            "api_key": "sk-db-key-9999",
+            "model": "db-model-x",
+        },
+    ).status_code == 200
+
+    llm_output = {
+        "actions": [
+            {
+                "action_type": "CreateEntry",
+                "payload": {
+                    "title": "Lunch",
+                    "date": "2026-05-16",
+                    "status": "confirmed",
+                    "category_lines": [
+                        {
+                            "category_id": category["id"],
+                            "direction": "expense",
+                            "amount": "30",
+                            "currency": "CNY",
+                        }
+                    ],
+                    "account_movements": [
+                        {
+                            "account_id": account["id"],
+                            "movement_type": "balance_out",
+                            "amount": "30",
+                            "currency": "CNY",
+                        }
+                    ],
+                },
+                "explanation": "A small lunch expense.",
+            }
+        ],
+        "explanation": "Parsed one expense.",
+        "confidence": 0.9,
+    }
+    captured: dict = {}
+    _patch_llm(monkeypatch, llm_output, captured)
+
+    response = client.post("/api/v1/ai/plans", json={"source_text": "午餐 30 元"})
+    assert response.status_code == 201
+
+    # DB config was used (DB > env; env is unset in tests).
+    assert captured["endpoint"] == "https://db-llm.test/v1/chat/completions"
+    assert captured["authorization"] == "Bearer sk-db-key-9999"
+    assert captured["body"]["model"] == "db-model-x"
+
+    # The system prompt carried the real account + category lists.
+    system_prompt = captured["body"]["messages"][0]["content"]
+    assert account["id"] in system_prompt
+    assert "Checking" in system_prompt
+    assert category["id"] in system_prompt
+    assert "Food" in system_prompt
+
+    # The proposal landed the real ids (not blank / not fabricated).
+    plan = response.json()
+    payload = plan["actions"][0]["payload"]
+    assert payload["account_movements"][0]["account_id"] == account["id"]
+    assert payload["category_lines"][0]["category_id"] == category["id"]
+
+
+def test_ai_plan_rejects_fabricated_account_id(client, monkeypatch) -> None:
+    # v3.0.0 P3 defense-in-depth: an id the model invented (not in the user's
+    # real lists) must be intercepted before storage/execution.
+    create_account(client)
+    category = create_category(client)
+
+    llm_output = {
+        "actions": [
+            {
+                "action_type": "CreateEntry",
+                "payload": {
+                    "title": "Lunch",
+                    "date": "2026-05-16",
+                    "status": "confirmed",
+                    "category_lines": [
+                        {
+                            "category_id": category["id"],
+                            "direction": "expense",
+                            "amount": "30",
+                            "currency": "CNY",
+                        }
+                    ],
+                    "account_movements": [
+                        {
+                            "account_id": "acc-does-not-exist",
+                            "movement_type": "balance_out",
+                            "amount": "30",
+                            "currency": "CNY",
+                        }
+                    ],
+                },
+                "explanation": "Fabricated account id.",
+            }
+        ],
+    }
+    captured: dict = {}
+    _patch_llm(monkeypatch, llm_output, captured)
+
+    assert client.put(
+        "/api/v1/ai/config",
+        json={"base_url": "https://x/v1", "api_key": "k12345", "model": "m"},
+    ).status_code == 200
+
+    response = client.post("/api/v1/ai/plans", json={"source_text": "午餐 30 元"})
+    assert response.status_code == 400
+    assert "acc-does-not-exist" in response.json()["detail"]
+    # Nothing was stored.
+    assert client.get("/api/v1/ai/plans").json() == []
+
+
+def test_ai_plan_without_config_returns_clear_error(client) -> None:
+    # v3.0.0 P3: with no DB row and no env config, the LLM path fails clearly.
+    response = client.post("/api/v1/ai/plans", json={"source_text": "午餐 30 元"})
+    assert response.status_code == 400
+    assert "not configured" in response.json()["detail"].lower()

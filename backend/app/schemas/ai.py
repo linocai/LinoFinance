@@ -87,10 +87,24 @@ class AIPlanRead(BaseModel):
 class AIConfigRead(BaseModel):
     provider: str
     model: Optional[str] = None
+    # v3.0.0 P3: `base_url` and `api_key_hint` are ADDITIVE. The existing
+    # `base_url_configured` / `api_key_configured` bools are kept so the shipped
+    # 2.5.0 client (whose AIConfigDTO declares them non-optional) keeps decoding.
+    # The full api_key is NEVER returned — only `api_key_hint` (last 4 chars).
+    base_url: Optional[str] = None
     base_url_configured: bool
     api_key_configured: bool
+    api_key_hint: Optional[str] = None
     auto_confirm_limit_cny: Decimal
 
     @field_serializer("auto_confirm_limit_cny")
     def serialize_limit(self, value: Decimal) -> str:
         return format_decimal(value)
+
+
+class AIConfigUpdate(BaseModel):
+    # All three optional. Field-presence semantics (via model_fields_set):
+    # absent  -> keep existing value; "" / null -> clear; value -> set.
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    model: Optional[str] = None

@@ -41,7 +41,9 @@ def generate_memo(db: Session, payload: AIMemoGenerateRequest, tone: Optional[st
     stats = _memo_stats(db, payload.period_start, payload.period_end)
     previous_memo = _previous_memo_summary(db, payload.period_start)
     prompt = _render_prompt(payload.period_start, payload.period_end, stats, tone, previous_memo)
-    result = ai_provider.generate_monthly_memo(prompt)
+    # v3.0.0 P3: memo generation also resolves AI config DB > env.
+    config = ai_provider.resolve_ai_config(db)
+    result = ai_provider.generate_monthly_memo(prompt, config)
     memo = _active_memo_for_period(db, payload.period_start, payload.period_end)
     if memo is None:
         memo = AIMemo(period_start=payload.period_start, period_end=payload.period_end)

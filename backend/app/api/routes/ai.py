@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas.ai import (
     AIConfigRead,
+    AIConfigUpdate,
     AIPlanApprove,
     AIPlanCreate,
     AIPlanExecute,
@@ -20,8 +21,20 @@ router = APIRouter()
 
 
 @router.get("/config", response_model=AIConfigRead)
-def get_ai_config() -> AIConfigRead:
-    return ai.get_ai_config()
+def get_ai_config(db: Session = Depends(get_db)) -> AIConfigRead:
+    return ai.get_ai_config(db)
+
+
+@router.put("/config", response_model=AIConfigRead)
+def update_ai_config(
+    payload: AIConfigUpdate,
+    db: Session = Depends(get_db),
+) -> AIConfigRead:
+    try:
+        return ai.update_ai_config(db, payload)
+    except LedgerValidationError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.get("/plans", response_model=List[AIPlanRead])

@@ -7,9 +7,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.models.account import Account
 from app.models.ai import AIAction, AIActionExecution, AIPlan
+from app.models.ai_settings import AISettings
 from app.models.audit_log import AuditLog
 from app.models.cash_flow import CashFlowItem
+from app.models.category import Category
 from app.models.entry import EntryCategoryLine, FinancialEntry
 from app.models.installment import InstallmentPlan
 from app.models.notification import NotificationRule
@@ -17,6 +20,7 @@ from app.schemas.ai import (
     AIActionProposal,
     AIActionRead,
     AIConfigRead,
+    AIConfigUpdate,
     AIPlanCreate,
     AIPlanExecute,
     AIPlanRead,
@@ -43,26 +47,86 @@ MEDIUM_RISK_ACTIONS = {
 }
 
 
-def get_ai_config() -> AIConfigRead:
+def _api_key_hint(api_key: Optional[str]) -> Optional[str]:
+    """Masked hint for a stored api_key — the last 4 chars only, never the whole
+    key. Keys of length <= 4 reveal nothing (real provider keys are far longer)."""
+    if not api_key:
+        return None
+    if len(api_key) <= 4:
+        return "..."
+    return f"...{api_key[-4:]}"
+
+
+def get_ai_config(db: Session) -> AIConfigRead:
     settings = get_settings()
+    config = ai_provider.resolve_ai_config(db)
     return AIConfigRead(
-        provider=settings.ai_provider,
-        model=settings.ai_model,
-        base_url_configured=bool(settings.ai_api_base_url),
-        api_key_configured=bool(settings.ai_api_key),
+        provider=config.provider,
+        model=config.model,
+        base_url=config.base_url,
+        base_url_configured=bool(config.base_url),
+        api_key_configured=bool(config.api_key),
+        api_key_hint=_api_key_hint(config.api_key),
         auto_confirm_limit_cny=settings.ai_auto_confirm_limit_cny,
     )
 
 
+def update_ai_config(db: Session, payload: AIConfigUpdate) -> AIConfigRead:
+    """Upsert the single `ai_settings` row.
+
+    Field-presence semantics (driven by which keys the client actually sent):
+    absent -> keep the stored value; empty string / null -> clear to None;
+    non-empty value -> set. This lets the client PATCH `model` alone without
+    wiping the api_key, and clear the key deliberately by sending "".
+    """
+    provided = payload.model_dump(exclude_unset=True)
+    row = ai_provider._ai_settings_row(db)
+    if row is None:
+        row = AISettings()
+        db.add(row)
+    for field in ("base_url", "api_key", "model"):
+        if field in provided:
+            value = provided[field]
+            if isinstance(value, str):
+                value = value.strip() or None
+            setattr(row, field, value)
+    db.commit()
+    return get_ai_config(db)
+
+
+def _ledger_context(db: Session) -> Dict[str, Any]:
+    """Account + category lists injected into the AI prompt so the model fills
+    real ids. Only active rows; only id/name/type(/currency) — no balances or
+    ledger detail leave the server for the third-party LLM."""
+    accounts = db.execute(
+        select(Account).where(Account.status == "active").order_by(Account.display_order.asc())
+    ).scalars().all()
+    categories = db.execute(
+        select(Category).where(Category.is_active.is_(True)).order_by(Category.display_order.asc())
+    ).scalars().all()
+    return {
+        "accounts": [
+            {"id": a.id, "name": a.name, "type": a.type, "currency": a.currency}
+            for a in accounts
+        ],
+        "categories": [
+            {"id": c.id, "name": c.name, "type": c.type} for c in categories
+        ],
+    }
+
+
 def create_ai_plan(db: Session, payload: AIPlanCreate) -> AIPlanRead:
     settings = get_settings()
+    config = ai_provider.resolve_ai_config(db)
     actions = payload.actions
     raw_response = payload.raw_response
     explanation = payload.explanation
     confidence = payload.confidence
     if not actions:
         actions, raw_response, explanation, confidence = ai_provider.generate_action_proposals(
-            payload.source_text
+            payload.source_text,
+            config,
+            _ledger_context(db),
         )
 
     if not actions:
@@ -75,8 +139,8 @@ def create_ai_plan(db: Session, payload: AIPlanCreate) -> AIPlanRead:
 
     plan = AIPlan(
         source_text=payload.source_text,
-        provider=settings.ai_provider,
-        model=settings.ai_model,
+        provider=config.provider,
+        model=config.model,
         status=status,
         risk_level=plan_risk,
         auto_confirm_eligible=auto_confirm_eligible,

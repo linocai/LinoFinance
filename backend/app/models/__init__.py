@@ -1,6 +1,7 @@
 from app.models.account import Account
 from app.models.ai import AIAction, AIActionExecution, AIPlan
 from app.models.ai_memo import AIMemo
+from app.models.ai_settings import AISettings
 from app.models.audit_log import AuditLog
 from app.models.attachment import Attachment
 from app.models.auth_session import AuthSession
@@ -25,6 +26,7 @@ __all__ = [
     "AIActionExecution",
     "AIMemo",
     "AIPlan",
+    "AISettings",
     "AuditLog",
     "Attachment",
     "AuthSession",

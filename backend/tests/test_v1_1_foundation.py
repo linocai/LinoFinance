@@ -225,7 +225,7 @@ def test_reconciliation_adjustment_zeroes_drift(client) -> None:
 def test_ai_memos_generate_patch_and_archive(client, monkeypatch) -> None:
     prompts = []
 
-    def fake_generate(prompt):
+    def fake_generate(prompt, config=None):
         prompts.append(prompt)
         return {
             "summary": f"## 月度备忘 {len(prompts)}\n现金流稳定。",

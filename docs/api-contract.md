@@ -135,6 +135,7 @@ so production `/health` is the canonical "what is deployed" probe.
   - `POST /subscription-rules/{rule_id}/cancel`
   - `POST /subscription-rules/{rule_id}/generate-next`
   - `GET /ai/config`
+  - `PUT /ai/config`
   - `GET /ai/plans`
   - `POST /ai/plans`
   - `GET /ai/plans/{plan_id}`
@@ -337,11 +338,13 @@ remapped by Alembic migration `202606150001`
 
 ## AI And Notification Rules Implemented
 
-- AI provider settings are read from `.env` via `LINOFINANCE_AI_*` variables.
-- Secrets are not returned by `GET /ai/config`; it only reports whether a key/base URL exists.
+- AI provider settings resolve **DB (`ai_settings` table) > env (`LINOFINANCE_AI_*`)**. As of v3.0.0 (P3, D0) the runtime config is entered in-app and stored in the single-row `ai_settings` table (`base_url` / `api_key` / `model`, `api_key` in plaintext at the same trust level as the env vars); env is only the fallback when no DB row exists.
+- `GET /ai/config` returns `provider`, `model`, `base_url`, `base_url_configured`, `api_key_configured`, `api_key_hint`, and `auto_confirm_limit_cny`. The full `api_key` is **never** returned — `api_key_hint` is a masked last-4 hint like `"...wxyz"` (`null`, and `"..."` for keys of length ≤ 4). `base_url_configured` / `api_key_configured` are kept for backward compatibility; `base_url` / `api_key_hint` are additive (a shipped client that ignores unknown keys is unaffected).
+- `PUT /ai/config` upserts the single row. Body fields `base_url` / `api_key` / `model` are all optional with field-presence semantics: a field **absent** from the body keeps its stored value, an **empty string / null** clears it, a **value** sets it. It returns the same masked body as `GET`. Callers can therefore update `model` alone without wiping the key. Errors return `400`.
+- When a natural-language `POST /ai/plans` triggers the model (no `actions` supplied), the service injects the user's real account list (`id` + `name` + `type` + `currency`) and category list (`id` + `name` + `type`) into the system prompt so the model fills genuine `account_movements[].account_id` / `category_lines[].category_id` values. Only ids/names/types (no balances or ledger detail) leave the server. A returned id that is not in the user's real lists is rejected with `400` before storage/execution; if no provided config, the plan request fails with a clear "AI is not configured" `400`.
 - AI plans are stored as structured actions before execution.
 - `GET /ai/plans` accepts additive filters `related_type` and `related_to`, matching executed action targets without changing the existing `status` filter.
-- Supported action protocol values include `CreateEntry`, `CreateCashFlowItem`, `MarkReimbursable`, `CreateInstallmentPlan`, `RecordCreditRepayment`, `GenerateNotificationRule`, and `VoidEntry`.
+- Supported action protocol values include `CreateEntry`, `CreateCashFlowItem`, `MarkReimbursable`, `CreateInstallmentPlan`, `RecordCreditRepayment`, `GenerateNotificationRule`, and `VoidEntry` (`VoidEntry` is high-risk and advertised in the system prompt).
 - Low-risk `CreateEntry` actions are complete CNY actions with amount less than or equal to `1000 CNY`; they become `auto_confirm_candidate`.
 - Medium-risk actions require approval before execution.
 - High-risk actions, such as `VoidEntry`, require approval and `strong_confirm = "EXECUTE_HIGH_RISK"`.
