@@ -1,3 +1,8 @@
+from datetime import date
+
+from app.services import ai_provider
+
+
 def create_account(client, name="Checking", balance="500"):
     response = client.post(
         "/api/v1/accounts",
@@ -316,3 +321,18 @@ def test_ai_can_update_reimbursement_status_with_audit_and_rollback(client) -> N
     assert rollback_response.status_code == 200
     assert rollback_response.json()["status"] == "rolled_back"
     assert client.get(f"/api/v1/reimbursement-claims/{claim['id']}").json()["status"] == "pending"
+
+
+def test_ai_prompt_anchors_today_to_business_timezone(monkeypatch) -> None:
+    # v3.0.0 P1: _build_system_prompt must resolve "today" via app_today()
+    # (business timezone), not the server's UTC date.today() — a UTC-day
+    # boundary can otherwise put the AI's anchor date a day off from the
+    # user's Asia/Shanghai calendar day. Monkeypatch the name ai_provider
+    # bound via `from app.core.timeutils import app_today`, so this test
+    # would fail if the code ever reverts to calling date.today() directly.
+    fixed_today = date(2026, 1, 2)
+    monkeypatch.setattr(ai_provider, "app_today", lambda: fixed_today)
+
+    prompt = ai_provider._build_system_prompt()
+
+    assert "Today's date is 2026-01-02." in prompt

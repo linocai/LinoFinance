@@ -7,7 +7,7 @@ import SwiftUI
 // iPhone comp (lf_iphone.png, 左) top→bottom:
 //   • hero GlassCard      = 未来 30 天可支配  disposable30dByCurrency
 //                            + 现金流净额 small signed line (cashFlow30dByCurrency)
-//   • 净资产 card (indigo) = netWorthByCurrency 折合人民币 (CNY 口径大字)
+//   • 净资产 card (indigo) = netWorthCny 折合人民币总额 (含全部币种折算, v3.0.0 P1 修)
 //   • 人民币 / 美元        = two small GlassCards side by side (per-currency balance)
 //   • 即将到来 list        = upcoming cash-flow events (CashFlowModel.sortedItems)
 //
@@ -99,7 +99,9 @@ struct OverviewIOSView: View {
                     .font(Theme.Font.caption(.medium))
                     .foregroundStyle(Theme.Color.textSecondary)
                 AmountText(
-                    value: cny(summary.netWorthByCurrency) ?? summary.netWorthCny,
+                    // v3.0.0 P1: 标"折合人民币"必须用折算总额 netWorthCny（含 USD 资产折算），
+                    // 不能取 netWorthByCurrency 的 CNY 原币桶——后者只是分币种明细,有 USD 资产时会漏掉。
+                    value: summary.netWorthCny,
                     currency: .cny,
                     font: Theme.Font.cardNumber(.bold),
                     color: Theme.Color.textPrimary

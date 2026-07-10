@@ -1,10 +1,10 @@
 import json
 import urllib.error
 import urllib.request
-from datetime import date
 from typing import Any, Dict, List, Tuple
 
 from app.core.config import get_settings
+from app.core.timeutils import app_today
 from app.schemas.ai import AIActionProposal
 from app.services.ledger import LedgerValidationError
 
@@ -71,7 +71,10 @@ Required payload shapes:
 
 
 def _build_system_prompt() -> str:
-    return SYSTEM_PROMPT_TEMPLATE.format(today=date.today().isoformat())
+    # v3.0.0 P1: use the business-timezone "today" (app_today), not the
+    # server's UTC date.today() — a UTC-day boundary can put the prompt's
+    # anchor date a day off from the user's Asia/Shanghai calendar day.
+    return SYSTEM_PROMPT_TEMPLATE.format(today=app_today().isoformat())
 
 
 def generate_action_proposals(

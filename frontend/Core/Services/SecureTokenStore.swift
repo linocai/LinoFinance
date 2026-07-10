@@ -13,7 +13,13 @@ struct SecureTokenStore {
     static let shared = SecureTokenStore()
 
     private let service = "com.lino.linofinance"
-    /// The v1.1.x single-token account name, migrated into `.admin` in v1.2.
+    /// The v1.1.x single-token account name. Its one-shot v1.1→v1.2 migration
+    /// caller lived in v1's `LinoFinanceApp.defaultAPIToken()` and was deleted
+    /// with the rest of v1 in commit `211afea` (2026-06-14) — v2 has never
+    /// called a migration, so this account is no longer read on any code path
+    /// (v3.0.0 P1 audit: `readEffectiveToken()` only ever checks `.session`/
+    /// `.admin`). Kept only so `clearAll()` can defensively wipe a leftover
+    /// entry on machines that still carry a pre-v1.2 keychain item.
     private let legacyAccount = "linofinance.apiToken"
 
     func readToken(kind: TokenKind) -> String? {
@@ -39,18 +45,11 @@ struct SecureTokenStore {
         readToken(kind: .session) ?? readToken(kind: .admin)
     }
 
-    /// One-shot v1.1 → v1.2 migration: move a legacy `linofinance.apiToken`
-    /// entry into the `.admin` slot and remove the old account. Returns true
-    /// when a legacy token was migrated.
-    @discardableResult
-    func migrateLegacyTokenIfNeeded() -> Bool {
-        guard let legacy = readToken(account: legacyAccount), !legacy.isEmpty else {
-            return false
-        }
-        try? saveToken(legacy, account: TokenKind.admin.rawValue)
-        deleteToken(account: legacyAccount)
-        return true
-    }
+    // v3.0.0 P1: the one-shot v1.1→v1.2 `migrateLegacyTokenIfNeeded()` step was
+    // removed here — its only caller was deleted with v1 in commit `211afea`
+    // (2026-06-14), so it had been unreachable dead code for a month across
+    // five shipped v2.x releases. `clearAll()` below still defensively deletes
+    // the legacy account so a full sign-out also clears any leftover entry.
 
     // MARK: - Generic keychain helpers
 
