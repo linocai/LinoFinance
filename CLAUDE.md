@@ -58,6 +58,7 @@ xcodebuild -project LinoFinance.xcodeproj -scheme LinoFinanceV2 \
 - **业务 UI + DesignSystem 在 Xcode target `frontend/LinoFinanceV2/`**；跨 target 共享的网络/模型/仓储 Core 6 文件在 `frontend/Core/`（见仓库结构速记）。**SwiftPM 已退役**（2026-06-14 随 v1 整删）——不再有 `swift test`，前端唯一编译门禁是 `xcodebuild`。
 - 新增只被 app target 用的 DTO / request 类型放 `frontend/LinoFinanceV2/`（或共享则放 `frontend/Core/Models/`）；编码正确性由后端 local smoke + `xcodebuild` 联合验证。
 - 改 SwiftUI View 必须用 `xcodebuild` 跑 v2 target 验证;液态玻璃/侧栏/双币种等 View 层效果须真机/真模拟器目视(单测抓不到)。
+- **iOS 26 玻璃面按钮必须显式 `.contentShape`**(2026-07-11 真机实证,快修 `a6fc627`):`.glassEffect`/`.glassPanel` 层真机上**不参与命中测试**,Button label 只靠玻璃背景撑命中面时,可点区域退化成字形像素(模拟器不复现,极易漏)。凡 Button label 内用 glassPanel,在其后补 `.contentShape(同形状)`。
 
 ## 后端铁律
 
