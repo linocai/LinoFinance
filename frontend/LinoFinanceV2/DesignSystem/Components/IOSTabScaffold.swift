@@ -57,6 +57,12 @@ struct IOSTabScaffold<Overview: View, Accounts: View, CashFlow: View, Reports: V
                         .foregroundStyle(Theme.Color.textPrimary)
                         .frame(width: 40, height: 40)
                         .glassPanel(cornerRadius: 12, shadow: Theme.ShadowSpec(color: .black.opacity(0.06), radius: 10, x: 0, y: 4))
+                        // contentShape after glassPanel: on-device the iOS 26 glass
+                        // layer renders out-of-process and does NOT count as hittable
+                        // content — without this, the tap target collapses to the
+                        // ellipsis glyph strokes themselves (~un-tappable). Same
+                        // treatment as tabButton/addButton below (they always had it).
+                        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .padding(.trailing, 16)

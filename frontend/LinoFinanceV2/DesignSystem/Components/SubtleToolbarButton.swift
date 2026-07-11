@@ -33,6 +33,9 @@ struct SubtleToolbarButton: View {
                         .fill(Theme.Color.textSecondary.opacity(0.08))
                 }
             }
+            // Glass layer isn't hittable on-device (iOS 26) — pin the tap target
+            // to the full pill, not just the glyph/text pixels.
+            .contentShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
         }
         .buttonStyle(.plain)
         #if os(macOS)
