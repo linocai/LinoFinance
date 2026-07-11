@@ -170,19 +170,19 @@ struct AIParseScreenshotIntent: AppIntent {
     static var title: LocalizedStringResource = "解析截图记账"
     static var description = IntentDescription("从一张账单或收据截图里用系统文字识别提取内容，交给 AI 自动记账。识别完全在本机进行，不会上传截图、不会保存截图，也不会访问相册——请通过「快捷指令」把截图传入（例如「获取最新截图」）。")
 
-    // Optional (not required): a Siri voice-only invocation has no way to
-    // supply an image, so a missing value is a normal, expected case —
-    // handled inside `AIIntentService.recordFromScreenshot` with a clear
-    // message, not one the system should interactively prompt for (D3:
-    // Shortcuts-fed only, no photo-library access).
+    // REQUIRED, deliberately (real-device findings 2026-07-11): Shortcuts only
+    // auto-binds the previous action's output (获取最新截屏) into a *required*
+    // file parameter — an Optional renders as an empty gray slot whose tap
+    // opens the Files picker with no variable menu, and runs with nil. The
+    // voice-friendly-nil trade-off lost; a voice-only invocation now gets the
+    // system's own value prompt, and the voice path is AIRecordIntent anyway.
+    // (D3 unchanged: Shortcuts-fed only, no photo-library access.)
     @Parameter(title: "截图", supportedContentTypes: [.image])
-    var screenshot: IntentFile?
+    var screenshot: IntentFile
 
-    // Inline the parameter into the action sentence. Without this, Shortcuts
-    // renders 截图 as a detail row whose tap opens the Files picker with no
-    // variable option (real-device report 2026-07-11) — an inline token slot
-    // both offers the variable picker on tap and lets Shortcuts auto-bind the
-    // previous action's image output (e.g. 获取最新截屏) when the action is added.
+    // Inline the parameter into the action sentence — renders as a token slot
+    // in the sentence (pre-filled by the auto-bind above when the action is
+    // added after a screenshot-producing action).
     static var parameterSummary: some ParameterSummary {
         Summary("解析\(\.$screenshot)记账")
     }
