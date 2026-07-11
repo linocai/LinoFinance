@@ -39,7 +39,11 @@ struct GlassCard<Content: View>: View {
             .glassEffect(in: shape)
             .overlay {
                 if let tint {
+                    // 装饰层必须放行触摸（真机实证 2026-07-11）：非零透明度的
+                    // fill Shape 默认参与命中测试，这层盖在内容之上的整卡染色
+                    // 曾把带 tint 卡（AI 提案面板等）内的所有控件触摸全部吃掉。
                     shape.fill(tint.opacity(0.12))
+                        .allowsHitTesting(false)
                 }
             }
             .overlay {
@@ -53,10 +57,12 @@ struct GlassCard<Content: View>: View {
                         ),
                         lineWidth: 0.5
                     )
+                    .allowsHitTesting(false)
             }
             .overlay {
                 // 0.5pt hairline border.
                 shape.strokeBorder(Theme.Color.glassStroke, lineWidth: 0.5)
+                    .allowsHitTesting(false)
             }
             .themeShadow(shadow)
     }
@@ -73,7 +79,8 @@ extension View {
         return self
             .glassEffect(in: shape)
             .overlay {
-                if let tint { shape.fill(tint.opacity(0.12)) }
+                // 同 GlassCard：装饰染色层放行触摸（吃触摸真机坑 2026-07-11）。
+                if let tint { shape.fill(tint.opacity(0.12)).allowsHitTesting(false) }
             }
             .overlay {
                 shape.strokeBorder(
@@ -84,8 +91,12 @@ extension View {
                     ),
                     lineWidth: 0.5
                 )
+                .allowsHitTesting(false)
             }
-            .overlay { shape.strokeBorder(Theme.Color.glassStroke, lineWidth: 0.5) }
+            .overlay {
+                shape.strokeBorder(Theme.Color.glassStroke, lineWidth: 0.5)
+                    .allowsHitTesting(false)
+            }
             .themeShadow(shadow)
     }
 }
