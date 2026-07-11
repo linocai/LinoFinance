@@ -168,21 +168,31 @@ struct AIRecordIntent: AppIntent {
 
 struct AIParseScreenshotIntent: AppIntent {
     static var title: LocalizedStringResource = "解析截图记账"
-    static var description = IntentDescription("从一张账单或收据截图里用系统文字识别提取内容，交给 AI 自动记账。识别完全在本机进行，不会上传截图、不会保存截图，也不会访问相册——请通过「快捷指令」把截图传入（例如「获取最新截图」）。")
+    static var description = IntentDescription("从一张账单或收据截图里用系统文字识别提取内容，交给 AI 自动记账。默认自动读取相册里最近 10 分钟内拍的最新一张截图（需要照片访问权限，可在 LinoFinance 的设置里授权）；也可以在快捷指令里显式传入一张图片，此时不会读取相册。识别全程在本机进行，不会上传或保存截图。")
 
-    // REQUIRED, deliberately (real-device findings 2026-07-11): Shortcuts only
-    // auto-binds the previous action's output (获取最新截屏) into a *required*
-    // file parameter — an Optional renders as an empty gray slot whose tap
-    // opens the Files picker with no variable menu, and runs with nil. The
-    // voice-friendly-nil trade-off lost; a voice-only invocation now gets the
-    // system's own value prompt, and the voice path is AIRecordIntent anyway.
-    // (D3 unchanged: Shortcuts-fed only, no photo-library access.)
-    @Parameter(title: "截图", supportedContentTypes: [.image])
-    var screenshot: IntentFile
+    // 快修三 (2026-07-11): back to OPTIONAL — this flipped once already
+    // (7ea2fd9 optional→needs parameterSummary, dd70300 optional→REQUIRED for
+    // Shortcuts auto-bind) and neither made "获取最新截屏 → 解析截图记账"
+    // actually work on a real device: the action never reliably bound, and
+    // running it just popped a blocking Files picker. The user's real ask
+    // (verbatim): "截图了之后，它能够直接获取最新的截图，然后直接去扫描，直接
+    // OCR，直接录入" — the APP should grab its own latest screenshot, no
+    // Shortcuts wiring at all. So the shape flips one more time: `nil` (the
+    // parameter left untouched — a bare single-action Shortcut, a Back Tap
+    // gesture, or a plain Siri invocation) is now the PRIMARY path and reads
+    // Photos directly via `LatestScreenshotFetcher` (D3 reversed — photo
+    // access permission is now required for the primary path; see
+    // `LatestScreenshotFetcher.swift` and `SettingsIOSView`'s photo-access
+    // card). An explicitly-bound `IntentFile` is still honored and skips the
+    // Photos read entirely — for anyone who wants to hand-pick an image via
+    // Shortcuts instead.
+    @Parameter(title: "截图（可选，留空自动读取相册最新截图）", supportedContentTypes: [.image])
+    var screenshot: IntentFile?
 
     // Inline the parameter into the action sentence — renders as a token slot
-    // in the sentence (pre-filled by the auto-bind above when the action is
-    // added after a screenshot-producing action).
+    // in the sentence. Kept even though the parameter is optional again: it
+    // still lets someone explicitly bind an image from Shortcuts if they
+    // want to; the auto-fetch path is simply what happens when they don't.
     static var parameterSummary: some ParameterSummary {
         Summary("解析\(\.$screenshot)记账")
     }
@@ -628,15 +638,41 @@ struct AIIntentService {
 
     /// `AIParseScreenshotIntent`'s entry — OCR the screenshot on-device (D2 甲)
     /// then hand the recognized text to the same `record(sourceText:)`
-    /// pipeline. `file == nil` is the expected shape for a Siri voice-only
-    /// invocation (there is no image to bind) — handled here with a clear
-    /// message, not via an interactive prompt (D3: Shortcuts-fed only).
+    /// pipeline.
+    ///
+    /// 快修三 (D3 reversed): `file == nil` used to mean "no image was bound,
+    /// tell the user to wire one up via Shortcuts" — real-device testing
+    /// showed that wiring never worked reliably (see the intent's doc
+    /// comment on `screenshot`). It now means "fetch the newest screenshot
+    /// from Photos myself" — the PRIMARY path, iOS only
+    /// (`LatestScreenshotFetcher`; macOS keeps the old explicit-file-only
+    /// behavior this round, unchanged). An explicitly-bound `file` still
+    /// skips the Photos read entirely and is used as-is.
     func recordFromScreenshot(_ file: IntentFile?) async -> String {
-        guard let file else {
-            return "没有收到截图，请通过「快捷指令」传入一张截图再试（本功能不会读取相册）。"
+        if let file {
+            return await recordFromImageData(file.data)
         }
+        #if os(iOS)
         do {
-            let recognizedText = try ScreenshotOCR.recognizeText(in: file.data)
+            let data = try await LatestScreenshotFetcher.fetchLatestScreenshotData()
+            return await recordFromImageData(data)
+        } catch let error as LatestScreenshotFetcherError {
+            return error.message
+        } catch {
+            return "获取截图失败：\(error.localizedDescription)"
+        }
+        #else
+        return "没有收到截图，请通过「快捷指令」传入一张截图再试。"
+        #endif
+    }
+
+    /// Shared "Data → OCR → record" tail — both the explicit-file path and
+    /// the auto-fetch-latest-screenshot path converge here once they have
+    /// image bytes in hand, so there is exactly one OCR/record call site
+    /// regardless of where the bytes came from.
+    private func recordFromImageData(_ data: Data) async -> String {
+        do {
+            let recognizedText = try ScreenshotOCR.recognizeText(in: data)
             return await record(sourceText: recognizedText)
         } catch {
             return error.localizedDescription
@@ -728,12 +764,14 @@ struct AIIntentService {
 }
 
 /// On-device Vision OCR (D2 甲) — no LLM vision call, no upload, no disk
-/// write, no Photos permission (the image arrives already in-process via
-/// `IntentFile`, fed by a Shortcut — D3). `.accurate` + zh-Hans/en-US covers
-/// the bilingual receipt/bill screenshots this feature targets. Decodes via
-/// `CGImageSource` (ImageIO) rather than `UIImage`/`NSImage` so this stays
-/// platform-agnostic with no `#if os(...)` split — matching this file's
-/// existing style (none of the other intents branch on platform either).
+/// write. Only ever sees raw image `Data`, agnostic of where it came from —
+/// an explicitly-bound Shortcuts `IntentFile`, or (iOS default, 快修三, D3
+/// reversed) `LatestScreenshotFetcher` reading the newest Photos-library
+/// screenshot. `.accurate` + zh-Hans/en-US covers the bilingual receipt/bill
+/// screenshots this feature targets. Decodes via `CGImageSource` (ImageIO)
+/// rather than `UIImage`/`NSImage` so this stays platform-agnostic with no
+/// `#if os(...)` split — matching this file's existing style (none of the
+/// other intents branch on platform either).
 private enum ScreenshotOCR {
     static func recognizeText(in data: Data) throws -> String {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
