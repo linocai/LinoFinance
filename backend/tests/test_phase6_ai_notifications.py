@@ -547,3 +547,111 @@ def test_ai_plan_without_config_returns_clear_error(client) -> None:
     response = client.post("/api/v1/ai/plans", json={"source_text": "午餐 30 元"})
     assert response.status_code == 400
     assert "not configured" in response.json()["detail"].lower()
+
+
+def _put_ai_config(client) -> None:
+    assert client.put(
+        "/api/v1/ai/config",
+        json={
+            "base_url": "https://db-llm.test/v1",
+            "api_key": "sk-db-key-9999",
+            "model": "db-model-x",
+        },
+    ).status_code == 200
+
+
+def _incomplete_entry_llm_output(category_id=None) -> dict:
+    """A CreateEntry proposal whose movement has NO account_id — the exact shape
+    the system prompt tells the LLM to produce when it can't map the receipt to
+    a listed account (v3.1.x 快修: previously 400'd at create, unstorable)."""
+    category_lines = []
+    if category_id is not None:
+        category_lines.append(
+            {
+                "category_id": category_id,
+                "direction": "expense",
+                "amount": "20",
+                "currency": "CNY",
+            }
+        )
+    return {
+        "actions": [
+            {
+                "action_type": "CreateEntry",
+                "payload": {
+                    "title": "扫码付款",
+                    "date": "2026-05-16",
+                    "status": "confirmed",
+                    "category_lines": category_lines,
+                    "account_movements": [
+                        {
+                            "movement_type": "balance_out",
+                            "amount": "20.00",
+                            "currency": "CNY",
+                        }
+                    ],
+                },
+                "explanation": "无法确定账户，account_id 留空。",
+            }
+        ],
+        "explanation": "Parsed one expense without a resolvable account.",
+        "confidence": 0.8,
+    }
+
+
+def test_ai_plan_stores_id_incomplete_proposal_requires_confirmation(client, monkeypatch) -> None:
+    # v3.1.x 快修: an id-incomplete proposal (missing account_id only) must be
+    # STORABLE — parked as requires_confirmation for the review UI to complete —
+    # and must never be an auto-confirm candidate regardless of amount (20 CNY
+    # is far below the 1000 auto-confirm limit).
+    create_account(client)
+    category = create_category(client)
+    _put_ai_config(client)
+    _patch_llm(monkeypatch, _incomplete_entry_llm_output(category["id"]), {})
+
+    response = client.post("/api/v1/ai/plans", json={"source_text": "扫码付了20元"})
+    assert response.status_code == 201
+    plan = response.json()
+    assert plan["status"] == "requires_confirmation"
+    assert plan["risk_level"] == "medium"
+    assert plan["auto_confirm_eligible"] is False
+    # Payload stored intact — movement still has no account_id for the UI to fill.
+    movement = plan["actions"][0]["payload"]["account_movements"][0]
+    assert "account_id" not in movement
+
+
+def test_ai_plan_incomplete_other_schema_errors_still_reject(client, monkeypatch) -> None:
+    # Leniency is ONLY for missing account_id/category_id. A payload that is
+    # broken in any other way (here: movement missing `amount` too) stays a
+    # hard create-time 400.
+    create_account(client)
+    category = create_category(client)
+    _put_ai_config(client)
+    llm_output = _incomplete_entry_llm_output(category["id"])
+    del llm_output["actions"][0]["payload"]["account_movements"][0]["amount"]
+    _patch_llm(monkeypatch, llm_output, {})
+
+    response = client.post("/api/v1/ai/plans", json={"source_text": "扫码付了20元"})
+    assert response.status_code == 400
+
+
+def test_ai_plan_incomplete_execute_rejected_cleanly(client, monkeypatch) -> None:
+    # Executing an id-incomplete plan without completing it must fail cleanly at
+    # the strict execute-time validation (`_apply_action` re-validates
+    # EntryCreate) and write nothing to the ledger.
+    account = create_account(client)
+    category = create_category(client)
+    _put_ai_config(client)
+    _patch_llm(monkeypatch, _incomplete_entry_llm_output(category["id"]), {})
+
+    plan = client.post("/api/v1/ai/plans", json={"source_text": "扫码付了20元"}).json()
+    assert client.post(f"/api/v1/ai/plans/{plan['id']}/approve", json={}).status_code == 200
+
+    response = client.post(f"/api/v1/ai/plans/{plan['id']}/execute", json={})
+    assert response.status_code == 400
+
+    # Nothing hit the ledger and the account balance is untouched.
+    entries = client.get("/api/v1/entries").json()
+    assert all(e["title"] != "扫码付款" for e in entries)
+    refreshed = client.get(f"/api/v1/accounts/{account['id']}").json()
+    assert refreshed["current_balance"] == account["current_balance"]

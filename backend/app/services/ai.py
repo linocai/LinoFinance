@@ -644,12 +644,20 @@ def _rollback_action_target(
 
 def _assess_action(action: AIActionProposal, auto_confirm_limit_cny: Decimal) -> Tuple[str, bool]:
     action_type = action.action_type
-    _validate_known_payload(action)
+    incomplete = _validate_known_payload(action)
     if action_type in HIGH_RISK_ACTIONS:
         return "high", True
     if action_type in MEDIUM_RISK_ACTIONS:
         return "medium", True
     if action_type == "CreateEntry":
+        # An id-incomplete proposal must NEVER be an auto-confirm candidate —
+        # it cannot execute (EntryCreate re-validates strictly in
+        # `_apply_action`); it exists to be completed by a human in the
+        # review UI, so force the requires-confirmation lane regardless of
+        # amount (v3.1.x 快修: the LLM legitimately leaves account_id blank
+        # when it can't map the receipt to a listed account).
+        if incomplete:
+            return "medium", True
         amount_cny = _entry_amount_cny(action.payload)
         if amount_cny is not None and amount_cny <= auto_confirm_limit_cny:
             return "low", False
@@ -657,10 +665,41 @@ def _assess_action(action: AIActionProposal, auto_confirm_limit_cny: Decimal) ->
     return "high", True
 
 
-def _validate_known_payload(action: AIActionProposal) -> None:
+def _only_missing_ids(exc: ValidationError) -> bool:
+    """True when EVERY validation error is a plain `missing` on an
+    `account_id` / `category_id` field — the one shape of invalidity the
+    system prompt explicitly tells the LLM to produce ("no fitting item →
+    leave the id blank and explain"). Anything else (bad amounts, wrong
+    types, missing title …) stays a hard create-time 400."""
+    errors = exc.errors()
+    if not errors:
+        return False
+    return all(
+        error.get("type") == "missing"
+        and error.get("loc")
+        and error["loc"][-1] in ("account_id", "category_id")
+        for error in errors
+    )
+
+
+def _validate_known_payload(action: AIActionProposal) -> bool:
+    """Validate an action payload at PROPOSAL time. Returns True when the
+    payload is structurally sound but id-INCOMPLETE (missing account_id /
+    category_id only) — such proposals are storable (the P4 review UI owns
+    letting the user fill the blanks; execute re-validates strictly in
+    `_apply_action`), they just must not auto-execute (see `_assess_action`).
+
+    v3.1.x 快修背景（真机实测 2026-07-11）：旧版对 CreateEntry 直接严格
+    `EntryCreate.model_validate`，LLM 按 prompt 指示留空 account_id 的合法提案
+    在「存提案」这步就被 400 拒收，确认页根本无从补起。"""
     try:
         if action.action_type == "CreateEntry":
-            EntryCreate.model_validate(action.payload)
+            try:
+                EntryCreate.model_validate(action.payload)
+            except ValidationError as entry_exc:
+                if _only_missing_ids(entry_exc):
+                    return True
+                raise
         elif action.action_type == "CreateCashFlowItem":
             CashFlowItemCreate.model_validate(action.payload)
         elif action.action_type == "CreateInstallmentPlan":
@@ -668,7 +707,12 @@ def _validate_known_payload(action: AIActionProposal) -> None:
         elif action.action_type == "GenerateNotificationRule":
             NotificationRuleCreate.model_validate(action.payload)
         elif action.action_type == "RecordCreditRepayment":
-            EntryCreate.model_validate(action.payload.get("entry", action.payload))
+            try:
+                EntryCreate.model_validate(action.payload.get("entry", action.payload))
+            except ValidationError as entry_exc:
+                if _only_missing_ids(entry_exc):
+                    return True
+                raise
         elif action.action_type == "VoidEntry" and "entry_id" not in action.payload:
             raise LedgerValidationError("VoidEntry requires entry_id")
         elif action.action_type == "MarkReimbursable" and "entry_line_id" not in action.payload:
@@ -688,6 +732,7 @@ def _validate_known_payload(action: AIActionProposal) -> None:
                 raise LedgerValidationError("UpdateReimbursementStatus requires status")
     except ValidationError as exc:
         raise LedgerValidationError(str(exc)) from exc
+    return False
 
 
 def _entry_amount_cny(payload: Dict[str, Any]) -> Optional[Decimal]:
