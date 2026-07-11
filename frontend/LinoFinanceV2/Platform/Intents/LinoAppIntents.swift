@@ -616,7 +616,16 @@ struct AIIntentService {
                 return message
             }
 
-            let executed = try await repository.executeAIPlan(plan.id)
+            let executed: AIPlanDTO
+            do {
+                executed = try await repository.executeAIPlan(plan.id)
+            } catch {
+                // 执行被服务端校验拒绝（如结构不完整、金额对不上）——plan 已转终态
+                // failed，但 AI 历史里仍可「查看/编辑」后重新提交（真机实测 2026-07-11:
+                // 之前这里直接透英文 400 detail，用户看不懂也不知道下一步做什么）。
+                return "自动记账没有成功（服务端校验未通过），提案已保存："
+                    + "请打开 LinoFinance 在 AI 历史中编辑补全后重新提交。"
+            }
             let message = summarize(executed, accounts: accounts, categories: categories)
             // P3: "已自动记账" 通知 + 可撤销 action（D5/D6·iOS only）。故意只在
             // ACTUALLY 执行成功这一处调用——上面 `status == "executed"` 的幂等

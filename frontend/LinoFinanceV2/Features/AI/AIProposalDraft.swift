@@ -143,9 +143,23 @@ struct EditableEntryDraft {
     var categoryLines: [EditableCategoryLine]
     var accountMovements: [EditableAccountMovement]
 
+    /// Mirrors backend `_is_transfer_only`: an entry whose movements are all
+    /// transfer-family (transfer_in / transfer_out / credit_repayment) needs no
+    /// category lines; anything else does (`_validate_confirmable`).
+    var isTransferOnly: Bool {
+        !accountMovements.isEmpty && accountMovements.allSatisfy {
+            [.transferIn, .transferOut, .creditRepayment].contains($0.movementType)
+        }
+    }
+
     func validationError(accounts: [AccountDTO], categories: [CategoryDTO]) -> String? {
         if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "请填写标题" }
-        if categoryLines.isEmpty && accountMovements.isEmpty { return "没有可提交的记账内容" }
+        // Structural completeness first — mirrors backend `_validate_confirmable`
+        // (real-device 2026-07-11: an LLM proposal with movements but ZERO
+        // category lines sailed past the old both-empty check, auto-executed,
+        // and died on the server's 400 with the plan stuck in terminal failed).
+        if accountMovements.isEmpty { return "缺少账户流水行，无法提交" }
+        if categoryLines.isEmpty && !isTransferOnly { return "缺少分类行，请补充分类" }
         for line in categoryLines {
             guard let categoryId = line.categoryId, categories.contains(where: { $0.id == categoryId }) else {
                 return "有一行分类还没选（或原分类已不可用）"
@@ -179,7 +193,7 @@ struct EditableEntryDraft {
     }
 
     static func parse(_ payload: [String: JSONValueDTO]) -> EditableEntryDraft {
-        EditableEntryDraft(
+        var draft = EditableEntryDraft(
             title: JSONPayload.string(payload, "title") ?? "",
             entryType: JSONPayload.string(payload, "entry_type") ?? "single",
             date: JSONPayload.date(payload, "date") ?? Date(),
@@ -191,6 +205,39 @@ struct EditableEntryDraft {
                 JSONPayload.object($0).map(EditableAccountMovement.parse)
             }
         )
+        draft.synthesizeMissingCategoryLine()
+        return draft
+    }
+
+    /// LLM proposals may legally omit category lines when no listed category
+    /// fits (the prompt says "leave blank and explain"). A non-transfer entry
+    /// without lines can never be confirmed server-side, and the review UI has
+    /// no add-row affordance — so synthesize ONE blank line mirroring the
+    /// movements' total (amount/currency/direction) for the user to pick a
+    /// category into. `categoryId` stays nil, so `validationError` blocks both
+    /// the intent auto-execute veto and the in-app confirm until it's chosen.
+    private mutating func synthesizeMissingCategoryLine() {
+        guard categoryLines.isEmpty, !accountMovements.isEmpty, !isTransferOnly else { return }
+        let spending = accountMovements.filter { [.balanceOut, .creditCharge].contains($0.movementType) }
+        let income = accountMovements.filter { $0.movementType == .balanceIn }
+        let source = spending.isEmpty ? income : spending
+        guard let first = source.first else { return }
+        let sameCurrency = source.filter { $0.currency == first.currency }
+        let total = sameCurrency
+            .compactMap { parseDecimalAmount($0.amountText) }
+            .reduce(Decimal(0), +)
+        categoryLines = [EditableCategoryLine(
+            categoryId: nil,
+            direction: spending.isEmpty ? .income : .expense,
+            amountText: total > 0 ? NSDecimalNumber(decimal: total).stringValue : first.amountText,
+            currency: first.currency,
+            exchangeRateId: nil,
+            convertedCnyAmountText: nil,
+            reimbursableFlag: false,
+            reimbursementPayer: nil,
+            reimbursementExpectedDate: nil,
+            reimbursementStatus: nil
+        )]
     }
 }
 
