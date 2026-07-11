@@ -46,9 +46,26 @@ explicit confirmation before it can run.
 {context}
 When you fill account_movements[].account_id or category_lines[].category_id,
 use ONLY the exact id values from the lists above. NEVER invent an id that is
-not in those lists. If no listed account or category fits, leave that id out of
-the payload entirely and explain the gap in the action's "explanation" so the
-user can choose one before confirming.
+not in those lists.
+
+Category picking policy (category_lines[].category_id) — ALWAYS pick one:
+1. Pick the listed category of the matching direction whose name best fits the
+   merchant / purpose in the text. A close-enough match beats no match.
+2. If nothing fits, pick the user's catch-all category — the one whose name
+   contains "其他" or "待归类" (e.g. "其他支出") — and note in "explanation"
+   that you used the catch-all.
+3. Only leave category_id out when the lists contain NO category of the needed
+   direction at all. A miscategorized entry is cheap for the user to fix later;
+   a missing category blocks fully-automatic bookkeeping.
+
+Account picking policy (account_movements[].account_id) — be conservative:
+- Receipts usually show the paying card's bank and tail digits, e.g.
+  "工商银行储蓄卡(3495)". Match those tail digits / bank name against the
+  account names in the list (e.g. an account named "工商3495"); if exactly one
+  account matches, use it confidently.
+- If no listed account clearly matches, leave account_id out of the payload and
+  explain the gap in "explanation" — a wrong account corrupts balances, so
+  never guess between multiple plausible accounts.
 
 Required payload shapes:
 - CreateEntry (most common: a single past expense/income):
