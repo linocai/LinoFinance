@@ -7,29 +7,27 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		006EE82203EA20BFD766AED4 /* SecureTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 988830AEFB53ACDEFFA4DC03 /* SecureTokenStore.swift */; };
-		540C6547DE3CF47347AA1C9A /* Formatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 749E1D7750E3877EFACCF948 /* Formatters.swift */; };
-		71609AF8A3EDE8666E187AC5 /* FinanceRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0BD393FA536EA34FD7CEDA2 /* FinanceRepository.swift */; };
-		9A3806DAA61BD371BB5FE0F1 /* APIRequests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 112F0BFE6CCABBA4A01723D3 /* APIRequests.swift */; };
-		C865D7B5B7B28A5C3E437778 /* LinoAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FFF53905D7F95F6C59D64A /* LinoAPIClient.swift */; };
-		DA0BB764578E4E966BE74CE0 /* APIDTOs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CBB33142F2B82AABF2BBFC5 /* APIDTOs.swift */; };
+		006EE82203EA20BFD766AED4 /* Core/Services/SecureTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 988830AEFB53ACDEFFA4DC03 /* Core/Services/SecureTokenStore.swift */; };
+		540C6547DE3CF47347AA1C9A /* Core/Utilities/Formatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 749E1D7750E3877EFACCF948 /* Core/Utilities/Formatters.swift */; };
+		71609AF8A3EDE8666E187AC5 /* Core/Repositories/FinanceRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0BD393FA536EA34FD7CEDA2 /* Core/Repositories/FinanceRepository.swift */; };
+		9A3806DAA61BD371BB5FE0F1 /* Core/Models/APIRequests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 112F0BFE6CCABBA4A01723D3 /* Core/Models/APIRequests.swift */; };
+		C865D7B5B7B28A5C3E437778 /* Core/Services/LinoAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FFF53905D7F95F6C59D64A /* Core/Services/LinoAPIClient.swift */; };
+		DA0BB764578E4E966BE74CE0 /* Core/Models/APIDTOs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CBB33142F2B82AABF2BBFC5 /* Core/Models/APIDTOs.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		09FFF53905D7F95F6C59D64A /* LinoAPIClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Core/Services/LinoAPIClient.swift; sourceTree = SOURCE_ROOT; };
-		112F0BFE6CCABBA4A01723D3 /* APIRequests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Core/Models/APIRequests.swift; sourceTree = SOURCE_ROOT; };
-		5CBB33142F2B82AABF2BBFC5 /* APIDTOs.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Core/Models/APIDTOs.swift; sourceTree = SOURCE_ROOT; };
-		749E1D7750E3877EFACCF948 /* Formatters.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Core/Utilities/Formatters.swift; sourceTree = SOURCE_ROOT; };
-		988830AEFB53ACDEFFA4DC03 /* SecureTokenStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Core/Services/SecureTokenStore.swift; sourceTree = SOURCE_ROOT; };
+		09FFF53905D7F95F6C59D64A /* Core/Services/LinoAPIClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Core/Services/LinoAPIClient.swift; sourceTree = SOURCE_ROOT; };
+		112F0BFE6CCABBA4A01723D3 /* Core/Models/APIRequests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Core/Models/APIRequests.swift; sourceTree = SOURCE_ROOT; };
+		5CBB33142F2B82AABF2BBFC5 /* Core/Models/APIDTOs.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Core/Models/APIDTOs.swift; sourceTree = SOURCE_ROOT; };
+		749E1D7750E3877EFACCF948 /* Core/Utilities/Formatters.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Core/Utilities/Formatters.swift; sourceTree = SOURCE_ROOT; };
+		988830AEFB53ACDEFFA4DC03 /* Core/Services/SecureTokenStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Core/Services/SecureTokenStore.swift; sourceTree = SOURCE_ROOT; };
 		A08B9A715C3881314BD11238 /* LinoF2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LinoF2.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		F0BD393FA536EA34FD7CEDA2 /* FinanceRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Core/Repositories/FinanceRepository.swift; sourceTree = SOURCE_ROOT; };
+		F0BD393FA536EA34FD7CEDA2 /* Core/Repositories/FinanceRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Core/Repositories/FinanceRepository.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		275FB34B251E211223E677BF /* LinoFinanceV2 */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = LinoFinanceV2;
 			sourceTree = "<group>";
 		};
@@ -49,12 +47,12 @@
 		94E6BAC66DB4636AB0A8AA8C /* SharedCore */ = {
 			isa = PBXGroup;
 			children = (
-				09FFF53905D7F95F6C59D64A /* LinoAPIClient.swift */,
-				988830AEFB53ACDEFFA4DC03 /* SecureTokenStore.swift */,
-				5CBB33142F2B82AABF2BBFC5 /* APIDTOs.swift */,
-				112F0BFE6CCABBA4A01723D3 /* APIRequests.swift */,
-				F0BD393FA536EA34FD7CEDA2 /* FinanceRepository.swift */,
-				749E1D7750E3877EFACCF948 /* Formatters.swift */,
+				09FFF53905D7F95F6C59D64A /* Core/Services/LinoAPIClient.swift */,
+				988830AEFB53ACDEFFA4DC03 /* Core/Services/SecureTokenStore.swift */,
+				5CBB33142F2B82AABF2BBFC5 /* Core/Models/APIDTOs.swift */,
+				112F0BFE6CCABBA4A01723D3 /* Core/Models/APIRequests.swift */,
+				F0BD393FA536EA34FD7CEDA2 /* Core/Repositories/FinanceRepository.swift */,
+				749E1D7750E3877EFACCF948 /* Core/Utilities/Formatters.swift */,
 			);
 			name = SharedCore;
 			sourceTree = "<group>";
@@ -112,15 +110,6 @@
 					3697A3F2D5753467D05ED0F4 = {
 						CreatedOnToolsVersion = 26.5;
 					};
-					A10000000000000000000006 = {
-						CreatedOnToolsVersion = 26.4.1;
-					};
-					A20000000000000000000006 = {
-						CreatedOnToolsVersion = 26.4.1;
-					};
-					A30000000000000000000006 = {
-						CreatedOnToolsVersion = 26.4.1;
-					};
 				};
 			};
 			buildConfigurationList = A10000000000000000000012 /* Build configuration list for PBXProject "LinoFinance" */;
@@ -158,12 +147,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C865D7B5B7B28A5C3E437778 /* LinoAPIClient.swift in Sources */,
-				006EE82203EA20BFD766AED4 /* SecureTokenStore.swift in Sources */,
-				DA0BB764578E4E966BE74CE0 /* APIDTOs.swift in Sources */,
-				9A3806DAA61BD371BB5FE0F1 /* APIRequests.swift in Sources */,
-				71609AF8A3EDE8666E187AC5 /* FinanceRepository.swift in Sources */,
-				540C6547DE3CF47347AA1C9A /* Formatters.swift in Sources */,
+				C865D7B5B7B28A5C3E437778 /* Core/Services/LinoAPIClient.swift in Sources */,
+				006EE82203EA20BFD766AED4 /* Core/Services/SecureTokenStore.swift in Sources */,
+				DA0BB764578E4E966BE74CE0 /* Core/Models/APIDTOs.swift in Sources */,
+				9A3806DAA61BD371BB5FE0F1 /* Core/Models/APIRequests.swift in Sources */,
+				71609AF8A3EDE8666E187AC5 /* Core/Repositories/FinanceRepository.swift in Sources */,
+				540C6547DE3CF47347AA1C9A /* Core/Utilities/Formatters.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
