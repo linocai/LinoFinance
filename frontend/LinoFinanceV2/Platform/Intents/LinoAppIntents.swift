@@ -178,6 +178,15 @@ struct AIParseScreenshotIntent: AppIntent {
     @Parameter(title: "截图", supportedContentTypes: [.image])
     var screenshot: IntentFile?
 
+    // Inline the parameter into the action sentence. Without this, Shortcuts
+    // renders 截图 as a detail row whose tap opens the Files picker with no
+    // variable option (real-device report 2026-07-11) — an inline token slot
+    // both offers the variable picker on tap and lets Shortcuts auto-bind the
+    // previous action's image output (e.g. 获取最新截屏) when the action is added.
+    static var parameterSummary: some ParameterSummary {
+        Summary("解析\(\.$screenshot)记账")
+    }
+
     init() {}
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
