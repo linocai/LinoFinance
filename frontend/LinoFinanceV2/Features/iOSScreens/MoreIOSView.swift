@@ -27,6 +27,15 @@ struct MoreIOSView: View {
                                 }
                                 .buttonStyle(.plain)
                                 Divider().overlay(Theme.Color.divider)
+                                // v3.1.x 真机反馈：待确认提案此前只有通知一个入口，
+                                // 通知划掉就找不回——补一个常驻列表入口。
+                                NavigationLink {
+                                    AIPlansIOSView(model: model)
+                                } label: {
+                                    moreRow(title: "AI 提案", subtitle: "待确认的 AI 记账提案", systemImage: "sparkles", ready: true)
+                                }
+                                .buttonStyle(.plain)
+                                Divider().overlay(Theme.Color.divider)
                                 placeholderRow(title: "报销", systemImage: "arrow.uturn.left.circle")
                                 Divider().overlay(Theme.Color.divider)
                                 placeholderRow(title: "周期", systemImage: "arrow.triangle.2.circlepath")
