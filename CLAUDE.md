@@ -59,6 +59,7 @@ xcodebuild -project LinoFinance.xcodeproj -scheme LinoFinanceV2 \
 - 新增只被 app target 用的 DTO / request 类型放 `frontend/LinoFinanceV2/`（或共享则放 `frontend/Core/Models/`）；编码正确性由后端 local smoke + `xcodebuild` 联合验证。
 - 改 SwiftUI View 必须用 `xcodebuild` 跑 v2 target 验证;液态玻璃/侧栏/双币种等 View 层效果须真机/真模拟器目视(单测抓不到)。
 - **iOS 26 玻璃面按钮必须显式 `.contentShape`**(2026-07-11 真机实证,快修 `a6fc627`):`.glassEffect`/`.glassPanel` 层真机上**不参与命中测试**,Button label 只靠玻璃背景撑命中面时,可点区域退化成字形像素(模拟器不复现,极易漏)。凡 Button label 内用 glassPanel,在其后补 `.contentShape(同形状)`。
+- **App Intents 参数要让快捷指令自动接上一步输出:必填 + `parameterSummary` 内联,缺一不可**(2026-07-11 真机实证,快修 `7ea2fd9`+`dd70300`):Optional 文件参数在快捷指令里是空灰槽、点开只有文件选择器无变量入口、运行传 nil;没有 parameterSummary 时参数渲染成详情行同样接不上。改 intents 元数据(标题/参数/summary)后**必须重装 app + 删旧动作重加**才生效。
 
 ## 后端铁律
 
